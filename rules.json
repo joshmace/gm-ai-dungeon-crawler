@@ -1,0 +1,245 @@
+{
+  "rules": {
+    "version": "1.0",
+    "system": "OSR (Old School Renaissance)",
+    "description": "Core game mechanics and rules",
+    
+    "core_mechanics": {
+      "ability_checks": {
+        "roll": "d20 + ability modifier",
+        "dc_scale": {
+          "trivial": 5,
+          "easy": 10,
+          "medium": 15,
+          "hard": 20,
+          "very_hard": 25,
+          "nearly_impossible": 30
+        },
+        "auto_success": "Tasks within normal capability with proper tools/time",
+        "auto_failure": "Impossible tasks or lacking required resources",
+        "when_to_roll": "Only when outcome is uncertain and failure has consequences"
+      },
+      
+      "skill_checks": {
+        "trained_bonus": "Add skill modifier to relevant ability check",
+        "untrained": "Use base ability modifier only",
+        "advantage": "Roll 2d20, take higher (when situationally beneficial)",
+        "disadvantage": "Roll 2d20, take lower (when hindered or impaired)"
+      },
+      
+      "saving_throws": {
+        "when_used": "Resist effects, avoid hazards, endure conditions",
+        "death_saves": {
+          "enabled": false,
+          "note": "OSR style - 0 HP = death (unless house rule enabled)"
+        }
+      }
+    },
+    
+    "combat": {
+      "initiative": {
+        "default": "Player acts first unless ambushed",
+        "optional_rule": "Roll 1d20 + DEX modifier for initiative order"
+      },
+      
+      "attack_roll": {
+        "melee": "1d20 + STR modifier + proficiency",
+        "ranged": "1d20 + DEX modifier + proficiency",
+        "spell": "1d20 + spellcasting modifier + proficiency",
+        "success": "Roll meets or exceeds target's AC"
+      },
+      
+      "damage": {
+        "roll": "Weapon die + ability modifier",
+        "critical_hit": {
+          "trigger": "Natural 20 on attack roll",
+          "effect": "Roll damage dice twice, add modifier once"
+        },
+        "critical_miss": {
+          "trigger": "Natural 1 on attack roll",
+          "effect": "Automatic miss (optional: fumble table)"
+        }
+      },
+      
+      "hit_points": {
+        "at_zero": "Character dies (OSR default)",
+        "negative_hp": "Not tracked - 0 HP = death",
+        "healing": {
+          "potions": "Instant, typically 2d4+2",
+          "magic": "Instant, varies by spell",
+          "rest": "Short rest: spend hit dice, Long rest: full HP"
+        },
+        "temporary_hp": "Absorbed first, doesn't stack, doesn't heal"
+      },
+      
+      "armor_class": {
+        "base": 10,
+        "calculation": "Base 10 + armor bonus + DEX modifier (max +2 for heavy armor)",
+        "shield": "+2 to AC when equipped"
+      },
+      
+      "conditions": {
+        "poisoned": "Disadvantage on attack rolls and ability checks",
+        "blessed": "+1d4 to attack rolls and saving throws",
+        "stunned": "Cannot move or take actions, auto-fail STR and DEX saves",
+        "wounded": "Disadvantage on physical ability checks",
+        "exhausted": "Levels 1-6, escalating penalties"
+      },
+      
+      "combat_actions": {
+        "action": "Attack, cast spell, dash, disengage, dodge, help, hide, ready, search, use item",
+        "bonus_action": "Some class features, two-weapon fighting, special abilities",
+        "reaction": "Opportunity attack, certain spells/abilities",
+        "movement": "Can move up to speed, split before/after action",
+        "free_actions": "Drop item, speak briefly, interact with object"
+      }
+    },
+    
+    "experience": {
+      "sources": {
+        "combat": "Defeating monsters (see monster XP values)",
+        "treasure": "1 XP per 1 gold piece recovered",
+        "objectives": "Completing quest goals, solving puzzles",
+        "milestones": "Story beats, major discoveries"
+      },
+      
+      "level_progression": {
+        "1": 0,
+        "2": 2000,
+        "3": 4000,
+        "4": 8000,
+        "5": 16000,
+        "6": 32000,
+        "7": 64000,
+        "8": 128000,
+        "9": 256000,
+        "10": 512000
+      },
+      
+      "leveling_up": {
+        "hp_increase": "Roll hit die + CON modifier (minimum 1)",
+        "new_abilities": "Gain class features per class progression",
+        "ability_score_increase": "Every 4 levels, +2 to one stat or +1 to two stats (max 20)",
+        "proficiency_bonus": "Increases at levels 5, 9, 13, 17"
+      }
+    },
+    
+    "exploration": {
+      "light_sources": {
+        "torch": "20ft bright, 20ft dim, lasts 1 hour",
+        "lantern": "30ft bright, 30ft dim, lasts 6 hours with oil",
+        "candle": "5ft bright, 5ft dim, lasts 1 hour"
+      },
+      
+      "searching": {
+        "quick_search": "Action, Perception check, 10ft area",
+        "thorough_search": "10 minutes, automatic find (reasonable things), 10ft area"
+      },
+      
+      "traps": {
+        "detection": "Passive Perception or active Investigation check",
+        "disarming": "Thieves' tools + DEX check, failure may trigger trap"
+      },
+      
+      "doors": {
+        "stuck": "STR check to force (DC varies)",
+        "locked": "Thieves' tools + DEX check or break (STR check)",
+        "listening": "Perception check to hear through door"
+      }
+    },
+    
+    "resources": {
+      "encumbrance": {
+        "system": "Simplified - track significant items only",
+        "heavily_encumbered": "Speed reduced by 10ft, disadvantage on STR/DEX/CON checks"
+      },
+      
+      "resting": {
+        "short_rest": {
+          "duration": "1 hour",
+          "benefits": "Spend hit dice to heal, recover some abilities"
+        },
+        "long_rest": {
+          "duration": "8 hours",
+          "benefits": "Restore all HP, half of total hit dice, all abilities",
+          "limitation": "Once per 24 hours"
+        }
+      },
+      
+      "consumables": {
+        "rations": "1 per day to avoid exhaustion",
+        "water": "Essential in hot environments",
+        "ammunition": "Track arrows/bolts (recover half after combat)",
+        "spell_components": "Track costly components, ignore common ones"
+      }
+    },
+    
+    "social_interaction": {
+      "reaction_rolls": {
+        "when_to_use": "NPC attitude uncertain",
+        "roll": "2d6",
+        "result": "2-3 hostile, 4-5 unfriendly, 6-8 neutral, 9-10 friendly, 11-12 helpful"
+      },
+      
+      "persuasion": {
+        "charisma_check": "Convince, negotiate, perform",
+        "modifiers": "Offer something valuable (+2 to +5), threaten (-2 to -5)"
+      },
+      
+      "intimidation": {
+        "charisma_or_strength": "Threaten, coerce, scare",
+        "consequences": "Success doesn't mean loyalty - may betray later"
+      },
+      
+      "deception": {
+        "charisma_check": "Lie, disguise, misdirect",
+        "contested": "Opposed by target's Insight"
+      }
+    },
+    
+    "optional_rules": {
+      "death_saves": {
+        "enabled": false,
+        "description": "At 0 HP, make death saves instead of dying. 3 successes = stabilized, 3 failures = dead"
+      },
+      
+      "flanking": {
+        "enabled": false,
+        "description": "Attacking from opposite sides grants advantage"
+      },
+      
+      "critical_fumbles": {
+        "enabled": false,
+        "description": "Natural 1 on attack causes mishap (drop weapon, hit ally, etc.)"
+      },
+      
+      "morale": {
+        "enabled": true,
+        "description": "NPCs/monsters may flee when reduced to 50% numbers or when leader falls"
+      }
+    },
+    
+    "difficulty_settings": {
+      "deadly": {
+        "death_at_zero": true,
+        "harsh_dcs": true,
+        "resource_scarcity": true,
+        "description": "True OSR - death is permanent, resources matter"
+      },
+      
+      "standard": {
+        "death_at_zero": true,
+        "harsh_dcs": false,
+        "resource_scarcity": false,
+        "description": "OSR with modern conveniences"
+      },
+      
+      "forgiving": {
+        "death_at_zero": false,
+        "death_saves": true,
+        "harsh_dcs": false,
+        "description": "More heroic, less punishing"
+      }
+    }
+  }
+}

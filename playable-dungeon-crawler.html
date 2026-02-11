@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Dungeon Crawler - Live Playtest</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Crimson Text', 'Georgia', serif;
+            background: linear-gradient(to bottom, #1a1410 0%, #2d2416 100%);
+            color: #e8dcc4;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            gap: 20px;
+            transition: all 0.3s ease;
+            padding-left: 280px;
+        }
+
+        /* Character Panel - Fixed Full Height */
+        .character-panel {
+            width: 260px;
+            background: rgba(25, 20, 15, 0.9);
+            border: 2px solid #5a4a3a;
+            border-radius: 8px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex-shrink: 0;
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .character-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .character-panel::-webkit-scrollbar-track {
+            background: #1a1410;
+        }
+
+        .character-panel::-webkit-scrollbar-thumb {
+            background: #5a4a3a;
+            border-radius: 4px;
+        }
+
+        .character-header {
+            background: linear-gradient(to bottom, #3d2f1f, #2a1f15);
+            padding: 12px;
+            border-bottom: 2px solid #5a4a3a;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .character-portrait {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid #d4af37;
+            background: linear-gradient(135deg, #5a4a3a, #3a2a1a);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            color: #d4af37;
+            margin: 0 auto 8px auto;
+        }
+
+        .character-name {
+            font-size: 1.1em;
+            color: #d4af37;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .character-class {
+            color: #b8a888;
+            font-size: 0.85em;
+        }
+
+        .quick-stats {
+            padding: 12px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .stat-box {
+            background: rgba(61, 47, 31, 0.4);
+            border: 1px solid #5a4a3a;
+            border-radius: 4px;
+            padding: 8px 6px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.7em;
+            color: #8a7a6a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 3px;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            color: #e8dcc4;
+            font-weight: bold;
+        }
+
+        .stat-value.hp {
+            color: #c85050;
+        }
+
+        .stat-value.ac {
+            color: #7a9aba;
+        }
+
+        .conditions {
+            padding: 8px 12px;
+            border-bottom: 1px solid #5a4a3a;
+            min-height: 35px;
+        }
+
+        .condition-tag {
+            display: inline-block;
+            background: rgba(200, 80, 80, 0.3);
+            border: 1px solid #c85050;
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 0.7em;
+            margin-right: 4px;
+            margin-bottom: 4px;
+        }
+
+        .condition-tag.buff {
+            background: rgba(80, 150, 80, 0.3);
+            border-color: #509650;
+        }
+
+        .xp-progress {
+            padding: 10px 12px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .xp-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7em;
+            color: #8a7a6a;
+            margin-bottom: 4px;
+        }
+
+        .xp-bar-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(61, 47, 31, 0.5);
+            border: 1px solid #5a4a3a;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .xp-bar-fill {
+            height: 100%;
+            background: linear-gradient(to right, #d4af37, #f4cf57);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+            box-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
+        }
+
+        .section-header {
+            color: #d4af37;
+            font-size: 0.85em;
+            padding: 10px 12px 6px 12px;
+            border-bottom: 1px solid #5a4a3a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            background: rgba(61, 47, 31, 0.2);
+        }
+
+        .ability-scores {
+            padding: 10px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .ability-score {
+            background: rgba(61, 47, 31, 0.3);
+            border: 1px solid #5a4a3a;
+            border-radius: 4px;
+            padding: 8px 6px;
+            text-align: center;
+        }
+
+        .ability-name {
+            font-size: 0.7em;
+            color: #8a7a6a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .ability-value {
+            font-size: 1.4em;
+            color: #e8dcc4;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .ability-modifier {
+            font-size: 0.9em;
+            color: #d4af37;
+        }
+
+        .skills-list {
+            padding: 10px 12px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .skill-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 6px;
+            background: rgba(61, 47, 31, 0.2);
+            border-radius: 3px;
+            margin-bottom: 4px;
+            font-size: 0.85em;
+        }
+
+        .skill-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .skill-name {
+            color: #b8a888;
+        }
+
+        .skill-modifier {
+            color: #d4af37;
+            font-weight: bold;
+        }
+
+        .equipment-section, .inventory-section, .actions-section {
+            padding: 10px 12px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .equipment-item, .inventory-item {
+            background: rgba(61, 47, 31, 0.3);
+            border: 1px solid #5a4a3a;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.85em;
+        }
+
+        .equipment-item:hover, .inventory-item:hover {
+            background: rgba(61, 47, 31, 0.5);
+            border-color: #8b7355;
+        }
+
+        .equipment-item.equipped {
+            border-color: #d4af37;
+            box-shadow: 0 0 6px rgba(212, 175, 55, 0.2);
+        }
+
+        .equipment-name, .item-name {
+            color: #e8dcc4;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .equipment-item.equipped .equipment-name {
+            color: #d4af37;
+        }
+
+        .equipment-stats {
+            font-size: 0.75em;
+            color: #b8a888;
+        }
+
+        .inventory-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+        }
+
+        .item-quantity {
+            background: rgba(90, 74, 58, 0.5);
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            color: #b8a888;
+        }
+
+        /* Narrative Panel */
+        .narrative-panel {
+            flex: 1;
+            background: rgba(25, 20, 15, 0.8);
+            border: 2px solid #5a4a3a;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 20px;
+            bottom: 20px;
+            right: 20px;
+            left: 300px;
+        }
+
+        .narrative-header {
+            background: linear-gradient(to bottom, #3d2f1f, #2a1f15);
+            padding: 15px 25px;
+            border-bottom: 2px solid #5a4a3a;
+            flex-shrink: 0;
+        }
+
+        .narrative-header h1 {
+            font-size: 1.6em;
+            color: #d4af37;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            font-weight: 400;
+            letter-spacing: 2px;
+        }
+
+        .narrative-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 25px;
+            scroll-behavior: smooth;
+        }
+
+        .narrative-scroll::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .narrative-scroll::-webkit-scrollbar-track {
+            background: #1a1410;
+        }
+
+        .narrative-scroll::-webkit-scrollbar-thumb {
+            background: #5a4a3a;
+            border-radius: 5px;
+        }
+
+        .narrative-entry {
+            margin-bottom: 20px;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .gm-narration {
+            font-size: 1.05em;
+            color: #e8dcc4;
+            padding: 14px;
+            background: rgba(61, 47, 31, 0.3);
+            border-left: 3px solid #8b7355;
+            border-radius: 4px;
+            line-height: 1.7;
+        }
+
+        .gm-narration::first-letter {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #d4af37;
+        }
+
+        /* Visual Insets */
+        .visual-inset {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .visual-inset.float-right {
+            float: right;
+            margin: 0 0 15px 20px;
+            max-width: 40%;
+        }
+
+        .visual-inset.float-left {
+            float: left;
+            margin: 0 20px 15px 0;
+            max-width: 40%;
+        }
+
+        .inset-image {
+            width: 100%;
+            border: 2px solid #5a4a3a;
+            border-radius: 4px;
+            background: #1a1410;
+            padding: 6px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        .placeholder-img {
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: linear-gradient(135deg, #2a1f15 0%, #3d2f1f 50%, #2a1f15 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #5a4a3a;
+            font-size: 0.8em;
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .placeholder-img::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(90, 74, 58, 0.1) 10px,
+                rgba(90, 74, 58, 0.1) 20px
+            );
+        }
+
+        .placeholder-img span {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: 15px;
+        }
+
+        .player-action {
+            color: #a8c8e8;
+            font-style: italic;
+            padding: 10px 14px;
+            background: rgba(40, 60, 80, 0.2);
+            border-left: 3px solid #5a7a9a;
+            border-radius: 4px;
+            clear: both;
+        }
+
+        .player-action::before {
+            content: "âž¤ ";
+            color: #7a9aba;
+            font-style: normal;
+        }
+
+        .system-message {
+            color: #b8a888;
+            font-size: 0.9em;
+            padding: 6px 14px;
+            background: rgba(90, 74, 58, 0.15);
+            border-left: 3px solid #6a5a4a;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            clear: both;
+        }
+
+        .dice-roll {
+            display: inline-block;
+            background: #4a3a2a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #d4af37;
+            font-weight: bold;
+            margin: 0 3px;
+        }
+
+        .loading-indicator {
+            color: #8a7a6a;
+            font-style: italic;
+            padding: 10px 14px;
+        }
+
+        .loading-indicator::after {
+            content: '...';
+            animation: ellipsis 1.5s infinite;
+        }
+
+        @keyframes ellipsis {
+            0% { content: '.'; }
+            33% { content: '..'; }
+            66% { content: '...'; }
+        }
+
+        /* Input Section */
+        .input-section {
+            padding: 15px 25px;
+            background: linear-gradient(to top, #3d2f1f, #2a1f15);
+            border-top: 2px solid #5a4a3a;
+            flex-shrink: 0;
+        }
+
+        .action-prompt {
+            color: #b8a888;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        input[type="text"], input[type="number"] {
+            padding: 10px 14px;
+            background: #1a1410;
+            border: 2px solid #5a4a3a;
+            border-radius: 4px;
+            color: #e8dcc4;
+            font-family: 'Crimson Text', 'Georgia', serif;
+            font-size: 1em;
+        }
+
+        input[type="text"] {
+            flex: 1;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: #8b7355;
+            box-shadow: 0 0 10px rgba(139, 115, 85, 0.3);
+        }
+
+        input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: linear-gradient(to bottom, #5a4a3a, #4a3a2a);
+            border: 2px solid #6a5a4a;
+            border-radius: 4px;
+            color: #e8dcc4;
+            font-family: 'Crimson Text', 'Georgia', serif;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover:not(:disabled) {
+            background: linear-gradient(to bottom, #6a5a4a, #5a4a3a);
+            border-color: #8b7355;
+            box-shadow: 0 0 15px rgba(139, 115, 85, 0.4);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .secondary-button {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            background: rgba(90, 74, 58, 0.3);
+            border: 1px solid #5a4a3a;
+        }
+
+        .dice-section {
+            display: none;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 0;
+            margin-bottom: 8px;
+            border: 2px solid #d4af37;
+            border-radius: 4px;
+            background: rgba(212, 175, 55, 0.1);
+            padding: 12px;
+            flex-wrap: wrap;
+        }
+
+        .dice-section.active {
+            display: flex;
+        }
+
+        .dice-label {
+            color: #d4af37;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .dice-input {
+            width: 50px;
+            padding: 5px 8px;
+            text-align: center;
+        }
+
+        .dice-button {
+            padding: 6px 12px;
+            font-size: 0.8em;
+        }
+
+        .suggestions-toggle {
+            text-align: center;
+            padding-top: 6px;
+        }
+
+        .toggle-link {
+            color: #8a7a6a;
+            font-size: 0.8em;
+            cursor: pointer;
+            text-decoration: underline;
+            transition: color 0.2s ease;
+        }
+
+        .toggle-link:hover {
+            color: #d4af37;
+        }
+
+        .suggestions-panel {
+            display: none;
+            gap: 6px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .suggestions-panel.active {
+            display: flex;
+        }
+
+        .suggestion-btn {
+            padding: 6px 12px;
+            font-size: 0.8em;
+            background: rgba(90, 74, 58, 0.3);
+            border: 1px solid #5a4a3a;
+            flex: 0 1 auto;
+        }
+
+        .error-message {
+            background: rgba(200, 80, 80, 0.2);
+            border: 1px solid #c85050;
+            color: #e8a8a8;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Character Panel -->
+        <div class="character-panel" id="characterPanel">
+            <div class="character-header">
+                <div class="character-portrait">⚔️</div>
+                <div class="character-name" id="charName">Aldric Ironhand</div>
+                <div class="character-class" id="charClass">Human Fighter • Lvl 3</div>
+            </div>
+
+            <div class="quick-stats">
+                <div class="stat-box">
+                    <div class="stat-label">HP</div>
+                    <div class="stat-value hp" id="hpDisplay">28/28</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">AC</div>
+                    <div class="stat-value ac" id="acDisplay">16</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Level</div>
+                    <div class="stat-value" id="levelDisplay">3</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">XP</div>
+                    <div class="stat-value" id="xpDisplay">5,250</div>
+                </div>
+            </div>
+
+            <div class="conditions" id="conditionsDisplay">
+                <!-- Conditions will be added dynamically -->
+            </div>
+
+            <div class="xp-progress">
+                <div class="xp-label">
+                    <span>XP Progress</span>
+                    <span id="xpProgressText">5,250 / 8,000</span>
+                </div>
+                <div class="xp-bar-container">
+                    <div class="xp-bar-fill" id="xpBarFill" style="width: 31.25%;"></div>
+                </div>
+            </div>
+
+            <div class="section-header">Abilities</div>
+            <div class="ability-scores" id="abilityScores">
+                <!-- Will be populated from character data -->
+            </div>
+
+            <div class="section-header">Skills</div>
+            <div class="skills-list" id="skillsList">
+                <!-- Will be populated from character data -->
+            </div>
+
+            <div class="section-header">Equipment</div>
+            <div class="equipment-section" id="equipmentList">
+                <!-- Will be populated from character data -->
+            </div>
+
+            <div class="section-header">Inventory</div>
+            <div class="inventory-section" id="inventoryList">
+                <!-- Will be populated from character data -->
+            </div>
+        </div>
+
+        <!-- Narrative Panel -->
+        <div class="narrative-panel">
+            <div class="narrative-header">
+                <h1 id="dungeonTitle">The Forgotten Crypt</h1>
+            </div>
+
+            <div class="narrative-scroll" id="narrativeScroll">
+                <!-- Narrative entries will be added here -->
+            </div>
+
+            <div class="input-section">
+                <!-- Dice Rolling Section -->
+                <div class="dice-section" id="diceSection">
+                    <span class="dice-label" id="rollPrompt">Roll requested:</span>
+                    <button class="dice-button secondary-button" onclick="rollDice()" id="rollBtn">Roll d20</button>
+                    <span class="dice-label">or enter result:</span>
+                    <input type="number" class="dice-input" id="diceInput" placeholder="14" min="1" max="20">
+                    <button class="dice-button secondary-button" onclick="submitDiceRoll()" id="submitRollBtn">Submit</button>
+                </div>
+
+                <div class="action-prompt">What do you do?</div>
+                
+                <div class="input-wrapper">
+                    <input type="text" id="playerInput" placeholder="Describe your action... (press Enter)" onkeypress="handleKeyPress(event)">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // GAME STATE
+        // ============================================
+        
+        // XP progression table (OSR style)
+        const XP_LEVELS = {
+            1: 0,
+            2: 2000,
+            3: 4000,
+            4: 8000,
+            5: 16000,
+            6: 32000,
+            7: 64000,
+            8: 128000,
+            9: 256000,
+            10: 512000
+        };
+        
+        const gameState = {
+            character: {
+                name: "Aldric Ironhand",
+                class: "Fighter",
+                level: 3,
+                hp: 28,
+                maxHp: 28,
+                ac: 16,
+                xp: 5250,
+                abilities: {
+                    str: { score: 16, modifier: 3 },
+                    dex: { score: 12, modifier: 1 },
+                    con: { score: 14, modifier: 2 },
+                    int: { score: 10, modifier: 0 },
+                    wis: { score: 13, modifier: 1 },
+                    cha: { score: 8, modifier: -1 }
+                },
+                skills: {
+                    athletics: 5,
+                    intimidation: 1,
+                    perception: 3,
+                    survival: 1
+                },
+                equipment: [
+                    { name: "🗡️ Longsword", stats: "1d8+3 slashing", equipped: true },
+                    { name: "🛡️ Chain Mail", stats: "AC 16 • Heavy", equipped: true },
+                    { name: "🏹 Shortbow", stats: "1d6+1 piercing", equipped: false },
+                    { name: "🔥 Torch (lit)", stats: "20ft bright, 20ft dim", equipped: true }
+                ],
+                inventory: [
+                    { name: "Torch", quantity: 3 },
+                    { name: "Healing Potion", quantity: 2 },
+                    { name: "Rope (50ft)", quantity: 1 },
+                    { name: "Rations", quantity: 5 },
+                    { name: "Gold", quantity: "47gp" }
+                ],
+                conditions: []
+            },
+            currentRoom: "entrance",
+            triggeredEvents: [],
+            conversationHistory: [],
+            waitingForRoll: false,
+            pendingRollContext: null
+        };
+
+        // ============================================
+        // INITIALIZE CHARACTER SHEET
+        // ============================================
+        
+        function initializeCharacterSheet() {
+            const char = gameState.character;
+            
+            // Abilities
+            const abilitiesHTML = Object.entries(char.abilities).map(([key, value]) => `
+                <div class="ability-score">
+                    <div class="ability-name">${key.toUpperCase()}</div>
+                    <div class="ability-value">${value.score}</div>
+                    <div class="ability-modifier">${value.modifier >= 0 ? '+' : ''}${value.modifier}</div>
+                </div>
+            `).join('');
+            document.getElementById('abilityScores').innerHTML = abilitiesHTML;
+            
+            // Skills
+            const skillsHTML = Object.entries(char.skills).map(([key, value]) => `
+                <div class="skill-item">
+                    <span class="skill-name">${key.charAt(0).toUpperCase() + key.slice(1)}</span>
+                    <span class="skill-modifier">+${value}</span>
+                </div>
+            `).join('');
+            document.getElementById('skillsList').innerHTML = skillsHTML;
+            
+            // Equipment
+            const equipmentHTML = char.equipment.map(item => `
+                <div class="equipment-item ${item.equipped ? 'equipped' : ''}">
+                    <div class="equipment-name">${item.name}</div>
+                    <div class="equipment-stats">${item.stats}</div>
+                </div>
+            `).join('');
+            document.getElementById('equipmentList').innerHTML = equipmentHTML;
+            
+            // Inventory
+            const inventoryHTML = char.inventory.map(item => `
+                <div class="inventory-item">
+                    <span class="item-name">${item.name}</span>
+                    <span class="item-quantity">Ã—${item.quantity}</span>
+                </div>
+            `).join('');
+            document.getElementById('inventoryList').innerHTML = inventoryHTML;
+            
+            updateCharacterDisplay();
+        }
+
+        function updateCharacterDisplay() {
+            const char = gameState.character;
+            document.getElementById('hpDisplay').textContent = `${char.hp}/${char.maxHp}`;
+            document.getElementById('acDisplay').textContent = char.ac;
+            document.getElementById('levelDisplay').textContent = char.level;
+            document.getElementById('xpDisplay').textContent = char.xp.toLocaleString();
+            
+            // Update XP progress bar
+            const currentLevel = char.level;
+            const nextLevel = currentLevel + 1;
+            const currentLevelXP = XP_LEVELS[currentLevel];
+            const nextLevelXP = XP_LEVELS[nextLevel] || XP_LEVELS[10] * 2; // Cap at level 10
+            
+            const xpProgress = char.xp - currentLevelXP;
+            const xpNeeded = nextLevelXP - currentLevelXP;
+            const progressPercent = Math.min(100, (xpProgress / xpNeeded) * 100);
+            
+            document.getElementById('xpProgressText').textContent = 
+                `${char.xp.toLocaleString()} / ${nextLevelXP.toLocaleString()}`;
+            document.getElementById('xpBarFill').style.width = `${progressPercent}%`;
+            
+            // Check for level up
+            if (char.xp >= nextLevelXP && nextLevel <= 10) {
+                showLevelUpNotification();
+            }
+            
+            // Update conditions
+            const conditionsHTML = char.conditions.map(condition => 
+                `<div class="condition-tag ${condition.type || ''}">${condition.name}</div>`
+            ).join('');
+            document.getElementById('conditionsDisplay').innerHTML = conditionsHTML;
+            
+            // Update equipment highlighting (only show equipped items as highlighted)
+            const equipmentHTML = char.equipment.map(item => `
+                <div class="equipment-item ${item.equipped ? 'equipped' : ''}">
+                    <div class="equipment-name">${item.name}</div>
+                    <div class="equipment-stats">${item.stats}</div>
+                </div>
+            `).join('');
+            document.getElementById('equipmentList').innerHTML = equipmentHTML;
+            
+            // Update inventory
+            const inventoryHTML = char.inventory.map(item => `
+                <div class="inventory-item">
+                    <span class="item-name">${item.name}</span>
+                    <span class="item-quantity">×${item.quantity}</span>
+                </div>
+            `).join('');
+            document.getElementById('inventoryList').innerHTML = inventoryHTML;
+        }
+
+        // ============================================
+        // STATE MANAGEMENT FUNCTIONS
+        // ============================================
+        
+        function modifyHP(amount) {
+            gameState.character.hp = Math.max(0, Math.min(gameState.character.maxHp, gameState.character.hp + amount));
+            updateCharacterDisplay();
+            
+            if (gameState.character.hp === 0) {
+                addSystemMessage("💀 You have died! Your adventure ends here.");
+                disableInput(true);
+            }
+        }
+        
+        function addXP(amount) {
+            gameState.character.xp += amount;
+            addSystemMessage(`✨ Gained ${amount} XP!`);
+            updateCharacterDisplay();
+        }
+        
+        function addToInventory(itemName, quantity = 1) {
+            const existing = gameState.character.inventory.find(i => i.name === itemName);
+            if (existing) {
+                // Update quantity - handle both numeric and string values
+                if (typeof existing.quantity === 'number') {
+                    existing.quantity += quantity;
+                } else {
+                    // For gold, extract number and update
+                    const match = existing.quantity.match(/(\d+)/);
+                    if (match) {
+                        const current = parseInt(match[1]);
+                        existing.quantity = `${current + quantity}gp`;
+                    }
+                }
+            } else {
+                gameState.character.inventory.push({ name: itemName, quantity });
+            }
+            updateCharacterDisplay();
+        }
+        
+        function removeFromInventory(itemName, quantity = 1) {
+            const item = gameState.character.inventory.find(i => i.name === itemName);
+            if (item) {
+                if (typeof item.quantity === 'number') {
+                    item.quantity -= quantity;
+                    if (item.quantity <= 0) {
+                        gameState.character.inventory = gameState.character.inventory.filter(i => i.name !== itemName);
+                    }
+                }
+            }
+            updateCharacterDisplay();
+        }
+        
+        function equipItem(itemName) {
+            // Unequip all items of the same type first
+            const item = gameState.character.equipment.find(e => e.name === itemName);
+            if (item) {
+                // Determine slot type
+                const slot = item.stats.includes('AC') ? 'armor' : 
+                            item.stats.includes('slashing') || item.stats.includes('piercing') ? 'weapon' : 
+                            'misc';
+                
+                // Unequip other items in same slot
+                gameState.character.equipment.forEach(e => {
+                    if (e !== item) {
+                        const eSlot = e.stats.includes('AC') ? 'armor' : 
+                                     e.stats.includes('slashing') || e.stats.includes('piercing') ? 'weapon' : 
+                                     'misc';
+                        if (eSlot === slot && slot !== 'misc') {
+                            e.equipped = false;
+                        }
+                    }
+                });
+                
+                item.equipped = true;
+                updateCharacterDisplay();
+            }
+        }
+        
+        function addCondition(name, type = '') {
+            if (!gameState.character.conditions.find(c => c.name === name)) {
+                gameState.character.conditions.push({ name, type });
+                updateCharacterDisplay();
+            }
+        }
+        
+        function removeCondition(name) {
+            gameState.character.conditions = gameState.character.conditions.filter(c => c.name !== name);
+            updateCharacterDisplay();
+        }
+        
+        function showLevelUpNotification() {
+            // This would show a level-up UI in a full implementation
+            addSystemMessage(`🎉 LEVEL UP! You are now level ${gameState.character.level + 1}!`);
+            // Auto-level for now (in full version, this would open a character advancement screen)
+        }
+
+        // ============================================
+        // NARRATIVE FUNCTIONS
+        // ============================================
+        
+        function scrollToBottom() {
+            const scroll = document.getElementById('narrativeScroll');
+            setTimeout(() => {
+                scroll.scrollTop = scroll.scrollHeight;
+            }, 100);
+        }
+
+        function addNarration(text) {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            
+            // Process any visual inserts
+            const visualPattern = /\[IMAGE:\s*([^\]]+)\]/g;
+            let processedText = text;
+            let hasVisual = false;
+            
+            processedText = processedText.replace(visualPattern, (match, description) => {
+                hasVisual = true;
+                return `<div class="visual-inset float-right">
+                    <div class="inset-image">
+                        <div class="placeholder-img">
+                            <span>${description}</span>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            
+            entry.innerHTML = `<div class="gm-narration">${processedText}</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
+        function addPlayerAction(text) {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.innerHTML = `<div class="player-action">${text}</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
+        function addSystemMessage(text) {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.innerHTML = `<div class="system-message">${text}</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
+        function addLoadingIndicator() {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.id = 'loadingIndicator';
+            entry.innerHTML = `<div class="loading-indicator">GM is thinking</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+            return entry;
+        }
+
+        function removeLoadingIndicator() {
+            const indicator = document.getElementById('loadingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        function addErrorMessage(text) {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.innerHTML = `<div class="error-message">Error: ${text}</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
+        // ============================================
+        // DICE ROLLING
+        // ============================================
+        
+        function showDiceSection(prompt = "Roll requested:") {
+            const diceSection = document.getElementById('diceSection');
+            const rollPrompt = document.getElementById('rollPrompt');
+            const rollBtn = document.getElementById('rollBtn');
+            const diceInput = document.getElementById('diceInput');
+            
+            rollPrompt.textContent = prompt;
+            
+            // Determine dice type from prompt
+            if (prompt.toLowerCase().includes('damage')) {
+                rollBtn.textContent = 'Roll Damage';
+                diceInput.placeholder = '8';
+                diceInput.max = '99'; // Damage can be higher
+            } else {
+                rollBtn.textContent = 'Roll d20';
+                diceInput.placeholder = '14';
+                diceInput.max = '20';
+            }
+            
+            diceSection.classList.add('active');
+            gameState.waitingForRoll = true;
+            disableInput(true);
+        }
+
+        function hideDiceSection() {
+            const diceSection = document.getElementById('diceSection');
+            diceSection.classList.remove('active');
+            gameState.waitingForRoll = false;
+            gameState.pendingRollContext = null;
+            disableInput(false);
+        }
+
+        function rollDice() {
+            const rollBtn = document.getElementById('rollBtn');
+            let roll;
+            
+            if (rollBtn.textContent.includes('Damage')) {
+                // Roll 1d8+3 for longsword (player's equipped weapon)
+                const baseDamage = Math.floor(Math.random() * 8) + 1;
+                const modifier = gameState.character.abilities.str.modifier;
+                roll = baseDamage + modifier;
+            } else {
+                // Roll d20
+                roll = Math.floor(Math.random() * 20) + 1;
+            }
+            
+            processDiceRoll(roll);
+        }
+
+        function submitDiceRoll() {
+            const input = document.getElementById('diceInput');
+            const roll = parseInt(input.value);
+            const rollBtn = document.getElementById('rollBtn');
+            
+            const isDamageRoll = rollBtn.textContent.includes('Damage');
+            const isValid = isDamageRoll ? (roll >= 1 && roll <= 99) : (roll >= 1 && roll <= 20);
+            
+            if (isValid) {
+                input.value = '';
+                processDiceRoll(roll);
+            }
+        }
+
+        function processDiceRoll(roll) {
+            addSystemMessage(`You rolled <span class="dice-roll">d20: ${roll}</span>`);
+            hideDiceSection();
+            
+            // Send roll result to AI
+            const rollMessage = `I rolled a ${roll}.`;
+            gameState.conversationHistory.push({
+                role: "user",
+                content: rollMessage
+            });
+            
+            callAIGM();
+        }
+
+        // ============================================
+        // INPUT HANDLING
+        // ============================================
+        
+        function disableInput(disabled) {
+            document.getElementById('playerInput').disabled = disabled;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                submitAction();
+            }
+        }
+
+        function submitAction() {
+            const input = document.getElementById('playerInput');
+            const action = input.value.trim();
+            
+            if (!action || gameState.waitingForRoll) return;
+            
+            addPlayerAction(action);
+            input.value = '';
+            
+            // Add to conversation history
+            gameState.conversationHistory.push({
+                role: "user",
+                content: action
+            });
+            
+            // Call AI GM
+            callAIGM();
+        }
+
+        // ============================================
+        // AI GM INTEGRATION
+        // ============================================
+        
+        async function callAIGM() {
+            disableInput(true);
+            const loader = addLoadingIndicator();
+            
+            try {
+                // Build the prompt
+                const systemPrompt = buildSystemPrompt();
+                const messages = [...gameState.conversationHistory];
+                
+                const response = await fetch('http://localhost:3000/api/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 2000,
+                        system: systemPrompt,
+                        messages: messages
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                removeLoadingIndicator();
+                
+                // Process AI response
+                const aiResponse = data.content[0].text;
+                
+                // Add to conversation history
+                gameState.conversationHistory.push({
+                    role: "assistant",
+                    content: aiResponse
+                });
+                
+                // Parse and display response
+                processAIResponse(aiResponse);
+                
+            } catch (error) {
+                removeLoadingIndicator();
+                console.error('AI GM Error:', error);
+                addErrorMessage('Failed to contact GM. Check console for details.');
+                disableInput(false);
+            }
+        }
+
+        function buildSystemPrompt() {
+            const char = gameState.character;
+            
+            return `You are the Game Master for an OSR-style dungeon crawl. You narrate scenes, adjudicate actions, and enforce rules.
+
+# CRITICAL RULES
+
+## RESPONSE LENGTH
+- Keep responses between 50-100 words typically
+- Longer (150 words max) only for major reveals or room descriptions
+- Shorter (20-40 words) for simple acknowledgments or quick narration
+- NEVER write 200+ word responses
+
+## INFORMATION CONTROL
+- NEVER reveal NPC motivations, secrets, or hidden information without successful checks
+- Show observable behavior only - let players interpret
+- Require Insight/Perception checks for "reading" NPCs or noticing hidden details
+- Don't explain why NPCs act - describe what they do
+
+## DICE ROLL REQUESTS
+When you need a roll, use EXACTLY this format:
+"[ROLL_REQUEST: Ability_Name]"
+
+Examples:
+- "[ROLL_REQUEST: Strength]" 
+- "[ROLL_REQUEST: Dexterity]"
+- "[ROLL_REQUEST: Perception]"
+- "[ROLL_REQUEST: Intelligence]"
+
+Do NOT say "Roll a Strength check" - use the exact format above.
+Wait for the player to roll before continuing.
+
+## COMBAT SEQUENCING - CRITICAL
+Combat happens in STRICT steps. Never combine steps:
+
+**Player declares attack â†’ Wait**
+**Player rolls attack â†’ You announce hit/miss â†’ Request damage roll â†’ Wait**
+**Player rolls damage â†’ You narrate damage effect â†’ Enemy's turn begins**
+**You roll enemy attack â†’ You roll enemy damage if hit â†’ Narrate result â†’ Player's turn**
+
+NEVER narrate enemy actions before player's damage roll.
+NEVER combine multiple steps in one response.
+
+Example of CORRECT combat flow:
+Player: "I attack the goblin"
+GM: "Roll your attack. [ROLL_REQUEST: Attack]"
+Player: "I rolled 16"
+GM: "Hit! [ROLL_REQUEST: Damage]"
+Player: "7 damage"
+GM: "Your blade cuts deep. The goblin staggers (3 HP remaining). It lunges at you with its dagger - rolled 12 vs AC 16, miss. It snarls in frustration. Your turn."
+
+## INITIATIVE
+No initiative rolls. Player acts first in combat unless ambushed.
+
+## FORMATTING
+Use these HTML tags in your responses:
+- <b>bold text</b> for emphasis
+- <i>italic text</i> for thoughts, whispers, atmospheric details
+- <code>dice results</code> for rolls and numbers (attack rolls, damage, DCs)
+
+Example: "The door groans open. <i>Cold air rushes past.</i> You see <b>three goblins</b> ahead. They notice you."
+
+## STATE TRACKING - CRITICAL
+The game automatically tracks character state changes. When these occur, use specific phrasing so the system can parse them:
+
+**HP Changes:**
+- Damage: "You take 8 damage" or "The goblin hits for 5 damage"
+- Healing: "You heal 6 HP" or "The potion restores 10 HP"
+
+**XP Rewards:**
+- Always award XP after defeating enemies: "You gain 50 XP"
+- Typical amounts: Minor enemy 10-25 XP, Tough enemy 50-100 XP, Boss 200+ XP
+
+**Inventory Changes:**
+- Finding items: "You find a healing potion" or "You discover 25 gold"
+- Using items: "You drink the healing potion" or "You light a torch"
+- Specific patterns: "find X", "obtain X", "discover X gp"
+
+**Equipment:**
+- Player's currently equipped weapon: Longsword (1d8+3 slashing)
+- Always add the STR modifier (+3) to melee damage
+- Player's AC is 16 from chain mail
+
+**Conditions:**
+- Apply with: "You are poisoned" or "You become blessed"
+- The system will track and display these automatically
+
+**Monster Stats (from module):**
+- Zombie: HP 12, AC 8, +3 attack for 1d6+1 damage
+- Tomb Guardian: HP 8, AC 13, +4 attack for 1d6+2 damage  
+- Always use exact stats from the module
+
+## SKILL USAGE
+Player's trained skills and bonuses:
+- Athletics: +5 (for climbing, jumping, swimming, breaking things)
+- Intimidation: +1 (for threatening or scaring NPCs)
+- Perception: +3 (for noticing hidden things, searching)
+- Survival: +1 (for tracking, foraging, navigation)
+
+When player attempts skill-based actions:
+- Request the APPROPRIATE skill check, not just generic ability checks
+- Add the skill bonus to their d20 roll when adjudicating
+- Example: Player searches for traps → "Roll Perception" → Player rolls 12 → 12 + 3 = 15 total
+
+# CURRENT GAME STATE
+Room: ${gameState.currentRoom}
+Character: ${char.name} (${char.class} Level ${char.level})
+HP: ${char.hp}/${char.maxHp} | AC: ${char.ac}
+STR +${char.abilities.str.modifier} | DEX +${char.abilities.dex.modifier} | CON +${char.abilities.con.modifier} | INT +${char.abilities.int.modifier} | WIS +${char.abilities.wis.modifier} | CHA +${char.abilities.cha.modifier}
+
+# THE FORGOTTEN CRYPT
+
+You are running this dungeon. Key facts:
+- Ancient tomb beneath abandoned monastery
+- Something called "the Sleeper" was imprisoned here
+- Three seals kept it bound - all broken decades ago
+- It escaped by clawing deeper into the earth
+- Glowing runes at entrance warn of containment failure
+
+## Current Room: ${gameState.currentRoom === 'entrance' ? 'Entrance' : gameState.currentRoom === 'library' ? 'Forgotten Library' : gameState.currentRoom === 'flooded_chamber' ? 'Flooded Chapel' : gameState.currentRoom === 'guard_room' ? 'Guardians Post' : 'Sleepers Tomb'}
+
+${getRoomDescription(gameState.currentRoom)}
+
+# ADJUDICATION
+
+**Auto-success:** Simple actions (walking, talking, using items normally)
+**Auto-fail:** Impossible actions
+**Requires roll:** Risky actions, searching, difficult tasks
+
+Standard DCs: Easy 10, Medium 15, Hard 20
+
+# TONE
+- Atmospheric but concise
+- Show don't tell
+- Build tension through description not exposition
+- Let players discover secrets
+
+Respond as GM. If you need a roll, use [ROLL_REQUEST: Ability]. Wait for results before continuing.`;
+        }
+
+        function getRoomDescription(room) {
+            const rooms = {
+                entrance: `Glowing runes on archway (warnings about containment). Three passages: north (dripping water), east (unnatural darkness), west (distant voices).`,
+                library: `Collapsed shelves, ancient books as dust. Central desk with open tome (describes binding ritual for "the Sleeper" - three seals, all broken per margin notes). Passage north to larger chamber.`,
+                flooded_chamber: `Half-submerged chapel. Dark water, toppled pews. Stone altar with dark stains. Two waterlogged zombies may emerge if player searches debris (HP 12, AC 8, +3 for 1d6+1). Silver holy symbol in debris (DC 12 DEX to find, can turn undead).`,
+                guard_room: `Stone benches, empty weapon racks. Three sarcophagi with armored skeletons in alcoves. Opening sarcophagi triggers 3 tomb guardians (HP 8, AC 13, +4 for 1d6+2). Middle sarcophagus has +1 longsword. All contain 150gp total jewelry.`,
+                crypt_proper: `Vast chamber. Dozens of burial niches. Central platform with shattered sarcophagus - empty, broken chains, shattered binding stones. Clawed tunnel descending behind it (the Sleeper's escape route). Disturbing niches may wake restless dead (HP 6, AC 10, +2 for 1d4 necrotic). One niche contains gems worth 75gp (DC 10 STR to open). Crown on platform worth 200gp.`
+            };
+            return rooms[room] || rooms.entrance;
+        }
+
+        function processAIResponse(response) {
+            // Format the response (convert HTML tags for display)
+            let formattedResponse = response;
+            
+            // Parse for state changes BEFORE displaying
+            parseStateChanges(response);
+            
+            // Check if AI is requesting a roll using the new format
+            const rollRequestPattern = /\[ROLL_REQUEST:\s*(\w+)\]/i;
+            const match = response.match(rollRequestPattern);
+            
+            if (match) {
+                const ability = match[1];
+                // Remove the roll request tag from displayed text
+                formattedResponse = response.replace(rollRequestPattern, '').trim();
+                
+                // Display the AI's narrative
+                addNarration(formattedResponse);
+                
+                // Show dice section
+                showDiceSection(`Roll ${ability}:`);
+            } else {
+                // No roll requested, just display and enable input
+                addNarration(formattedResponse);
+                disableInput(false);
+            }
+        }
+        
+        function parseStateChanges(text) {
+            // Parse HP changes
+            const damagePatterns = [
+                /(?:take|taking|suffer|lose)\s+(\d+)\s+(?:damage|HP)/i,
+                /(\d+)\s+damage/i,
+                /hit\s+for\s+(\d+)/i
+            ];
+            
+            for (const pattern of damagePatterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    const damage = parseInt(match[1]);
+                    modifyHP(-damage);
+                    break;
+                }
+            }
+            
+            // Parse healing
+            const healPatterns = [
+                /(?:heal|restore|regain)\s+(\d+)\s+(?:HP|hit points)/i,
+                /(\d+)\s+HP\s+(?:restored|healed)/i
+            ];
+            
+            for (const pattern of healPatterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    const healing = parseInt(match[1]);
+                    modifyHP(healing);
+                    break;
+                }
+            }
+            
+            // Parse XP gains
+            const xpPattern = /(?:gain|earn|receive)\s+(\d+)\s+XP/i;
+            const xpMatch = text.match(xpPattern);
+            if (xpMatch) {
+                addXP(parseInt(xpMatch[1]));
+            }
+            
+            // Parse gold found
+            const goldPatterns = [
+                /(?:find|discover|obtain|gain)\s+(\d+)\s*gp/i,
+                /(\d+)\s+gold/i
+            ];
+            
+            for (const pattern of goldPatterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    const gold = parseInt(match[1]);
+                    addToInventory('[GOLD] Gold', gold);
+                    addSystemMessage(`Found ${gold} gold pieces!`);
+                    break;
+                }
+            }
+            
+            // Parse item acquisition (generic)
+            const itemPattern = /(?:find|discover|obtain|take)\s+(?:a|an|the)\s+([^.!?,]+?)(?:\.|!|,|\s+in\s+|\s+from\s+)/i;
+            const itemMatch = text.match(itemPattern);
+            if (itemMatch && !text.match(/gold|damage|HP/i)) {
+                const itemName = itemMatch[1].trim();
+                // Don't add if it's just narrative description
+                if (itemName.length < 30 && !itemName.includes('you') && !itemName.includes('your')) {
+                    addToInventory(itemName, 1);
+                    addSystemMessage(`Added to inventory: ${itemName}`);
+                }
+            }
+            
+            // Parse torch usage
+            if (text.match(/torch\s+(?:burns out|extinguishes|dies)/i)) {
+                removeFromInventory('[TORCH] Torch', 1);
+                addSystemMessage('A torch has burned out.');
+            }
+            
+            if (text.match(/light\s+(?:a|another)\s+torch/i)) {
+                removeFromInventory('[TORCH] Torch', 1);
+                addSystemMessage('Lit a torch from your pack.');
+            }
+            
+            // Parse potion usage
+            if (text.match(/drink|consume|use\s+(?:a|the)\s+healing\s+potion/i)) {
+                removeFromInventory('[POTION] Healing Potion', 1);
+                addSystemMessage('Used a healing potion.');
+            }
+            
+            // Parse conditions
+            const conditionPatterns = [
+                { pattern: /(?:become|are|you're)\s+poisoned/i, name: 'Poisoned', type: 'debuff' },
+                { pattern: /(?:become|are|you're)\s+blessed/i, name: 'Blessed', type: 'buff' },
+                { pattern: /(?:become|are|you're)\s+wounded/i, name: 'Wounded', type: 'debuff' },
+                { pattern: /(?:become|are|you're)\s+stunned/i, name: 'Stunned', type: 'debuff' }
+            ];
+            
+            for (const cond of conditionPatterns) {
+                if (text.match(cond.pattern)) {
+                    addCondition(cond.name, cond.type);
+                }
+            }
+            
+            // Parse condition removal
+            if (text.match(/(?:no longer|removes?|cures?)\s+\w+/i)) {
+                // Could be more sophisticated
+                gameState.character.conditions.forEach(c => {
+                    if (text.toLowerCase().includes(c.name.toLowerCase())) {
+                        removeCondition(c.name);
+                    }
+                });
+            }
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        
+        window.addEventListener('load', () => {
+            initializeCharacterSheet();
+            
+            // Welcome message
+            addNarration("The ancient stone door groans open, revealing a passage descending into darkness. Cold air rushes past you, carrying the scent of earth and something elseâ€”something old and patient. Your torch flickers in the sudden draft, casting wild shadows on the crumbling walls.");
+            
+            addNarration("As your eyes adjust to the gloom, you notice strange markings carved into the archway above the entrance. They glow faintly with a sickly green light, pulsing like a slow heartbeat. The passage ahead splits in three directions.");
+            
+            addSystemMessage("Type your action and press Enter to begin your adventure.");
+            
+            // Focus input
+            document.getElementById('playerInput').focus();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JSON Validator</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1410;
+            color: #e8dcc4;
+        }
+        .test {
+            margin: 10px 0;
+            padding: 15px;
+            background: #2a1f15;
+            border-left: 3px solid #5a4a3a;
+            border-radius: 4px;
+        }
+        .success {
+            border-left-color: #50c050;
+        }
+        .error {
+            border-left-color: #c85050;
+        }
+        .warning {
+            border-left-color: #f0a000;
+        }
+        pre {
+            background: #0a0a0a;
+            padding: 10px;
+            overflow-x: auto;
+            max-height: 300px;
+            border-radius: 3px;
+        }
+        h1 {
+            color: #d4af37;
+        }
+        .summary {
+            background: #3d2f1f;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 JSON Validator</h1>
+    <p>Checking all JSON files for syntax errors...</p>
+    <div id="results"></div>
+    <div id="summary"></div>
+
+    <script>
+        const files = [
+            'character_aldric.json',
+            'test_module_arena.json',
+            'monster_manual.json',
+            'rules.json'
+        ];
+
+        let totalTests = 0;
+        let passedTests = 0;
+        let failedTests = 0;
+
+        async function validateFile(filename) {
+            totalTests++;
+            const resultsDiv = document.getElementById('results');
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test';
+            testDiv.innerHTML = `<strong>📄 ${filename}</strong><br>`;
+            resultsDiv.appendChild(testDiv);
+
+            try {
+                // Step 1: Fetch the file
+                testDiv.innerHTML += `⏳ Fetching...<br>`;
+                const response = await fetch(`./${filename}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                // Step 2: Get as text first to see raw content
+                const rawText = await response.text();
+                testDiv.innerHTML += `✓ Fetched (${rawText.length} bytes)<br>`;
+
+                // Show first 200 chars
+                testDiv.innerHTML += `<pre>First 200 chars:\n${rawText.substring(0, 200)}...</pre>`;
+
+                // Step 3: Try to parse as JSON
+                testDiv.innerHTML += `⏳ Parsing JSON...<br>`;
+                const data = JSON.parse(rawText);
+                
+                // Step 4: Validate structure
+                testDiv.className = 'test success';
+                testDiv.innerHTML += `✅ <strong>VALID JSON</strong><br>`;
+                testDiv.innerHTML += `Structure: ${Object.keys(data).join(', ')}<br>`;
+                
+                // Show preview
+                const preview = JSON.stringify(data, null, 2).substring(0, 500);
+                testDiv.innerHTML += `<pre>Preview:\n${preview}...\n</pre>`;
+                
+                passedTests++;
+                
+            } catch (error) {
+                failedTests++;
+                testDiv.className = 'test error';
+                testDiv.innerHTML += `❌ <strong>FAILED</strong><br>`;
+                testDiv.innerHTML += `<strong>Error Type:</strong> ${error.name}<br>`;
+                testDiv.innerHTML += `<strong>Error Message:</strong> ${error.message}<br>`;
+                
+                // Try to show where the error is
+                if (error instanceof SyntaxError) {
+                    testDiv.innerHTML += `<br><strong>This is a JSON syntax error!</strong><br>`;
+                    testDiv.innerHTML += `The file contains invalid JSON syntax.<br>`;
+                    testDiv.innerHTML += `<br><strong>Common causes:</strong><br>`;
+                    testDiv.innerHTML += `• Trailing comma in array or object<br>`;
+                    testDiv.innerHTML += `• Missing quote marks<br>`;
+                    testDiv.innerHTML += `• Unescaped special characters<br>`;
+                    testDiv.innerHTML += `• Comments (JSON doesn't allow comments)<br>`;
+                }
+                
+                testDiv.innerHTML += `<pre>${error.stack}</pre>`;
+            }
+        }
+
+        async function runTests() {
+            for (const file of files) {
+                await validateFile(file);
+            }
+            
+            // Summary
+            const summaryDiv = document.getElementById('summary');
+            summaryDiv.className = 'summary';
+            
+            if (failedTests === 0) {
+                summaryDiv.innerHTML = `
+                    <h2 style="color: #50c050;">✅ All JSON Files Valid!</h2>
+                    <p>All ${totalTests} files passed validation.</p>
+                    <p><strong>Next step:</strong> The error must be in how the data is being loaded. Check the browser console for more details.</p>
+                `;
+            } else {
+                summaryDiv.innerHTML = `
+                    <h2 style="color: #c85050;">❌ Found ${failedTests} Invalid File(s)</h2>
+                    <p>Passed: ${passedTests}/${totalTests}</p>
+                    <p><strong>Fix the files marked with ❌ above.</strong></p>
+                    <p>Use a JSON validator like <a href="https://jsonlint.com/" target="_blank" style="color: #d4af37;">JSONLint</a> to fix syntax errors.</p>
+                `;
+            }
+        }
+
+        runTests();
+    </script>
+</body>
+</html>

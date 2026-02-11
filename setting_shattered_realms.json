@@ -1,0 +1,184 @@
+{
+  "setting": {
+    "name": "The Shattered Realms",
+    "version": "1.0",
+    "type": "generic_fantasy",
+    "tone": "dark fantasy with hope",
+    "
+": "A basic fantasy setting that can be used with any module. Provides world context without constraining adventures.",
+    
+    "world_overview": {
+      "description": "A world recovering from a magical cataclysm known as the Sundering. Ancient civilizations have fallen, magic is unstable, and the dead do not always rest. Heroes are needed.",
+      "current_era": "The Age of Reclamation (approximately 200 years after the Sundering)",
+      "magic_level": "Medium - magic exists but is dangerous and unpredictable",
+      "technology_level": "Medieval with some Renaissance elements",
+      "tone": "Survivors rebuilding civilization, ancient mysteries waiting to be discovered"
+    },
+    
+    "cosmology": {
+      "planes": {
+        "material_plane": "The mortal world where most life exists",
+        "shadowfell": "Realm of death and shadow, bleeds into material world through old tombs",
+        "feywild": "Realm of chaotic magic and fey creatures, distant since the Sundering",
+        "elemental_planes": "Primal forces of creation, rarely accessed",
+        "astral_plane": "Realm of thought and divine power"
+      },
+      "gods": {
+        "the_keeper": {
+          "domain": "Death, graves, memory",
+          "alignment": "Neutral",
+          "symbol": "Lantern with no flame",
+          "note": "Ensures the dead rest peacefully"
+        },
+        "the_lifegiver": {
+          "domain": "Life, growth, healing",
+          "alignment": "Good",
+          "symbol": "Tree with golden leaves",
+          "note": "Grants vitality and renewal"
+        },
+        "the_wanderer": {
+          "domain": "Travel, trade, freedom",
+          "alignment": "Neutral",
+          "symbol": "Road leading to horizon",
+          "note": "Protects travelers and merchants"
+        },
+        "the_forge": {
+          "domain": "Crafting, civilization, law",
+          "alignment": "Lawful",
+          "symbol": "Hammer and anvil",
+          "note": "Patron of builders and smiths"
+        }
+      },
+      "afterlife": "Souls journey to the Keeper's realm unless bound by magic or unfinished business"
+    },
+    
+    "major_regions": {
+      "the_sundered_coast": {
+        "description": "Coastal region where the Sundering began. Still magically unstable.",
+        "population": "Sparse - mostly ruins and scavengers",
+        "danger_level": "Very high",
+        "notes": "Source of most undead and magical anomalies"
+      },
+      "the_kingdom_of_aldwyn": {
+        "description": "Largest surviving human kingdom. Trying to restore order.",
+        "population": "Dense - cities and fortified towns",
+        "government": "Monarchy with feudal system",
+        "danger_level": "Low in cities, medium in borderlands",
+        "notes": "Most adventures start here"
+      },
+      "the_old_empire": {
+        "description": "Ruins of the pre-Sundering civilization. Dungeons and treasures.",
+        "population": "None - all dead or fled",
+        "danger_level": "Extreme",
+        "notes": "Rich in loot but deadly. Most modules take place in Old Empire ruins."
+      },
+      "the_wildwood": {
+        "description": "Vast forest, home to elves and fey creatures",
+        "population": "Sparse - isolated communities",
+        "danger_level": "Medium",
+        "notes": "Elves are reclusive after the Sundering"
+      }
+    },
+    
+    "races": {
+      "humans": {
+        "population": "Most common",
+        "culture": "Diverse - rebuilding lost civilizations",
+        "lifespan": "60-80 years",
+        "notes": "Adaptable and ambitious"
+      },
+      "dwarves": {
+        "population": "Uncommon",
+        "culture": "Clan-based, live in mountain holds",
+        "lifespan": "200-300 years",
+        "notes": "Survived Sundering underground, now re-emerging"
+      },
+      "elves": {
+        "population": "Rare",
+        "culture": "Reclusive forest dwellers",
+        "lifespan": "500+ years",
+        "notes": "Deeply scarred by Sundering, distrustful of outsiders"
+      },
+      "halflings": {
+        "population": "Common in human lands",
+        "culture": "Nomadic traders and farmers",
+        "lifespan": "100-150 years",
+        "notes": "Adapted well to post-Sundering world"
+      }
+    },
+    
+    "history": {
+      "the_old_empire": {
+        "era": "Age of Wonders (ended 200 years ago)",
+        "description": "Advanced magical civilization spanning the continent",
+        "achievements": "Great cities, powerful magic, peace and prosperity",
+        "end": "The Sundering destroyed it in a single cataclysmic day"
+      },
+      "the_sundering": {
+        "era": "Day of Ash (200 years ago)",
+        "description": "A magical catastrophe that destroyed civilization",
+        "cause": "Unknown - theories include: experiment gone wrong, divine punishment, war between archmages",
+        "effects": "Mass death, collapse of magic, undead plague, geographical devastation",
+        "survivors": "Less than 10% of population survived"
+      },
+      "the_dark_years": {
+        "era": "First century after Sundering",
+        "description": "Survival, scattered communities, constant danger",
+        "challenges": "Undead hordes, magical instability, starvation, disease",
+        "heroes": "Many small heroes kept humanity alive"
+      },
+      "the_reclamation": {
+        "era": "Current era (last 100 years)",
+        "description": "Rebuilding, reclaiming land, rediscovering lost knowledge",
+        "progress": "New kingdoms formed, trade routes restored, population growing",
+        "challenges": "Still many ruins unexplored, undead still rise, magic still dangerous"
+      }
+    },
+    
+    "magic": {
+      "nature": "Magic is real but dangerous and unpredictable since the Sundering",
+      "practitioners": "Rare - most magic users are self-taught or learned from fragments",
+      "restrictions": "No great magic schools remain. Knowledge is scattered.",
+      "effects": "Spells can backfire or have unintended consequences",
+      "undead": "The Sundering weakened the barrier between life and death. Undead rise easily.",
+      "artifacts": "Many powerful items from Old Empire remain buried in ruins"
+    },
+    
+    "adventure_context": {
+      "why_adventure": [
+        "Reclaim lost treasures from Old Empire ruins",
+        "Stop undead from plaguing settlements",
+        "Discover what caused the Sundering",
+        "Find and secure magical artifacts before they cause harm",
+        "Protect trade routes and settlements from monsters",
+        "Earn gold and fame in a dangerous world"
+      ],
+      "common_threats": [
+        "Undead (most common)",
+        "Bandits and raiders",
+        "Magical anomalies",
+        "Monsters from the Sundering",
+        "Cultists trying to repeat the Sundering",
+        "Rival adventuring parties"
+      ],
+      "opportunities": [
+        "Ruins full of treasure",
+        "Bounties on monsters and undead",
+        "Lost knowledge to rediscover",
+        "New lands to settle",
+        "Mysteries to solve",
+        "Fame and glory"
+      ]
+    },
+    
+    "gm_guidance": {
+      "tone": "Dark but hopeful - the world is dangerous but worth saving",
+      "player_motivation": "Gold, glory, and making the world safer",
+      "moral_ambiguity": "Not everything is black and white. Survivors had to make hard choices.",
+      "mystery": "What caused the Sundering? Can it happen again? Let players discover clues.",
+      "death": "Death is common but meaningful. Dead PCs can inspire future heroes.",
+      "magic_items": "Old Empire artifacts are powerful but rare. Finding one is special.",
+      "undead": "Treat undead with horror - they're not just XP, they're tragic victims of the Sundering"
+    }
+  }
+}

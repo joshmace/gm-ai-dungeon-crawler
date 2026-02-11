@@ -1,0 +1,2527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Dungeon Crawler - v2 Testing Build</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Crimson Text', 'Georgia', serif;
+            background: linear-gradient(to bottom, #1a1410 0%, #2d2416 100%);
+            color: #e8dcc4;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            gap: 20px;
+            transition: all 0.3s ease;
+            padding-left: 280px;
+        }
+
+        /* Character Panel - Fixed Full Height */
+        .character-panel {
+            width: 260px;
+            background: rgba(25, 20, 15, 0.9);
+            border: 2px solid #5a4a3a;
+            border-radius: 8px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            flex-shrink: 0;
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .character-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .character-panel::-webkit-scrollbar-track {
+            background: #1a1410;
+        }
+
+        .character-panel::-webkit-scrollbar-thumb {
+            background: #5a4a3a;
+            border-radius: 4px;
+        }
+
+        .character-header {
+            background: linear-gradient(to bottom, #3d2f1f, #2a1f15);
+            padding: 12px;
+            border-bottom: 2px solid #5a4a3a;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .character-header.in-combat {
+            background: linear-gradient(to bottom, #4a1a1a, #2a0f0f);
+            border: 2px solid #c03030;
+            border-bottom-color: #c03030;
+            box-shadow: 0 0 10px rgba(192, 48, 48, 0.3);
+        }
+
+        .character-header.in-combat .character-name {
+            color: #ff6b6b;
+        }
+
+        .character-portrait {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid #d4af37;
+            background: linear-gradient(135deg, #5a4a3a, #3a2a1a);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            color: #d4af37;
+            margin: 0 auto 8px auto;
+        }
+
+        .character-name {
+            font-size: 1.1em;
+            color: #d4af37;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .character-class {
+            color: #b8a888;
+            font-size: 0.85em;
+        }
+
+        .quick-stats {
+            padding: 12px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .stat-box {
+            background: rgba(61, 47, 31, 0.4);
+            border: 1px solid #5a4a3a;
+            border-radius: 4px;
+            padding: 8px 6px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.7em;
+            color: #8a7a6a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 3px;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            color: #e8dcc4;
+            font-weight: bold;
+        }
+
+        .stat-value.hp {
+            color: #c85050;
+        }
+
+        .stat-value.ac {
+            color: #7a9aba;
+        }
+
+        .status-line {
+            padding: 6px 12px;
+            border-bottom: 1px solid #5a4a3a;
+            font-size: 0.8em;
+            color: #c85050;
+            min-height: 22px;
+        }
+        .status-line:empty {
+            display: none;
+        }
+        .conditions {
+            padding: 8px 12px;
+            border-bottom: 1px solid #5a4a3a;
+            min-height: 35px;
+        }
+
+        .condition-tag {
+            display: inline-block;
+            background: rgba(200, 80, 80, 0.3);
+            border: 1px solid #c85050;
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 0.7em;
+            margin-right: 4px;
+            margin-bottom: 4px;
+        }
+
+        .condition-tag.buff {
+            background: rgba(80, 150, 80, 0.3);
+            border-color: #509650;
+        }
+
+        .xp-progress {
+            padding: 10px 12px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .xp-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7em;
+            color: #8a7a6a;
+            margin-bottom: 4px;
+        }
+
+        .xp-bar-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(61, 47, 31, 0.5);
+            border: 1px solid #5a4a3a;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .xp-bar-fill {
+            height: 100%;
+            background: linear-gradient(to right, #d4af37, #f4cf57);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+            box-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
+        }
+
+        .section-header {
+            color: #d4af37;
+            font-size: 0.85em;
+            padding: 10px 12px 6px 12px;
+            border-bottom: 1px solid #5a4a3a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            background: rgba(61, 47, 31, 0.2);
+        }
+
+        .ability-scores {
+            padding: 10px 12px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .ability-score {
+            background: rgba(61, 47, 31, 0.3);
+            border: 1px solid #5a4a3a;
+            border-radius: 4px;
+            padding: 8px 6px;
+            text-align: center;
+        }
+
+        .ability-name {
+            font-size: 0.7em;
+            color: #8a7a6a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .ability-value {
+            font-size: 1.4em;
+            color: #e8dcc4;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .ability-modifier {
+            font-size: 0.9em;
+            color: #d4af37;
+        }
+
+        .skills-list {
+            padding: 10px 12px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .skill-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 6px;
+            background: rgba(61, 47, 31, 0.2);
+            border-radius: 3px;
+            margin-bottom: 4px;
+            font-size: 0.85em;
+        }
+
+        .skill-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .skill-name {
+            color: #b8a888;
+        }
+
+        .skill-modifier {
+            color: #d4af37;
+            font-weight: bold;
+        }
+
+        .equipment-section, .inventory-section {
+            padding: 10px 12px;
+            border-bottom: 1px solid #5a4a3a;
+        }
+
+        .equipment-item, .inventory-item {
+            background: rgba(61, 47, 31, 0.3);
+            border: 1px solid #5a4a3a;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.85em;
+        }
+
+        .equipment-item:hover, .inventory-item:hover {
+            background: rgba(61, 47, 31, 0.5);
+            border-color: #8b7355;
+        }
+
+        .equipment-weapon {
+            cursor: pointer;
+            border-left: 3px solid #8b7355;
+        }
+
+        .equipment-weapon:hover {
+            border-left-color: #d4af37;
+        }
+
+        .equipment-name, .item-name {
+            color: #e8dcc4;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .equipment-stats {
+            font-size: 0.75em;
+            color: #b8a888;
+        }
+
+        .inventory-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+        }
+
+        .item-quantity {
+            background: rgba(90, 74, 58, 0.5);
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            color: #b8a888;
+        }
+
+        /* Narrative Panel */
+        .narrative-panel {
+            flex: 1;
+            background: rgba(25, 20, 15, 0.8);
+            border: 2px solid #5a4a3a;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 20px;
+            bottom: 20px;
+            right: 20px;
+            left: 300px;
+        }
+
+        .narrative-header {
+            background: linear-gradient(to bottom, #3d2f1f, #2a1f15);
+            padding: 15px 25px;
+            border-bottom: 2px solid #5a4a3a;
+            flex-shrink: 0;
+        }
+
+        .narrative-header h1 {
+            font-size: 1.6em;
+            color: #d4af37;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            font-weight: 400;
+            letter-spacing: 2px;
+        }
+
+        .narrative-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 25px;
+            scroll-behavior: smooth;
+        }
+
+        .narrative-scroll::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .narrative-scroll::-webkit-scrollbar-track {
+            background: #1a1410;
+        }
+
+        .narrative-scroll::-webkit-scrollbar-thumb {
+            background: #5a4a3a;
+            border-radius: 5px;
+        }
+
+        .narrative-entry {
+            margin-bottom: 20px;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .gm-narration {
+            font-size: 1.05em;
+            color: #e8dcc4;
+            padding: 14px;
+            background: rgba(61, 47, 31, 0.3);
+            border-left: 3px solid #8b7355;
+            border-radius: 4px;
+            line-height: 1.7;
+        }
+
+        .gm-narration::first-letter {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #d4af37;
+        }
+
+        .player-action {
+            color: #a8c8e8;
+            font-style: italic;
+            padding: 10px 14px;
+            background: rgba(40, 60, 80, 0.2);
+            border-left: 3px solid #5a7a9a;
+            border-radius: 4px;
+        }
+
+        .player-action::before {
+            content: "> ";
+            color: #7a9aba;
+            font-style: normal;
+        }
+
+        .system-message {
+            color: #b8a888;
+            font-size: 0.9em;
+            padding: 6px 14px;
+            background: rgba(90, 74, 58, 0.15);
+            border-left: 3px solid #6a5a4a;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .loading-indicator {
+            color: #8a7a6a;
+            font-style: italic;
+            padding: 10px 14px;
+        }
+
+        .loading-indicator::after {
+            content: '...';
+            animation: ellipsis 1.5s infinite;
+        }
+
+        @keyframes ellipsis {
+            0% { content: '.'; }
+            33% { content: '..'; }
+            66% { content: '...'; }
+        }
+
+        /* Input Section */
+        .input-section {
+            padding: 15px 25px;
+            background: linear-gradient(to top, #3d2f1f, #2a1f15);
+            border-top: 2px solid #5a4a3a;
+            flex-shrink: 0;
+        }
+
+        .action-prompt {
+            color: #b8a888;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        input[type="text"], input[type="number"] {
+            padding: 10px 14px;
+            background: #1a1410;
+            border: 2px solid #5a4a3a;
+            border-radius: 4px;
+            color: #e8dcc4;
+            font-family: 'Crimson Text', 'Georgia', serif;
+            font-size: 1em;
+        }
+
+        input[type="text"] {
+            flex: 1;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: #8b7355;
+            box-shadow: 0 0 10px rgba(139, 115, 85, 0.3);
+        }
+
+        input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: linear-gradient(to bottom, #5a4a3a, #4a3a2a);
+            border: 2px solid #6a5a4a;
+            border-radius: 4px;
+            color: #e8dcc4;
+            font-family: 'Crimson Text', 'Georgia', serif;
+            font-size: 0.95em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover:not(:disabled) {
+            background: linear-gradient(to bottom, #6a5a4a, #5a4a3a);
+            border-color: #8b7355;
+            box-shadow: 0 0 15px rgba(139, 115, 85, 0.4);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .secondary-button {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            background: rgba(90, 74, 58, 0.3);
+            border: 1px solid #5a4a3a;
+        }
+
+        .dice-section {
+            display: none;
+            gap: 8px;
+            align-items: center;
+            padding: 10px 0;
+            margin-bottom: 8px;
+            border: 2px solid #d4af37;
+            border-radius: 4px;
+            background: rgba(212, 175, 55, 0.1);
+            padding: 12px;
+            flex-wrap: wrap;
+        }
+
+        .dice-section.active {
+            display: flex;
+        }
+
+        .dice-label {
+            color: #d4af37;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .dice-input {
+            width: 56px;
+            min-width: 56px;
+            padding: 5px 8px;
+            text-align: center;
+        }
+        /* Remove number input spinners so the field isn't cramped */
+        .dice-input::-webkit-outer-spin-button,
+        .dice-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .dice-input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+
+        .dice-button {
+            padding: 6px 12px;
+            font-size: 0.8em;
+        }
+
+        .error-message {
+            background: rgba(200, 80, 80, 0.2);
+            border: 1px solid #c85050;
+            color: #e8a8a8;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+
+        /* Debug Panel */
+        #debugPanel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(10, 10, 10, 0.95);
+            border: 2px solid #d4af37;
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 1000;
+            min-width: 250px;
+            max-height: 80vh;
+            overflow-y: auto;
+            display: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+        }
+
+        #debugPanel h3 {
+            color: #d4af37;
+            margin-bottom: 10px;
+            font-size: 1em;
+            border-bottom: 1px solid #5a4a3a;
+            padding-bottom: 5px;
+        }
+
+        .debug-section {
+            margin-bottom: 15px;
+        }
+
+        .debug-section label {
+            display: block;
+            color: #b8a888;
+            font-size: 0.8em;
+            margin-bottom: 3px;
+        }
+
+        .debug-controls {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .debug-button {
+            padding: 5px 10px;
+            font-size: 0.75em;
+            background: rgba(90, 74, 58, 0.5);
+            border: 1px solid #5a4a3a;
+            color: #e8dcc4;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .debug-button:hover {
+            background: rgba(90, 74, 58, 0.8);
+            border-color: #8b7355;
+        }
+
+        .debug-info {
+            font-size: 0.75em;
+            color: #8a7a6a;
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 3px;
+            margin-top: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 20, 16, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #loadingOverlay h2 {
+            color: #d4af37;
+            font-size: 2em;
+        }
+
+        #loadingOverlay p {
+            color: #b8a888;
+            font-size: 1.2em;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #5a4a3a;
+            border-top-color: #d4af37;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay">
+        <h2>Loading Game Data...</h2>
+        <div class="spinner"></div>
+        <p id="loadingStatus">Initializing...</p>
+    </div>
+
+    <!-- Debug Panel (Ctrl+Shift+D to toggle) -->
+    <div id="debugPanel">
+        <h3>Debug Panel</h3>
+        
+        <div class="debug-section">
+            <label>HP Controls:</label>
+            <div class="debug-controls">
+                <button class="debug-button" onclick="TestUtils.modifyHP(-10)">-10 HP</button>
+                <button class="debug-button" onclick="TestUtils.modifyHP(-5)">-5 HP</button>
+                <button class="debug-button" onclick="TestUtils.modifyHP(5)">+5 HP</button>
+                <button class="debug-button" onclick="TestUtils.modifyHP(10)">+10 HP</button>
+                <button class="debug-button" onclick="TestUtils.fullHeal()">Full Heal</button>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <label>XP Controls:</label>
+            <div class="debug-controls">
+                <button class="debug-button" onclick="TestUtils.addXP(25)">+25 XP</button>
+                <button class="debug-button" onclick="TestUtils.addXP(50)">+50 XP</button>
+                <button class="debug-button" onclick="TestUtils.addXP(100)">+100 XP</button>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <label>Pack:</label>
+            <div class="debug-controls">
+                <button class="debug-button" onclick="TestUtils.addPotion()">+Potion</button>
+                <button class="debug-button" onclick="TestUtils.addGold(50)">+50 Gold</button>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <label>Navigation:</label>
+            <div class="debug-controls">
+                <button class="debug-button" onclick="TestUtils.teleportToRoom('entry_hall')">Entry</button>
+                <button class="debug-button" onclick="TestUtils.teleportToRoom('training_room')">Training</button>
+                <button class="debug-button" onclick="TestUtils.teleportToRoom('challenge_chamber')">Challenge</button>
+                <button class="debug-button" onclick="TestUtils.teleportToRoom('boss_arena')">Boss</button>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <label>State:</label>
+            <div class="debug-controls">
+                <button class="debug-button" onclick="TestUtils.logState()">Log State</button>
+                <button class="debug-button" onclick="TestUtils.clearHistory()">Clear History</button>
+            </div>
+        </div>
+
+        <div class="debug-section">
+            <label>Parse Log:</label>
+            <div class="debug-info" id="debugParseLog">No parsing activity yet...</div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Character Panel -->
+        <div class="character-panel" id="characterPanel">
+            <div class="character-header" id="characterHeader">
+                <div class="character-portrait">W</div>
+                <div class="character-name" id="charName">Loading...</div>
+                <div class="character-class" id="charClass">...</div>
+            </div>
+
+            <div class="quick-stats">
+                <div class="stat-box">
+                    <div class="stat-label">HP</div>
+                    <div class="stat-value hp" id="hpDisplay">--/--</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">AC</div>
+                    <div class="stat-value ac" id="acDisplay">--</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Level</div>
+                    <div class="stat-value" id="levelDisplay">--</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">XP</div>
+                    <div class="stat-value" id="xpDisplay">--</div>
+                </div>
+            </div>
+
+            <div class="conditions" id="conditionsDisplay"></div>
+
+            <div class="xp-progress">
+                <div class="xp-label">
+                    <span>XP Progress</span>
+                    <span id="xpProgressText">-- / --</span>
+                </div>
+                <div class="xp-bar-container">
+                    <div class="xp-bar-fill" id="xpBarFill" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <div class="section-header">Abilities</div>
+            <div class="ability-scores" id="abilityScores"></div>
+
+            <div class="section-header">Skills</div>
+            <div class="skills-list" id="skillsList"></div>
+
+            <div class="section-header">Equipped</div>
+            <div class="equipment-section" id="equippedList"></div>
+
+            <div class="section-header">Pack</div>
+            <div class="inventory-section" id="packList"></div>
+        </div>
+
+        <!-- Narrative Panel -->
+        <div class="narrative-panel">
+            <div class="narrative-header">
+                <h1 id="dungeonTitle">Loading...</h1>
+            </div>
+
+            <div class="narrative-scroll" id="narrativeScroll">
+                <!-- Narrative entries will be added here -->
+            </div>
+
+            <div class="input-section">
+                <!-- Dice Rolling Section -->
+                <div class="dice-section" id="diceSection">
+                    <span class="dice-label" id="rollPrompt">Roll requested:</span>
+                    <button class="dice-button secondary-button" onclick="rollDice()" id="rollBtn">Roll d20</button>
+                    <span class="dice-label">or enter result:</span>
+                    <input type="number" class="dice-input" id="diceInput" placeholder="1-20" min="1" max="20">
+                    <button class="dice-button secondary-button" onclick="submitDiceRoll()" id="submitRollBtn">Submit</button>
+                </div>
+
+                <div class="action-prompt">What do you do?</div>
+                
+                <div class="input-wrapper">
+                    <input type="text" id="playerInput" placeholder="Describe your action... (press Enter)" onkeypress="handleKeyPress(event)" disabled>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION & DEBUG
+        // ============================================
+        
+        const CONFIG = {
+            DEBUG_MODE: true,
+            DATA_FILES: {
+                character: './character_aldric.json',
+                module: './test_module_arena.json',
+                monsters: './monster_manual.json',
+                rules: './rules.json'
+            },
+            API_ENDPOINT: '/api/messages',
+            MODEL: 'claude-sonnet-4-20250514',
+            MAX_TOKENS: 2000,
+            MAX_HISTORY_TURNS: 20
+        };
+
+        // Debug logging function
+        function debugLog(category, message, data = null) {
+            if (!CONFIG.DEBUG_MODE) return;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = `[${timestamp}] [${category}]`;
+            
+            console.log(prefix, message, data || '');
+            
+            // Update debug panel parse log if it's a parse event
+            if (category === 'PARSE') {
+                const logDiv = document.getElementById('debugParseLog');
+                if (logDiv) {
+                    const entry = document.createElement('div');
+                    entry.textContent = `${timestamp} ${message}`;
+                    entry.style.marginBottom = '2px';
+                    logDiv.insertBefore(entry, logDiv.firstChild);
+                    
+                    // Keep only last 20 entries
+                    while (logDiv.children.length > 20) {
+                        logDiv.removeChild(logDiv.lastChild);
+                    }
+                }
+            }
+        }
+
+        // ============================================
+        // GAME DATA & STATE
+        // ============================================
+        
+        const gameData = {
+            character: null,
+            module: null,
+            monsters: null,
+            rules: null
+        };
+
+        // XP progression table
+        const XP_LEVELS = {
+            1: 0, 2: 2000, 3: 4000, 4: 8000, 5: 16000,
+            6: 32000, 7: 64000, 8: 128000, 9: 256000, 10: 512000
+        };
+        
+        const gameState = {
+            character: null,
+            currentRoom: null,
+            triggeredEvents: [],
+            conversationHistory: [],
+            waitingForRoll: false,
+            pendingRollContext: null,
+            /** Damage dealt to each encounter by id (e.g. goblin_guard: 5). Used to show current monster HP. */
+            damageToEncounters: {},
+            /** True when combat has started (either side attacked). Cleared when all nearby enemies defeated, player dies, or player retreats. */
+            inCombat: false,
+            /** Items put in use during play (e.g. Torch (lit) when player lights one from pack). Shown in Equipped. */
+            equippedInUse: [],
+            /** Set when we parse torch use from player message; skip GM parse for same turn to avoid double-count. */
+            torchUseParsedThisTurn: false
+        };
+
+        // ============================================
+        // DATA LOADING
+        // ============================================
+        
+        async function loadGameData() {
+            try {
+                updateLoadingStatus('Loading character data...');
+                const charResponse = await fetch(CONFIG.DATA_FILES.character);
+                if (!charResponse.ok) throw new Error('Failed to load character');
+                const charData = await charResponse.json();
+                gameData.character = charData.character;
+                
+                updateLoadingStatus('Loading module...');
+                const modResponse = await fetch(CONFIG.DATA_FILES.module);
+                if (!modResponse.ok) throw new Error('Failed to load module');
+                const modData = await modResponse.json();
+                // Store the full module data (includes module metadata AND rooms)
+                gameData.module = modData;
+                
+                updateLoadingStatus('Loading monster manual...');
+                const monsResponse = await fetch(CONFIG.DATA_FILES.monsters);
+                if (!monsResponse.ok) throw new Error('Failed to load monsters');
+                const monsData = await monsResponse.json();
+                gameData.monsters = monsData.monster_manual.monsters;
+                
+                updateLoadingStatus('Loading rules...');
+                const rulesResponse = await fetch(CONFIG.DATA_FILES.rules);
+                if (!rulesResponse.ok) throw new Error('Failed to load rules');
+                const rulesData = await rulesResponse.json();
+                gameData.rules = rulesData.rules;
+                
+                debugLog('DATA', 'All game data loaded successfully');
+                return true;
+                
+            } catch (error) {
+                console.error('Failed to load game data:', error);
+                updateLoadingStatus(`ERROR: ${error.message}`);
+                return false;
+            }
+        }
+
+        function updateLoadingStatus(message) {
+            const statusEl = document.getElementById('loadingStatus');
+            if (statusEl) statusEl.textContent = message;
+        }
+
+        // ============================================
+        // MONSTER RESOLUTION
+        // ============================================
+        
+        function resolveMonster(monsterId) {
+            if (!gameData.monsters || !gameData.monsters[monsterId]) {
+                debugLog('MONSTER', `WARNING: Monster ${monsterId} not found in manual`);
+                return null;
+            }
+            return gameData.monsters[monsterId];
+        }
+
+        /** Current HP for an encounter (tracked damage vs monster max HP). */
+        function getEncounterHP(encounter) {
+            const monster = resolveMonster(encounter.monster_ref);
+            if (!monster) return { current: 0, max: 0, defeated: true };
+            const damage = gameState.damageToEncounters[encounter.id] || 0;
+            const current = Math.max(0, monster.hp - damage);
+            return { current, max: monster.hp, defeated: current <= 0 };
+        }
+        
+        function buildEncounterDescription(encounter, includeCurrentHP = false) {
+            const monster = resolveMonster(encounter.monster_ref);
+            if (!monster) return `Unknown monster: ${encounter.monster_ref}`;
+            
+            const hpInfo = includeCurrentHP ? getEncounterHP(encounter) : null;
+            let hpStr;
+            if (hpInfo && hpInfo.defeated) {
+                hpStr = `DEFEATED (0/${hpInfo.max} HP) — narrate death, award XP/treasure from On death`;
+            } else if (hpInfo) {
+                hpStr = `${hpInfo.current}/${hpInfo.max} HP remaining`;
+            } else {
+                hpStr = `HP ${monster.hp}`;
+            }
+            // List all attacks with range (melee vs ranged) — GM chooses based on distance
+            const attackLines = (monster.attacks || []).map(a => {
+                const r = (a.range || 'melee').toString().toLowerCase();
+                const rangeStr = r === 'melee' ? 'melee' : `ranged ${a.range}`;
+                return `${a.name} +${a.bonus} for ${a.damage} ${a.damage_type} (${rangeStr})`;
+            }).join(' | ');
+            const attackStr = attackLines || 'no attacks';
+            let line = `${encounter.name} (${monster.name}): ${hpStr}, AC ${monster.ac} (use this exact AC for hit/miss). Attacks: ${attackStr}`;
+            if (encounter.on_death) {
+                if (encounter.on_death.xp_award != null) line += ` | On death: award exactly ${encounter.on_death.xp_award} XP`;
+                if (encounter.on_death.treasure && encounter.on_death.treasure.length) {
+                    const treasureStr = encounter.on_death.treasure.map(t => t.item === 'gold' ? `${t.quantity} gp` : t.item).join(', ');
+                    line += ` | Treasure: ${treasureStr}`;
+                }
+            }
+            return line;
+        }
+
+        /** Build explicit dungeon layout from module JSON for the GM. GM must use ONLY this. */
+        function buildModuleLayoutForPrompt() {
+            const rooms = gameData.module.rooms;
+            const moduleMeta = gameData.module.module;
+            let out = '';
+            for (const [roomId, room] of Object.entries(rooms)) {
+                out += `\n--- ROOM: ${room.name} (id: ${roomId}) ---\n`;
+                out += `Description: ${room.description}\n`;
+                if (room.connections && Object.keys(room.connections).length > 0) {
+                    const exits = Object.entries(room.connections).map(([dir, targetId]) => {
+                        const target = rooms[targetId];
+                        const targetName = target ? target.name : targetId;
+                        return `${dir} → ${targetName} (${targetId})`;
+                    }).join(', ');
+                    out += `Exits (use ONLY these): ${exits}\n`;
+                } else {
+                    out += `Exits: none\n`;
+                }
+                if (room.features && room.features.length > 0) {
+                    out += 'Features (use ONLY these; do not add others):\n';
+                    for (const f of room.features) {
+                        out += `- ${f.name}: ${f.description || ''}`;
+                        if (f.text) out += ` | When read/used: "${f.text}"`;
+                        if (f.note) out += ` | Note: "${f.note}"`;
+                        if (f.success) out += ` | On success: "${f.success}"`;
+                        if (f.failure) out += ` | On failure: "${f.failure}"`;
+                        if (f.contains) out += ` | Contains: ${JSON.stringify(f.contains)}`;
+                        if (f.interaction) out += ` | Interaction: ${f.interaction}`;
+                        out += '\n';
+                    }
+                }
+                if (room.encounters && room.encounters.length > 0) {
+                    out += 'Encounters here (ONLY these monsters exist in this room): ';
+                    out += room.encounters.map(e => e.name + ' (' + e.monster_ref + ')').join(', ') + '\n';
+                }
+            }
+            return out;
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        
+        async function initializeGame() {
+            debugLog('INIT', 'Starting game initialization');
+            
+            // Load all data files
+            const loaded = await loadGameData();
+            if (!loaded) {
+                alert('Failed to load game data. Check console for details and ensure all JSON files are in the same directory.');
+                return;
+            }
+            
+            // Initialize game state from loaded data
+            updateLoadingStatus('Initializing game state...');
+            
+            // Convert loaded character data to game state format
+            gameState.character = {
+                name: gameData.character.basic_info.name,
+                class: gameData.character.basic_info.class,
+                level: gameData.character.basic_info.level,
+                hp: gameData.character.combat_stats.hit_points.current,
+                maxHp: gameData.character.combat_stats.hit_points.maximum,
+                ac: gameData.character.combat_stats.armor_class,
+                xp: gameData.character.experience.current,
+                abilities: {},
+                skills: {},
+                equipment: [],
+                inventory: [],
+                conditions: []
+            };
+            
+            // Convert abilities (map full names to short names)
+            const abilityNameMap = {
+                strength: 'str', dexterity: 'dex', constitution: 'con',
+                intelligence: 'int', wisdom: 'wis', charisma: 'cha'
+            };
+            for (const [key, value] of Object.entries(gameData.character.ability_scores)) {
+                const shortKey = abilityNameMap[key] || key;
+                gameState.character.abilities[shortKey] = {
+                    score: value.score,
+                    modifier: value.modifier
+                };
+            }
+            
+            debugLog('INIT', 'Character abilities initialized', gameState.character.abilities);
+            
+            // Convert skills
+            for (const [key, value] of Object.entries(gameData.character.skills)) {
+                gameState.character.skills[key] = value.modifier;
+            }
+            
+            // Convert equipment: weapons and armor only (no torch, light sources, etc.)
+            for (const item of [...gameData.character.equipment.worn, ...gameData.character.equipment.wielded, ...gameData.character.equipment.carried]) {
+                const isWeapon = !!item.damage;
+                const isArmor = (item.type || '').toLowerCase() === 'armor';
+                if (!isWeapon && !isArmor) continue; // skip torch, light sources, etc.
+                const typeInfo = isWeapon ? getWeaponTypeInfo(item) : { type: null, range: null };
+                let stats = '';
+                if (item.damage) {
+                    const base = `${item.damage} ${item.damage_type}`;
+                    stats = typeInfo.type === 'ranged' && typeInfo.range
+                        ? `${base} (ranged ${typeInfo.range})`
+                        : `${base} (${typeInfo.type || 'melee'})`;
+                } else {
+                    stats = item.properties ? item.properties.join(' - ') : '';
+                }
+                gameState.character.equipment.push({
+                    name: item.name,
+                    stats,
+                    equipped: item.equipped !== undefined ? item.equipped : false,
+                    isWeapon,
+                    isArmor,
+                    weaponType: typeInfo.type,
+                    weaponRange: typeInfo.range
+                });
+            }
+            // No weapon readied at start; only armor is "equipped" for display
+            gameState.readiedWeaponName = null;
+            gameState.armorEquipped = true;
+            
+            // Convert inventory
+            for (const item of gameData.character.equipment.backpack) {
+                gameState.character.inventory.push({
+                    name: item.name,
+                    quantity: item.quantity
+                });
+            }
+            
+            // Add coins
+            const coins = gameData.character.equipment.coin;
+            gameState.character.inventory.push({
+                name: 'Gold',
+                quantity: `${coins.gold}gp`
+            });
+            
+            // Set starting room
+            gameState.currentRoom = gameData.module.module.starting_room;
+            
+            updateLoadingStatus('Rendering interface...');
+            
+            // Initialize character sheet display
+            initializeCharacterSheet();
+            
+            // Update title
+            document.getElementById('dungeonTitle').textContent = gameData.module.module.title;
+            
+            // Hide loading overlay
+            document.getElementById('loadingOverlay').style.display = 'none';
+            
+            // Enable input
+            document.getElementById('playerInput').disabled = false;
+            
+            // Add welcome message
+            const startingRoom = gameData.module.rooms[gameState.currentRoom];
+            addSystemMessage(`Welcome to ${gameData.module.module.title}!`);
+            addNarration(startingRoom.description);
+            
+            // Check for on_entry features
+            if (startingRoom.features) {
+                for (const feature of startingRoom.features) {
+                    if (feature.triggers && feature.triggers.includes('on_entry') && feature.text) {
+                        addNarration(`<i>${feature.text}</i>`);
+                    }
+                }
+            }
+            
+            addSystemMessage('Press Ctrl+Shift+D to toggle debug panel. Type your action and press Enter.');
+            
+            // Focus input
+            document.getElementById('playerInput').focus();
+            
+            debugLog('INIT', 'Game initialization complete');
+        }
+
+        // ============================================
+        // CHARACTER SHEET DISPLAY
+        // ============================================
+        
+        function initializeCharacterSheet() {
+            const char = gameState.character;
+            
+            // Update header
+            document.getElementById('charName').textContent = char.name;
+            document.getElementById('charClass').textContent = `${char.class} - Lvl ${char.level}`;
+            
+            // Abilities
+            const abilitiesHTML = Object.entries(char.abilities).map(([key, value]) => `
+                <div class="ability-score">
+                    <div class="ability-name">${key.toUpperCase()}</div>
+                    <div class="ability-value">${value.score}</div>
+                    <div class="ability-modifier">${value.modifier >= 0 ? '+' : ''}${value.modifier}</div>
+                </div>
+            `).join('');
+            document.getElementById('abilityScores').innerHTML = abilitiesHTML;
+            
+            // Skills
+            const skillsHTML = Object.entries(char.skills).map(([key, value]) => `
+                <div class="skill-item">
+                    <span class="skill-name">${key.charAt(0).toUpperCase() + key.slice(1)}</span>
+                    <span class="skill-modifier">+${value}</span>
+                </div>
+            `).join('');
+            document.getElementById('skillsList').innerHTML = skillsHTML;
+            
+            updateCharacterDisplay();
+
+            // Click handler for weapons in Equipped (event delegation)
+            const equippedList = document.getElementById('equippedList');
+            if (equippedList && !equippedList._weaponClickBound) {
+                equippedList._weaponClickBound = true;
+                equippedList.addEventListener('click', (e) => {
+                    const weaponItem = e.target.closest('.equipment-weapon');
+                    if (weaponItem) {
+                        const name = weaponItem.dataset.weaponName;
+                        if (name) handleWeaponClick(name);
+                    }
+                });
+            }
+        }
+
+        /** When player clicks a weapon in Equipped: ready (out of combat), describe (already readied), or attack (in combat, GM verifies). */
+        function handleWeaponClick(weaponName) {
+            if (gameState.waitingForRoll) return;
+            const readied = gameState.readiedWeaponName;
+            const alreadyReadied = readied && readied.toLowerCase() === weaponName.toLowerCase();
+            let message;
+            if (gameState.inCombat) {
+                message = `I want to attack with my ${weaponName}.`;
+            } else if (alreadyReadied) {
+                message = `I check my ${weaponName} — it's already drawn.`;
+            } else {
+                message = `I ready my ${weaponName}.`;
+                gameState.readiedWeaponName = weaponName;
+            }
+            addPlayerAction(message);
+            gameState.conversationHistory.push({ role: 'user', content: message });
+            callAIGM();
+        }
+
+        /** AC from armor if worn, otherwise 10 + DEX (unarmored). */
+        function getEffectiveAC() {
+            const char = gameState.character;
+            if (!char || !char.abilities) return char ? char.ac : 10;
+            if (!gameState.armorEquipped) return 10 + char.abilities.dex.modifier;
+            const worn = gameData.character && gameData.character.equipment && gameData.character.equipment.worn;
+            const armor = worn && worn.find(w => (w.type || '').toLowerCase() === 'armor');
+            return (armor && armor.ac != null) ? armor.ac : char.ac;
+        }
+
+        function updateCharacterDisplay() {
+            const char = gameState.character;
+            const ac = getEffectiveAC();
+            document.getElementById('hpDisplay').textContent = `${char.hp}/${char.maxHp}`;
+            document.getElementById('acDisplay').textContent = ac;
+            document.getElementById('levelDisplay').textContent = char.level;
+            document.getElementById('xpDisplay').textContent = char.xp.toLocaleString();
+            
+            // Update XP progress bar
+            const currentLevel = char.level;
+            const nextLevel = currentLevel + 1;
+            const currentLevelXP = XP_LEVELS[currentLevel];
+            const nextLevelXP = XP_LEVELS[nextLevel] || XP_LEVELS[10] * 2;
+            
+            const xpProgress = char.xp - currentLevelXP;
+            const xpNeeded = nextLevelXP - currentLevelXP;
+            const progressPercent = Math.min(100, (xpProgress / xpNeeded) * 100);
+            
+            document.getElementById('xpProgressText').textContent = 
+                `${char.xp.toLocaleString()} / ${nextLevelXP.toLocaleString()}`;
+            document.getElementById('xpBarFill').style.width = `${progressPercent}%`;
+            
+            // Combat indicator: red highlight on character header when in combat
+            const headerEl = document.getElementById('characterHeader');
+            if (headerEl) headerEl.classList.toggle('in-combat', gameState.inCombat);
+            
+            // Update conditions
+            const conditionsHTML = char.conditions.map(condition => 
+                `<div class="condition-tag ${condition.type || ''}">${condition.name}</div>`
+            ).join('');
+            document.getElementById('conditionsDisplay').innerHTML = conditionsHTML;
+            
+            // Update Equipped: armor, weapons, and items in use (e.g. torch lit). Weapons are clickable.
+            const equippedItems = [...char.equipment, ...(gameState.equippedInUse || [])];
+            const equippedHTML = equippedItems.map(item => {
+                const isWeapon = !!item.isWeapon;
+                const weaponAttr = isWeapon ? ` data-weapon-name="${item.name.replace(/"/g, '&quot;')}"` : '';
+                const weaponClass = isWeapon ? ' equipment-weapon' : '';
+                return `
+                <div class="equipment-item${weaponClass}"${weaponAttr}>
+                    <div class="equipment-name">${item.name}</div>
+                    <div class="equipment-stats">${item.stats || ''}</div>
+                </div>
+            `}).join('');
+            document.getElementById('equippedList').innerHTML = equippedHTML;
+            
+            // Update Pack: backpack items with quantities (show x0 when used)
+            const packHTML = char.inventory.map(item => {
+                const qty = item.quantity;
+                const qtyStr = item.name === 'Gold' ? ` ${qty}` : `x${qty}`;
+                return `
+                <div class="inventory-item">
+                    <span class="item-name">${item.name}</span>
+                    <span class="item-quantity">${qtyStr}</span>
+                </div>
+            `}).join('');
+            document.getElementById('packList').innerHTML = packHTML;
+        }
+
+        // ============================================
+        // STATE MANAGEMENT FUNCTIONS
+        // ============================================
+        
+        function modifyHP(amount) {
+            debugLog('STATE', `Modifying HP by ${amount}`);
+            gameState.character.hp = Math.max(0, Math.min(gameState.character.maxHp, gameState.character.hp + amount));
+            updateCharacterDisplay();
+            
+            if (gameState.character.hp === 0) {
+                gameState.inCombat = false;
+                addSystemMessage("You have died! Your adventure ends here.");
+                disableInput(true);
+            }
+        }
+        
+        function addXP(amount) {
+            debugLog('STATE', `Adding ${amount} XP`);
+            gameState.character.xp += amount;
+            addSystemMessage(`Gained ${amount} XP!`);
+            updateCharacterDisplay();
+        }
+        
+        function addToInventory(itemName, quantity = 1) {
+            debugLog('STATE', `Adding to inventory: ${itemName} x${quantity}`);
+            const existing = gameState.character.inventory.find(i => i.name === itemName);
+            if (existing) {
+                if (typeof existing.quantity === 'number') {
+                    existing.quantity += quantity;
+                } else {
+                    const match = existing.quantity.match(/(\d+)/);
+                    if (match) {
+                        const current = parseInt(match[1]);
+                        existing.quantity = `${current + quantity}gp`;
+                    }
+                }
+            } else {
+                gameState.character.inventory.push({ name: itemName, quantity });
+            }
+            updateCharacterDisplay();
+        }
+        
+        function removeFromInventory(itemName, quantity = 1) {
+            debugLog('STATE', `Removing from inventory: ${itemName} x${quantity}`);
+            const item = gameState.character.inventory.find(i => i.name === itemName);
+            if (item) {
+                if (typeof item.quantity === 'number') {
+                    item.quantity = Math.max(0, item.quantity - quantity);
+                    // Keep item with qty 0 so it can be retrieved (e.g. rope)
+                }
+            }
+            updateCharacterDisplay();
+        }
+
+        // ============================================
+        // NARRATIVE FUNCTIONS
+        // ============================================
+        
+        function scrollToBottom() {
+            const scroll = document.getElementById('narrativeScroll');
+            setTimeout(() => {
+                scroll.scrollTop = scroll.scrollHeight;
+            }, 100);
+        }
+
+        function addNarration(text) {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.innerHTML = `<div class="gm-narration">${text}</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
+        function addPlayerAction(text) {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.innerHTML = `<div class="player-action">${text}</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
+        function addSystemMessage(text) {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.innerHTML = `<div class="system-message">${text}</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
+        function addLoadingIndicator() {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.id = 'loadingIndicator';
+            entry.innerHTML = `<div class="loading-indicator">GM is thinking</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+            return entry;
+        }
+
+        function removeLoadingIndicator() {
+            const indicator = document.getElementById('loadingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        function addErrorMessage(text) {
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.innerHTML = `<div class="error-message">Error: ${text}</div>`;
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
+        // ============================================
+        // WEAPON DAMAGE (from character JSON)
+        // ============================================
+        
+        /** Whether a weapon uses DEX (ranged) or STR (melee) for damage. */
+        function isRangedWeapon(weapon) {
+            return getWeaponTypeInfo(weapon).type === 'ranged';
+        }
+
+        /** Get weapon type (melee/ranged) and range. Works on character equipment or monster attack. */
+        function getWeaponTypeInfo(weapon) {
+            if (!weapon) return { type: 'melee', range: null };
+            const name = (weapon.name || '').toLowerCase();
+            const props = Array.isArray(weapon.properties) ? weapon.properties.join(' ') : (weapon.properties || '');
+            const propsLower = props.toLowerCase();
+            // Explicit range field (e.g. monster attacks)
+            if (weapon.range) {
+                const r = String(weapon.range).toLowerCase();
+                if (r === 'melee') return { type: 'melee', range: null };
+                return { type: 'ranged', range: weapon.range };
+            }
+            // From properties: "range 80/320" or "range 30/120"
+            const rangeMatch = props.match(/range\s+(\d+(?:\/\d+)?)/i);
+            if (rangeMatch) return { type: 'ranged', range: rangeMatch[1] };
+            // Ammunition property implies ranged
+            if (/ammunition/.test(propsLower)) return { type: 'ranged', range: 'see properties' };
+            // Name-based
+            if (/bow|crossbow|sling|dart|thrown/.test(name)) {
+                const m = props.match(/range\s+(\d+(?:\/\d+)?)/i);
+                return { type: 'ranged', range: m ? m[1] : 'see properties' };
+            }
+            return { type: 'melee', range: null };
+        }
+        
+        /** Get readied weapon damage: dice and modifier (STR for melee, DEX for ranged). */
+        function getEquippedWeaponDamage() {
+            const sources = gameData.character && gameData.character.equipment
+                ? [...(gameData.character.equipment.wielded || []), ...(gameData.character.equipment.carried || [])]
+                : [];
+            const weapons = sources.filter(w => w.damage);
+            if (!weapons.length) return { dice: '1d8', modifier: gameState.character.abilities.str.modifier, label: '1d8', count: 1, sides: 8 };
+            // Use readied weapon by name, or first equipped
+            const readied = gameState.readiedWeaponName;
+            let weapon = readied ? weapons.find(w => w.name && w.name.toLowerCase() === readied.toLowerCase()) : null;
+            if (!weapon) weapon = weapons.find(w => w.equipped) || weapons[0];
+            const useDex = isRangedWeapon(weapon);
+            const mod = useDex ? gameState.character.abilities.dex.modifier : gameState.character.abilities.str.modifier;
+            return parseWeaponDice(weapon.damage, mod);
+        }
+        
+        /** Resolve dice for a roll request. Returns { type:'weapon'|'custom'|'d20', ... } */
+        function getDiceForRollRequest(rollType) {
+            const t = (rollType || '').trim().toLowerCase();
+            if (t === 'damage') {
+                return { type: 'weapon', label: getEquippedWeaponDamage().label };
+            }
+            // Custom dice: 2d4+2, 1d6, 3d8+1, 1d6-1, etc.
+            const diceMatch = t.match(/^(\d+)d(\d+)(?:([+-])(\d+))?$/i);
+            if (diceMatch) {
+                const count = parseInt(diceMatch[1]);
+                const sides = parseInt(diceMatch[2]);
+                const modifier = diceMatch[4] ? (diceMatch[3] === '-' ? -parseInt(diceMatch[4]) : parseInt(diceMatch[4])) : 0;
+                const modStr = modifier ? (modifier >= 0 ? '+' + modifier : String(modifier)) : '';
+                return {
+                    type: 'custom',
+                    count: count,
+                    sides: sides,
+                    modifier,
+                    label: `${count}d${sides}${modStr}`,
+                    minFace: count,
+                    maxFace: count * sides
+                };
+            }
+            // Healing: lookup from character or use default 2d4+2
+            if (t === 'healing' || t === 'healing potion' || t === 'healingpotion') {
+                const backpack = gameData.character?.equipment?.backpack || [];
+                const potion = backpack.find(i => (i.name || '').toLowerCase().includes('healing') && (i.effect || '').includes('d'));
+                if (potion && potion.effect) {
+                    const m = potion.effect.match(/(\d+)d(\d+)(?:\+(\d+))?/i);
+                    if (m) {
+                        const count = parseInt(m[1]);
+                        const sides = parseInt(m[2]);
+                        const modifier = m[3] ? parseInt(m[3]) : 0;
+                        const modStr = modifier ? (modifier >= 0 ? '+' + modifier : String(modifier)) : '';
+                        return {
+                            type: 'custom',
+                            count, sides, modifier,
+                            label: `${count}d${sides}${modStr}`,
+                            minFace: count,
+                            maxFace: count * sides
+                        };
+                    }
+                }
+                return {
+                    type: 'custom',
+                    count: 2, sides: 4, modifier: 2,
+                    label: '2d4+2',
+                    minFace: 2,
+                    maxFace: 8
+                };
+            }
+            // d20 for abilities/skills
+            return { type: 'd20', ability: t };
+        }
+
+        /** Parse "1d8" or "2d6" and return { dice, modifier, label } for display and rolling. */
+        function parseWeaponDice(diceStr, modifier) {
+            const match = (diceStr || '1d8').match(/^(\d+)d(\d+)$/i);
+            const count = match ? parseInt(match[1], 10) : 1;
+            const sides = match ? parseInt(match[2], 10) : 8;
+            const modifierNum = typeof modifier === 'number' ? modifier : 0;
+            const modStr = modifierNum >= 0 ? '+' + modifierNum : String(modifierNum);
+            return {
+                dice: diceStr || '1d8',
+                count,
+                sides,
+                modifier: modifierNum,
+                label: (count === 1 ? '1d' + sides : count + 'd' + sides) + (modifierNum !== 0 ? modStr : '')
+            };
+        }
+        
+        /** Roll weapon damage (e.g. 1d8+3 or 2d6+2). Returns { total, breakdown } for display. */
+        function rollWeaponDamage() {
+            const w = getEquippedWeaponDamage();
+            const rolls = [];
+            let diceTotal = 0;
+            for (let i = 0; i < w.count; i++) {
+                const r = Math.floor(Math.random() * w.sides) + 1;
+                rolls.push(r);
+                diceTotal += r;
+            }
+            const total = diceTotal + w.modifier;
+            const diceExpr = w.count === 1 ? `1d${w.sides}` : `${w.count}d${w.sides}`;
+            const rollsStr = rolls.join(' + ');
+            const modStr2 = w.modifier >= 0 ? ` + ${w.modifier}` : ` - ${Math.abs(w.modifier)}`;
+            const breakdown = w.modifier !== 0
+                ? `${diceExpr} (${rollsStr})${modStr2} = ${total}`
+                : `${diceExpr} (${rollsStr}) = ${total}`;
+            return { total, breakdown };
+        }
+
+        // ============================================
+        // DICE ROLLING
+        // ============================================
+        
+        function showDiceSection(prompt = "Roll requested:", rollType = null) {
+            const diceSection = document.getElementById('diceSection');
+            const rollPrompt = document.getElementById('rollPrompt');
+            const rollBtn = document.getElementById('rollBtn');
+            const diceInput = document.getElementById('diceInput');
+            
+            const rt = rollType || (prompt.match(/Roll\s+(.+?)(?::|$)/i)?.[1]?.trim() || '');
+            const dice = getDiceForRollRequest(rt);
+            
+            if (dice.type === 'weapon') {
+                const w = getEquippedWeaponDamage();
+                rollPrompt.textContent = `Roll damage (${w.label}):`;
+                rollBtn.textContent = `Roll ${w.label}`;
+                diceInput.placeholder = `1-${w.count * w.sides}`;
+                diceInput.min = String(w.count);
+                diceInput.max = String(w.count * w.sides);
+            } else if (dice.type === 'custom') {
+                rollPrompt.textContent = `Roll ${dice.label}:`;
+                rollBtn.textContent = `Roll ${dice.label}`;
+                diceInput.placeholder = `${dice.minFace}-${dice.maxFace}`;
+                diceInput.min = String(dice.minFace);
+                diceInput.max = String(dice.maxFace);
+            } else {
+                const abilityInfo = getAbilityModifierForRoll(dice.ability);
+                const modStr = abilityInfo && abilityInfo.modifier != null
+                    ? ` (${abilityInfo.modifier >= 0 ? '+' : ''}${abilityInfo.modifier})`
+                    : '';
+                rollPrompt.textContent = prompt.endsWith(':') ? prompt : prompt + ':';
+                rollBtn.textContent = `Roll d20${modStr}`;
+                diceInput.placeholder = '1-20';
+                diceInput.min = '1';
+                diceInput.max = '20';
+            }
+            
+            diceSection.classList.add('active');
+            gameState.waitingForRoll = true;
+            gameState.pendingRollContext = { dice };
+            disableInput(true);
+        }
+
+        function hideDiceSection() {
+            const diceSection = document.getElementById('diceSection');
+            diceSection.classList.remove('active');
+            gameState.waitingForRoll = false;
+            gameState.pendingRollContext = null;
+            disableInput(false);
+        }
+
+        /** Map roll request to modifier for display: use skill modifier if it's a skill, else ability. */
+        function getAbilityModifierForRoll(abilityName) {
+            if (!abilityName || !gameState.character) return null;
+            const key = abilityName.toLowerCase().trim();
+            const char = gameState.character;
+            if (char.skills && typeof char.skills[key] === 'number') {
+                const label = abilityName.charAt(0).toUpperCase() + abilityName.slice(1).toLowerCase();
+                return { modifier: char.skills[key], label: label };
+            }
+            if (!char.abilities) return null;
+            const keyMap = {
+                strength: 'str', str: 'str', dex: 'dex', dexterity: 'dex',
+                constitution: 'con', con: 'con', intelligence: 'int', int: 'int',
+                wisdom: 'wis', wis: 'wis', charisma: 'cha', cha: 'cha'
+            };
+            const abKey = keyMap[key];
+            if (!abKey || !char.abilities[abKey]) return null;
+            const mod = char.abilities[abKey].modifier;
+            const label = abilityName.charAt(0).toUpperCase() + abilityName.slice(1).toLowerCase();
+            return { modifier: mod, label: label };
+        }
+
+        function rollDice() {
+            const ctx = gameState.pendingRollContext?.dice;
+            if (!ctx) return;
+            if (ctx.type === 'weapon') {
+                const result = rollWeaponDamage();
+                processDiceRoll(result.total, ctx, { damageBreakdown: result.breakdown });
+            } else if (ctx.type === 'custom') {
+                const rolls = [];
+                let sum = 0;
+                for (let i = 0; i < ctx.count; i++) {
+                    const r = Math.floor(Math.random() * ctx.sides) + 1;
+                    rolls.push(r);
+                    sum += r;
+                }
+                const total = sum + ctx.modifier;
+                const rollsStr = rolls.join(' + ');
+                const modStr = ctx.modifier ? (ctx.modifier >= 0 ? ` + ${ctx.modifier}` : ` - ${Math.abs(ctx.modifier)}`) : '';
+                const breakdown = ctx.modifier !== 0
+                    ? `${ctx.label} (${rollsStr})${modStr} = ${total}`
+                    : `${ctx.label} (${rollsStr}) = ${total}`;
+                processDiceRoll(total, ctx, { customBreakdown: breakdown });
+            } else {
+                const d20 = Math.floor(Math.random() * 20) + 1;
+                processDiceRoll(d20, ctx);
+            }
+        }
+
+        function submitDiceRoll() {
+            const input = document.getElementById('diceInput');
+            const roll = parseInt(input.value, 10);
+            const min = parseInt(input.min || 1, 10);
+            const max = parseInt(input.max || 20, 10);
+            const ctx = gameState.pendingRollContext?.dice;
+            const isValid = !isNaN(roll) && roll >= min && roll <= max;
+            
+            if (isValid && ctx) {
+                input.value = '';
+                const opts = (ctx.type === 'weapon' || ctx.type === 'custom') ? {} : {};
+                processDiceRoll(roll, ctx, opts);
+            }
+        }
+
+        function processDiceRoll(roll, diceCtx, options = {}) {
+            let message;
+            let totalToSend;
+            const ctx = gameState.pendingRollContext?.dice || diceCtx;
+            if (!ctx) return;
+            
+            if (ctx.type === 'weapon') {
+                const breakdown = options.damageBreakdown;
+                if (breakdown) {
+                    message = `You rolled damage: <span class="dice-roll">${breakdown}</span>`;
+                    totalToSend = roll;
+                } else {
+                    const w = getEquippedWeaponDamage();
+                    totalToSend = roll + w.modifier;
+                    const modStr = w.modifier >= 0 ? ` + ${w.modifier}` : ` - ${Math.abs(w.modifier)}`;
+                    message = `You rolled damage: <span class="dice-roll">${w.label} = ${roll} (manual)${w.modifier !== 0 ? modStr : ''} = ${totalToSend}</span>`;
+                }
+            } else if (ctx.type === 'custom') {
+                const breakdown = options.customBreakdown;
+                if (breakdown) {
+                    message = `You rolled ${ctx.label}: <span class="dice-roll">${breakdown}</span>`;
+                    totalToSend = roll;
+                } else {
+                    totalToSend = roll + (ctx.modifier || 0);
+                    const modStr = ctx.modifier ? (ctx.modifier >= 0 ? ` + ${ctx.modifier}` : ` - ${Math.abs(ctx.modifier)}`) : '';
+                    message = `You rolled ${ctx.label}: <span class="dice-roll">${ctx.label} = ${roll} (manual)${modStr} = ${totalToSend}</span>`;
+                }
+            } else {
+                const abilityInfo = ctx.ability ? getAbilityModifierForRoll(ctx.ability) : null;
+                if (abilityInfo != null && abilityInfo.modifier != null) {
+                    totalToSend = roll + abilityInfo.modifier;
+                    const modStr = abilityInfo.modifier >= 0 ? ` + ${abilityInfo.modifier}` : ` - ${Math.abs(abilityInfo.modifier)}`;
+                    message = `You rolled d20: <span class="dice-roll">${roll} (${abilityInfo.label}${modStr}) = ${totalToSend}</span>`;
+                } else {
+                    totalToSend = roll;
+                    message = `You rolled d20: <span class="dice-roll">${roll}</span>`;
+                }
+            }
+            
+            addSystemMessage(message);
+            hideDiceSection();
+            
+            const rollMessage = `I rolled a ${totalToSend != null ? totalToSend : roll}.`;
+            gameState.conversationHistory.push({
+                role: "user",
+                content: rollMessage
+            });
+            
+            callAIGM();
+        }
+
+        // ============================================
+        // INPUT HANDLING
+        // ============================================
+        
+        function disableInput(disabled) {
+            document.getElementById('playerInput').disabled = disabled;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                submitAction();
+            }
+        }
+
+        function submitAction() {
+            const input = document.getElementById('playerInput');
+            const action = input.value.trim();
+            
+            if (!action || gameState.waitingForRoll) return;
+            
+            tryParseWeaponAway(action);
+            tryParseWeaponSwitch(action);
+            tryParseArmorState(action);
+            tryParseRetreat(action);
+            gameState.torchUseParsedThisTurn = false; // reset each turn
+            tryParsePackItemUse(action, true); // parse player's declared actions (e.g. "I pull out my torch and light it")
+            
+            addPlayerAction(action);
+            input.value = '';
+            
+            gameState.conversationHistory.push({
+                role: "user",
+                content: action
+            });
+            
+            callAIGM();
+        }
+
+        // ============================================
+        // CONVERSATION HISTORY MANAGEMENT
+        // ============================================
+        
+        function pruneConversationHistory() {
+            if (gameState.conversationHistory.length > CONFIG.MAX_HISTORY_TURNS) {
+                debugLog('HISTORY', `Pruning conversation history (${gameState.conversationHistory.length} turns)`);
+                const intro = gameState.conversationHistory.slice(0, 2);
+                const recent = gameState.conversationHistory.slice(-(CONFIG.MAX_HISTORY_TURNS - 2));
+                gameState.conversationHistory = [...intro, ...recent];
+                debugLog('HISTORY', `History pruned to ${gameState.conversationHistory.length} turns`);
+            }
+        }
+
+        // ============================================
+        // AI GM INTEGRATION
+        // ============================================
+        
+        async function callAIGM() {
+            disableInput(true);
+            const loader = addLoadingIndicator();
+            
+            // Prune history before making call
+            pruneConversationHistory();
+            
+            try {
+                const systemPrompt = buildSystemPrompt();
+                const messages = [...gameState.conversationHistory];
+                
+                debugLog('AI', 'Calling AI GM', { 
+                    historyLength: messages.length,
+                    currentRoom: gameState.currentRoom 
+                });
+                
+                const response = await fetch(CONFIG.API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: CONFIG.MODEL,
+                        max_tokens: CONFIG.MAX_TOKENS,
+                        system: systemPrompt,
+                        messages: messages
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                removeLoadingIndicator();
+                
+                const aiResponse = data.content[0].text;
+                debugLog('AI', 'Received AI response', { length: aiResponse.length });
+                
+                gameState.conversationHistory.push({
+                    role: "assistant",
+                    content: aiResponse
+                });
+                
+                processAIResponse(aiResponse);
+                
+            } catch (error) {
+                removeLoadingIndicator();
+                console.error('AI GM Error:', error);
+                
+                let errorMsg = 'Unknown error';
+                if (error.message.includes('Failed to fetch')) {
+                    errorMsg = 'Server not running. Start server.js first!';
+                } else if (error.message.includes('API error: 401')) {
+                    errorMsg = 'Invalid API key in server.js';
+                } else if (error.message.includes('API error: 429')) {
+                    errorMsg = 'Rate limit exceeded. Wait a moment.';
+                } else {
+                    errorMsg = error.message;
+                }
+                
+                addErrorMessage(errorMsg);
+                disableInput(false);
+            }
+        }
+
+        function buildSystemPrompt() {
+            const char = gameState.character;
+            const room = gameData.module.rooms[gameState.currentRoom];
+            
+            // Defensive check
+            if (!char || !char.abilities) {
+                console.error('Character not initialized properly!', gameState.character);
+                throw new Error('Character data missing');
+            }
+            
+            debugLog('PROMPT', 'Building system prompt', {
+                character: char.name,
+                room: room.name,
+                abilities: Object.keys(char.abilities)
+            });
+            
+            // Build encounter info if present
+            let encounterInfo = '';
+            if (room.encounters && room.encounters.length > 0) {
+                encounterInfo = '\n\n## Active Encounters — use these EXACT stats; current HP is tracked for you (monster is DEFEATED when it reaches 0):\n';
+                for (const enc of room.encounters) {
+                    encounterInfo += buildEncounterDescription(enc, true) + '\n';
+                }
+            } else {
+                encounterInfo = '\n\n## Active Encounters: NONE — there are no monsters in this room. Do not add or invent any monsters.\n';
+            }
+            
+            const layoutBlock = buildModuleLayoutForPrompt();
+            
+            return `You are the Game Master for an OSR-style dungeon crawl: ${gameData.module.module.title}.
+
+# CRITICAL RULES
+
+## DUNGEON LAYOUT — USE ONLY THE MODULE DATA
+You MUST use ONLY the layout and content in the module data block below. Do NOT invent rooms, exits, room descriptions, or features.
+- When describing a room, use the exact "Description" and "Features" text from the module.
+- When the player moves, only allow movement to the "Exits" listed for the current room.
+- Do not add new rooms, new exits, or new features. Each play-through must match the module.
+${layoutBlock}
+
+## RESPONSE LENGTH
+- Keep responses between 50-100 words typically
+- Longer (150 words max) only for major reveals or room descriptions
+- Shorter (20-40 words) for simple acknowledgments or quick narration
+- NEVER write 200+ word responses
+
+## WHO ROLLS — PLAYER ONLY ROLLS FOR THEIR OWN ACTIONS
+The player rolls ONLY for their own character's actions: their attack roll (d20), their damage roll (weapon dice), their skill/ability checks (Perception, Strength, etc.).
+- You (the GM) resolve ALL monster/NPC actions. Never ask the player to roll for the goblin, the monster, or any enemy. When the monster attacks, you determine the monster's attack roll and result (or narrate the outcome) and say e.g. "The goblin attacks... and hits you for 4 damage" or "The goblin misses." Do NOT use [ROLL_REQUEST: ...] for monster attacks.
+- Only use [ROLL_REQUEST: ...] when the PLAYER's character is doing something that requires a roll (player attacks, player searches, player makes a check, player rolls damage after hitting).
+
+## DICE ROLL REQUESTS (player actions only)
+Use EXACTLY one of these formats when the PLAYER must roll. The app shows the correct dice for each:
+- **Ability/attack rolls (d20):** [ROLL_REQUEST: Strength], [ROLL_REQUEST: Perception], etc.
+- **Weapon damage:** [ROLL_REQUEST: Damage] — player rolls their readied weapon (e.g. 1d8 for longsword, 1d6 for shortbow).
+- **Healing potion:** [ROLL_REQUEST: Healing Potion] or [ROLL_REQUEST: Healing] — player rolls 2d4+2.
+- **Custom dice:** [ROLL_REQUEST: 2d4+2], [ROLL_REQUEST: 1d6], etc. — use when the roll has a specific formula.
+Do NOT ask for a d20 for damage or healing. Wait for the player to roll before continuing.
+
+## HIT RULE — ATTACK ROLL VS AC
+An attack HITS only if the attack roll is **greater than or equal to** the target's AC.
+- Example: roll 14 vs AC 16 = MISS (14 < 16). Never say the attack hit.
+- Example: roll 16 vs AC 16 = HIT. Always state hit/miss correctly using this rule.
+
+## COMBAT STATE — YOU CONTROL IT
+**You decide when the party is in combat.** Include one of these tags in your response so the app tracks combat correctly:
+- **When combat begins** (first attack, initiative, etc.): include **[COMBAT: on]** in your response. Example: "The goblin draws its blade! [COMBAT: on] Roll initiative!"
+- **When combat ends** (all enemies defeated, player dies, retreat, etc.): include **[COMBAT: off]** in your response. Example: "The last goblin falls. [COMBAT: off] The room is quiet."
+The tag is stripped from the displayed text; the player will not see it. Use your judgment — a tense standoff might not be combat until blades are drawn; a chase might end combat when the player escapes.
+
+## INITIATIVE — PLAYER ACTS FIRST
+By default the **player acts first** in combat. Enemies attack first only if (1) they surprise the player (e.g. ambush, failed perception), or (2) the player explicitly defers ("I wait", "I hold my action", "they can go first"). When combat begins without surprise, prompt the player for their action first; do not have the monster attack before the player has had a chance to act.
+
+## COMBAT SEQUENCING - CRITICAL
+Combat happens in STRICT steps. Never combine steps:
+
+**Player declares attack -> Wait**
+**Player rolls attack (d20) -> You compare to AC: if roll >= AC say HIT and use [ROLL_REQUEST: Damage]; if roll < AC say MISS and no damage roll**
+**Player rolls damage (weapon dice) -> You narrate damage effect -> Enemy's turn begins**
+
+**KILL RULE — damage >= remaining HP = dead:** When the player's last message is a damage roll (e.g. "I rolled 11"), compare that number to the monster's **current HP remaining** in the Active Encounters block. If the damage roll is **greater than or equal to** that remaining HP, the monster is **defeated in this response** — narrate its death, award On death XP and treasure, and do not say it is still standing or has any HP left. Example: Goblin has 7 HP (or 4/7 remaining); player rolls 11 (or 5) — 11 >= 7 (or 5 >= 4), so the goblin is dead now.
+
+**Enemy's turn -> You resolve the monster's attack yourself. Roll or decide the monster's attack vs player AC, then narrate hit or miss and any damage to the player. Do NOT ask the player to roll for the monster.**
+
+**Show enemy rolls in the narrative:** When the monster attacks, state the roll and result clearly so the player can see the math. Examples: "The goblin attacks: <code>14 vs AC 16 = miss</code>." or "The goblin attacks: <code>17 to hit, 5 damage</code> (1d6+2 = 5)." Always include the attack roll vs your AC and, if it hits, the damage roll (e.g. 1d6+2 = 5) in the text.
+
+NEVER ask the player to roll for enemies. NEVER narrate enemy actions before player's damage roll. NEVER combine multiple steps in one response.
+
+## MELEE VS RANGED COMBAT
+**Melee combat** = combatants within reach to attack with handheld weapons.
+**Ranged combat** = targets outside melee reach; ranged weapons can be used.
+
+**Rules:**
+- **Cannot use ranged weapons in melee range.** If the player (or monster) is in melee range of an enemy, they must use a melee weapon. Ranged weapons (bows, crossbows, etc.) cannot be used when an enemy is adjacent.
+- **Cannot use melee weapons outside melee range.** If the target is too far for melee (e.g. across the room, on a ledge), only ranged weapons work.
+- **You judge distances.** When the player declares an attack, determine whether they are in melee or ranged distance. If they try to use the wrong weapon type for the situation, narrate that they cannot (e.g. "The goblin is right in front of you — you'd need to use your longsword, not the bow") or that they must close/retreat first.
+- Monster attacks list melee vs ranged; choose the appropriate attack based on distance.
+
+## MONSTERS — ONLY FROM ACTIVE ENCOUNTERS / EXACT STATS
+Use ONLY the monsters listed in "Active Encounters" for the current room. Do not invent or add any other monsters.
+**Current HP is tracked for you** in the Active Encounters block (e.g. "3/7 HP remaining" or "DEFEATED (0/7 HP)"). If the player just dealt damage and that damage is >= the monster's current HP remaining, the monster is defeated **in your response** — narrate death and awards; do not say it is still standing. When the block already says **DEFEATED**, the monster is dead — narrate its death and award On death XP/treasure; do not say it is still alive or let it act again.
+**Use the EXACT AC from the block:** Each monster's AC is the number given in Active Encounters (e.g. Goblin AC 13 — never say 15 or any other number). When judging whether the player's attack hits, compare their roll to this AC only. Do not substitute a different AC.
+Use the EXACT attack bonus and damage from the block. If Active Encounters is empty or says NONE, there are no monsters in this room.
+
+## STATE TRACKING
+When HP/XP/inventory changes, use specific phrasing:
+- Damage (to the player only): "You take 8 damage" or "The goblin hits you for 4 damage"
+- Healing: "You heal 6 HP"
+- XP: Award exactly the amount in the encounter's "On death" (e.g. "You gain 25 XP" for the goblin — use the number from the module, not a different amount)
+- Items: "You find a healing potion" or "You discover 25 gold" (use treasure amounts from the encounter's on_death)
+- Pack item use: When the player uses a consumable or item from their Pack, say so explicitly (e.g. "You drink a healing potion", "You use the rope to climb", "You eat some rations"). For torch: when they light one from their pack, say "You pull out a torch and light it" — this updates Pack and shows the lit torch in Equipped. When they put it away, say "You put the torch back in your pack" or "You stow the torch" — this removes it from Equipped and adds 1 back to Pack. If they retrieve the rope later, say "You retrieve the rope".
+
+## WEAPON CLICKS (player clicks a weapon in Equipped)
+When the player clicks a weapon in the character panel, they send a contextual message:
+- **Out of combat, weapon not readied:** "I ready my [weapon]" — narrate them drawing/readying the weapon. They have now readied it.
+- **Out of combat, weapon already readied:** "I check my [weapon] — it's already drawn" — respond that it's already in hand; you may briefly describe the weapon (e.g. its condition, heft).
+- **In combat:** "I want to attack with my [weapon]" — **You MUST verify with the player before narrating the attack.** Ask something like "Do you want to attack the [enemy] with your [weapon]?" or "You raise your [weapon]. Attack the goblin?" Wait for confirmation before proceeding to the attack roll.
+
+## FORMATTING
+Use HTML tags: <b>bold</b>, <i>italic</i>, <code>dice results</code>
+
+# CURRENT GAME STATE
+Room: ${room.name} (id: ${gameState.currentRoom})
+Character: ${char.name} (${char.class} Level ${char.level})
+HP: ${char.hp}/${char.maxHp} | AC: ${getEffectiveAC()} (attack roll must be >= ${getEffectiveAC()} to hit the player${!gameState.armorEquipped ? '; armor is not worn' : ''})
+STR +${char.abilities.str.modifier} | DEX +${char.abilities.dex.modifier} | CON +${char.abilities.con.modifier} | INT +${char.abilities.int.modifier} | WIS +${char.abilities.wis.modifier} | CHA +${char.abilities.cha.modifier}
+Weapons (all available): ${(function(){
+            const sources = gameData.character && gameData.character.equipment
+                ? [...(gameData.character.equipment.wielded || []), ...(gameData.character.equipment.carried || [])]
+                : [];
+            const weapons = sources.filter(w => w.damage);
+            return weapons.map(w => {
+                const info = getWeaponTypeInfo(w);
+                const typeStr = info.type === 'ranged' && info.range ? `ranged ${info.range}` : 'melee';
+                return `${w.name} (${w.damage} ${w.damage_type}, ${typeStr})`;
+            }).join('; ') || 'none'
+        })()}
+Readied weapon: ${gameState.readiedWeaponName || 'none'} — when requesting damage, the player rolls this weapon's dice (melee: STR, ranged: DEX). If they try to use the wrong weapon type for the distance, correct them.
+
+Skills: ${Object.entries(char.skills).map(([k,v]) => `${k} +${v}`).join(', ')}
+
+# CURRENT ROOM: ${room.name}
+${room.description}
+${encounterInfo}
+
+# ADJUDICATION
+**Auto-success:** Simple actions
+**Auto-fail:** Impossible actions  
+**Requires roll:** Risky actions, searching, difficult tasks
+
+Standard DCs: Easy 10, Medium 15, Hard 20
+
+# TONE
+Atmospheric but concise. Show don't tell. Build tension through description.
+
+Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Damage] for weapon damage. Wait for results before continuing.`;
+        }
+
+        function processAIResponse(response) {
+            debugLog('AI', 'Processing AI response');
+            
+            // Strip [COMBAT: on/off] from display (GM uses it to set state; we parse in parseStateChanges)
+            const displayResponse = response.replace(/\[COMBAT:\s*(on|off|true|false|yes|no)\]/gi, '').trim();
+            
+            // Parse for state changes BEFORE displaying
+            parseStateChanges(response);
+            
+            // Check for roll request (captures "Damage", "Healing Potion", "2d4+2", "Strength", etc.)
+            const rollRequestPattern = /\[ROLL_REQUEST:\s*([^\]]+)\]/i;
+            const match = displayResponse.match(rollRequestPattern);
+            
+            if (match) {
+                const ability = match[1].trim();
+                if (ability.toLowerCase() === 'damage') {
+                    gameState.inCombat = true;
+                    if (!gameState.readiedWeaponName) {
+                        const sources = gameData.character && gameData.character.equipment
+                            ? [...(gameData.character.equipment.wielded || []), ...(gameData.character.equipment.carried || [])]
+                            : [];
+                        const firstWeapon = sources.find(w => w.damage);
+                        if (firstWeapon) {
+                            gameState.readiedWeaponName = firstWeapon.name;
+                            updateCharacterDisplay();
+                            debugLog('PARSE', `Readied weapon (default for damage roll): ${firstWeapon.name}`);
+                        }
+                    }
+                }
+                const formattedResponse = displayResponse.replace(rollRequestPattern, '').trim();
+                addNarration(formattedResponse);
+                showDiceSection(`Roll ${ability}:`, ability);
+            } else {
+                addNarration(displayResponse);
+                disableInput(false);
+            }
+        }
+        
+        /** Parse "goblin takes 5 damage" / "hits the goblin for 5" and update tracked monster HP. Checks all rooms so we record damage even if currentRoom was wrong. */
+        function parseMonsterDamage(text) {
+            const rooms = gameData.module && gameData.module.rooms;
+            if (!rooms) return;
+            if (!gameState.damageToEncounters) gameState.damageToEncounters = {};
+            let roomWithUpdate = null;
+            for (const [roomId, room] of Object.entries(rooms)) {
+                if (!room || !room.encounters || room.encounters.length === 0) continue;
+                for (const enc of room.encounters) {
+                    const monster = resolveMonster(enc.monster_ref);
+                    if (!monster) continue;
+                    const names = [enc.name, monster.name].filter(Boolean);
+                    const escapedNames = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+                    const patterns = [
+                        new RegExp(`(?:the\\s+)?(?:${escapedNames})\\s+takes\\s+(\\d+)\\s+(?:damage|HP)`, 'gi'),
+                        new RegExp(`(?:hits?|strikes?|deals?)\\s+(?:the\\s+)?(?:${escapedNames})\\s+for\\s+(\\d+)\\s*(?:damage|HP)?`, 'gi'),
+                        new RegExp(`(\\d+)\\s+(?:damage|HP)\\s+(?:to|against)\\s+(?:the\\s+)?(?:${escapedNames})`, 'gi'),
+                        new RegExp(`(?:deal|deals?|dealt)\\s+(?:the\\s+)?(?:${escapedNames})\\s+(\\d+)\\s+(?:damage|HP)`, 'gi'),
+                        new RegExp(`(?:deal|deals?|dealt)\\s+(\\d+)\\s+(?:damage|HP)\\s+(?:to|against)\\s+(?:the\\s+)?(?:${escapedNames})`, 'gi')
+                    ];
+                    for (const re of patterns) {
+                        let m;
+                        re.lastIndex = 0;
+                        while ((m = re.exec(text)) !== null) {
+                            const damage = parseInt(m[1], 10);
+                            gameState.damageToEncounters[enc.id] = (gameState.damageToEncounters[enc.id] || 0) + damage;
+                            gameState.inCombat = true;
+                            roomWithUpdate = roomId;
+                            debugLog('PARSE', `Monster damage: ${enc.name} +${damage} (total: ${gameState.damageToEncounters[enc.id]}/${monster.hp})`);
+                        }
+                    }
+                    const deathPattern = new RegExp(`(?:${escapedNames})\\s+(?:falls?|is\\s+dead|dies?|is\\s+defeated|is\\s+slain)|(?:kill|slay|defeat)s?\\s+(?:the\\s+)?(?:${escapedNames})`, 'gi');
+                    if (deathPattern.test(text)) {
+                        const current = gameState.damageToEncounters[enc.id] || 0;
+                        if (current < monster.hp) {
+                            gameState.damageToEncounters[enc.id] = monster.hp;
+                            roomWithUpdate = roomId;
+                            debugLog('PARSE', `Monster defeated (narrative): ${enc.name}`);
+                        }
+                    }
+                }
+            }
+            if (roomWithUpdate) {
+                const room = rooms[roomWithUpdate];
+                gameState.currentRoom = roomWithUpdate;
+                if (room && room.encounters && room.encounters.length > 0) {
+                    const allDefeated = room.encounters.every(enc => getEncounterHP(enc).defeated);
+                    if (allDefeated) {
+                        gameState.inCombat = false;
+                        debugLog('PARSE', 'Combat ended: all enemies defeated');
+                    }
+                }
+            }
+        }
+        
+        /** If narrative indicates the player entered a different room, update currentRoom so combat indicator etc. are correct. */
+        function tryParseRoomChange(text) {
+            const rooms = gameData.module && gameData.module.rooms;
+            if (!rooms || !text) return;
+            const t = text.toLowerCase();
+            const movementWord = /\b(?:enter|reach|arrive|step into|are now in|find yourself in|head (?:in)?to|go (?:in)?to)\b/.test(t);
+            if (!movementWord) return;
+            for (const [roomId, room] of Object.entries(rooms)) {
+                if (!room || !room.name) continue;
+                if (roomId === gameState.currentRoom) continue;
+                const roomName = room.name.toLowerCase();
+                if (t.includes(roomName)) {
+                    gameState.currentRoom = roomId;
+                    updateCharacterDisplay();
+                    debugLog('PARSE', `Room changed to: ${roomId} (${room.name})`);
+                    return;
+                }
+            }
+        }
+        
+        /** Parse [COMBAT: on] and [COMBAT: off] — GM explicitly sets combat state. Takes precedence over heuristics. */
+        function tryParseCombatTag(text) {
+            if (!text) return;
+            const onMatch = text.match(/\[COMBAT:\s*(on|true|yes)\]/i);
+            const offMatch = text.match(/\[COMBAT:\s*(off|false|no)\]/i);
+            if (onMatch) {
+                gameState.inCombat = true;
+                gameState.combatStateFromTag = true;
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Combat state: on (GM tag)');
+            } else if (offMatch) {
+                gameState.inCombat = false;
+                gameState.combatStateFromTag = true;
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Combat state: off (GM tag)');
+            }
+        }
+
+        /** Fallback: if GM says combat begins/starts (and no explicit tag), set in-combat. */
+        function tryParseCombatBegins(text) {
+            if (!text) return;
+            if (text.match(/\[COMBAT:\s*(on|off|true|false)\]/i)) return; // GM used tag, skip heuristic
+            const t = text.toLowerCase();
+            if (/\bcombat\s+(?:begins?|starts?)\b/.test(t) || /\b(?:the\s+)?(?:fight|battle)\s+(?:begins?|starts?|is\s+on)\b/.test(t) || /\b(?:you\s+are\s+)(?:in\s+)?combat\b/.test(t)) {
+                gameState.inCombat = true;
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Combat began (GM narrative fallback)');
+            }
+        }
+        
+        /** If narrative or player message indicates retreat/flee, end combat. */
+        function tryParseRetreat(text) {
+            if (!text) return;
+            const t = text.toLowerCase();
+            const gmNarrative = /\b(?:you\s+)(?:run|retreat|flee|escape|withdraw|manage to|succeed in)\b/.test(t) ||
+                /\b(?:you\s+)(?:run|retreat|flee|escape)\s+(?:away|safely|back)/.test(t) ||
+                /\b(?:run\s+away|retreat|fled|escape|withdraw)\b.*\b(?:safely|successfully|manage)\b/.test(t);
+            const playerDeclares = /\b(?:i\s+)(?:run\s+away|retreat|flee|escape|withdraw|disengage)\b/.test(t) ||
+                /\b(?:i'll\s+)(?:run\s+away|retreat|flee|escape)\b/.test(t);
+            if (gmNarrative || playerDeclares) {
+                gameState.inCombat = false;
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Combat ended: retreat/flee');
+            }
+        }
+        
+        /** If text mentions removing or donning armor, update armorEquipped and AC. */
+        function tryParseArmorState(text) {
+            const t = text.toLowerCase();
+            if (/\b(?:remove|take off|doff|strip off|unequip)\s+(?:your?)?\s*(?:armor|chain mail|mail)\b/i.test(t) ||
+                /\b(?:you\s+)?(?:remove|doff)\s+(?:your?)?\s*(?:armor|chain mail)\b/i.test(t)) {
+                gameState.armorEquipped = false;
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Armor removed; AC now unarmored');
+            } else if (/\b(?:put on|don|equip|wear)\s+(?:your?)?\s*(?:armor|chain mail|mail)\b/i.test(t) ||
+                /\b(?:you\s+)?(?:don|put on)\s+(?:your?)?\s*(?:armor|chain mail)\b/i.test(t)) {
+                gameState.armorEquipped = true;
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Armor donned');
+            }
+        }
+        
+        /** If text mentions putting away / sheathing a weapon, clear readied weapon so no weapon is highlighted. */
+        function tryParseWeaponAway(text) {
+            if (!text) return;
+            const t = text.toLowerCase();
+            if (/\b(?:put|puts?)\s+(?:my|your?|the)\s+(?:sword|weapon|blade|longsword|shortbow)\s+away\b/.test(t) ||
+                /\b(?:put|puts?)\s+away\s+(?:my|your?|the)\s+(?:sword|weapon|blade|longsword|shortbow)\b/.test(t) ||
+                /\bsheathe?s?\s+(?:my|your?|the)\s+(?:sword|weapon|blade)?\b/.test(t) ||
+                /\bstow?s?\s+(?:my|your?|the)\s+(?:sword|weapon)\b/.test(t) ||
+                /\b(?:you\s+)?(?:put|sheathe?|stow)\s+(?:your?\s+)?(?:sword|weapon)\s+away\b/.test(t)) {
+                gameState.readiedWeaponName = null;
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Readied weapon cleared (put away / sheathed)');
+            }
+        }
+        
+        /** If text mentions switching/drawing/readying/attacking with a weapon, set readied weapon and update panel. */
+        function tryParseWeaponSwitch(text) {
+            const sources = gameData.character && gameData.character.equipment
+                ? [...(gameData.character.equipment.wielded || []), ...(gameData.character.equipment.carried || [])]
+                : [];
+            const weaponNames = sources.filter(w => w.damage).map(w => w.name).filter(Boolean);
+            for (const name of weaponNames) {
+                const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const patterns = [
+                    new RegExp(`(?:switch|switch to|draw|ready|use|wield|pull out)\\s+(?:your?\\s+)?(?:the\\s+)?${escaped}`, 'i'),
+                    new RegExp(`(?:attack|strike|hit)\\s+(?:with|using)\\s+(?:your?|my\\s+)?(?:the\\s+)?${escaped}`, 'i'),
+                    new RegExp(`(?:attack|strike)\\s+(?:the\\s+)?[^\\s]+\\s+with\\s+(?:your?|my\\s+)?(?:the\\s+)?${escaped}`, 'i'),
+                    new RegExp(`(?:you\\s+)?(?:draw|ready|switch to)\\s+(?:your?\\s+)?(?:the\\s+)?${escaped}`, 'i'),
+                    new RegExp(`(?:you\\s+)?(?:attack|strike)\\s+with\\s+(?:your?\\s+)?(?:the\\s+)?${escaped}`, 'i'),
+                    new RegExp(`${escaped}\\s+(?:is\\s+)?(?:now\\s+)?(?:readied?|drawn|out)`, 'i')
+                ];
+                for (const p of patterns) {
+                    if (p.test(text)) {
+                        gameState.readiedWeaponName = name;
+                        updateCharacterDisplay();
+                        debugLog('PARSE', `Readied weapon set to: ${name}`);
+                        return;
+                    }
+                }
+            }
+        }
+        
+        function parseStateChanges(text) {
+            debugLog('PARSE', 'Parsing state changes from AI response');
+            gameState.combatStateFromTag = false; // reset; set true if GM used [COMBAT: on/off]
+            // Strip HTML so "You take <b>4</b> damage" is parseable (GM may use <b>/<i> in responses)
+            const plainText = text.replace(/<[^>]*>/g, ' ');
+            
+            tryParseRoomChange(plainText);
+            tryParseCombatTag(plainText);   // GM tag takes precedence
+            tryParseCombatBegins(plainText);
+            tryParseRetreat(plainText);
+            tryParseCombatBegins(plainText);
+            tryParseWeaponAway(plainText);
+            tryParseWeaponSwitch(plainText);
+            tryParseArmorState(plainText);
+            parseMonsterDamage(plainText);
+            updateCharacterDisplay();
+            
+            // Parse HP changes - DAMAGE (only when the PLAYER receives damage, not when the player deals damage)
+            // Order matters: try explicit "you take/suffer/lose" first, then "hits you for X"
+            const damageToPlayerPatterns = [
+                /(?:you\s+)(?:take|taking|suffer|lose)\s+(\d+)\s+(?:damage|HP)/i,
+                /(?:take|taking|suffer|lose)\s+(\d+)\s+(?:damage|HP)/i,
+                /(?:hits?|strikes?|deals?)\s+(?:you|your)\s+(?:for\s+)?(\d+)\s*(?:damage|HP)?/i,
+                /(?:you'?re?)\s+hit\s+for\s+(\d+)/i,
+                /hits?\s+you\s+for\s+(\d+)/i,
+                /dealing\s+(\d+)\s+(?:damage|HP)\s+to\s+you/i,
+                /(\d+)\s+(?:damage|HP)\s+(?:to\s+you|against\s+you)/i
+            ];
+            
+            for (const pattern of damageToPlayerPatterns) {
+                const match = plainText.match(pattern);
+                if (match) {
+                    const damage = parseInt(match[1], 10);
+                    debugLog('PARSE', `Detected damage TO PLAYER: ${damage}`);
+                    if (!gameState.combatStateFromTag) gameState.inCombat = true; // GM tag overrides
+                    modifyHP(-damage);
+                    break;
+                }
+            }
+            
+            // Parse HP changes - HEALING
+            const healPatterns = [
+                /(?:heal|restore|regain)\s+(\d+)\s+(?:HP|hit points)/i,
+                /(\d+)\s+HP\s+(?:restored|healed)/i
+            ];
+            
+            for (const pattern of healPatterns) {
+                const match = plainText.match(pattern);
+                if (match) {
+                    const healing = parseInt(match[1]);
+                    debugLog('PARSE', `Detected healing: ${healing}`);
+                    modifyHP(healing);
+                    break;
+                }
+            }
+            
+            // Parse XP gains
+            const xpPattern = /(?:gain|earn|receive)\s+(\d+)\s+XP/i;
+            const xpMatch = plainText.match(xpPattern);
+            if (xpMatch) {
+                const xp = parseInt(xpMatch[1]);
+                debugLog('PARSE', `Detected XP gain: ${xp}`);
+                addXP(xp);
+            }
+            
+            // Parse gold found
+            const goldPatterns = [
+                /(?:find|discover|obtain|gain)\s+(\d+)\s*gp/i,
+                /(\d+)\s+gold/i
+            ];
+            
+            for (const pattern of goldPatterns) {
+                const match = plainText.match(pattern);
+                if (match) {
+                    const gold = parseInt(match[1]);
+                    debugLog('PARSE', `Detected gold: ${gold}`);
+                    addToInventory('Gold', gold);
+                    break;
+                }
+            }
+            
+            // Parse item acquisition
+            const itemPattern = /(?:find|discover|obtain|take)\s+(?:a|an|the)\s+([^.!?,]+?)(?:\.|!|,|\s+in\s+|\s+from\s+)/i;
+            const itemMatch = plainText.match(itemPattern);
+            if (itemMatch && !plainText.match(/gold|damage|HP/i)) {
+                const itemName = itemMatch[1].trim();
+                if (itemName.length < 30 && !itemName.includes('you') && !itemName.includes('your')) {
+                    debugLog('PARSE', `Detected item: ${itemName}`);
+                    addToInventory(itemName, 1);
+                }
+            }
+            
+            tryParsePackItemUse(plainText, false); // GM response (skip if already parsed from player)
+        }
+
+        /** Parse when player uses Pack items (potion, rope, rations, torch) and decrement quantity.
+         * @param {string} text - GM or player narrative text
+         * @param {boolean} fromPlayer - if true, set torchUseParsedThisTurn to avoid double-count when GM also confirms */
+        function tryParsePackItemUse(text, fromPlayer = false) {
+            if (!text) return;
+            const t = text.toLowerCase();
+            // Healing potion
+            if (/\b(?:you\s+)?(?:drink|drank|consume|consumed|use|used)\s+(?:a|the)?\s*healing\s+potion\b/i.test(t) ||
+                /\bhealing\s+potion\s+(?:restores?|heals?)\b/i.test(t)) {
+                const before = gameState.character.inventory.find(i => i.name === 'Healing Potion');
+                if (before && (typeof before.quantity === 'number') && before.quantity > 0) {
+                    removeFromInventory('Healing Potion', 1);
+                    debugLog('PARSE', 'Detected potion usage');
+                }
+            }
+            // Rope
+            if (/\b(?:you\s+)?(?:use|used|employ)\s+(?:the\s+)?rope\b/i.test(t) ||
+                /\b(?:the\s+)?rope\s+(?:is\s+)?(?:used|uncoiled|tied)\b/i.test(t) ||
+                /\bclimb\s+(?:with|using)\s+(?:the\s+)?rope\b/i.test(t)) {
+                const before = gameState.character.inventory.find(i => i.name === 'Rope (50ft)' || i.name === 'Rope');
+                if (before && (typeof before.quantity === 'number') && before.quantity > 0) {
+                    removeFromInventory(before.name, 1);
+                    debugLog('PARSE', 'Detected rope usage');
+                }
+            }
+            // Rations
+            if (/\b(?:you\s+)?(?:eat|ate|consume|consumed)\s+(?:some\s+|your\s+)?(?:rations?|food)\b/i.test(t) ||
+                /\b(?:you\s+)?(?:use|used)\s+(?:some\s+|your\s+)?rations?\b/i.test(t)) {
+                const before = gameState.character.inventory.find(i => i.name === 'Rations');
+                if (before && (typeof before.quantity === 'number') && before.quantity > 0) {
+                    removeFromInventory('Rations', 1);
+                    debugLog('PARSE', 'Detected rations usage');
+                }
+            }
+            // Torch (from pack - lighting one, pulling out, etc.)
+            // Match both GM ("You pull out...") and player ("I pull out...") phrasing
+            // Skip if we already parsed from player message this turn (avoid double-count)
+            const torchUsed = !gameState.torchUseParsedThisTurn && (
+                /\b(?:you|i)\s+(?:pull|pulled)\s+out\s+(?:a\s+|my\s+|your\s+)?torch\b/i.test(t) ||
+                /\b(?:you|i)\s+(?:draw|drew)\s+(?:a\s+|my\s+|your\s+)?torch\b/i.test(t) ||
+                /\b(?:you|i)\s+(?:light|lit|take|took)\s+(?:a\s+|my\s+|your\s+)?torch\s+(?:from\s+(?:my|your)\s+pack)?/i.test(t) ||
+                /\b(?:you|i)\s+(?:light|lit)\s+(?:a\s+|my\s+|your\s+)?torch\b/i.test(t) ||
+                /\b(?:pull|pulled)\s+out\s+(?:a\s+|my\s+|your\s+)?torch\s+(?:and\s+)?(?:light|lit)/i.test(t) ||
+                /\b(?:light|lit)\s+(?:a\s+|my\s+|your\s+)?torch\b/i.test(t)
+            );
+            if (torchUsed) {
+                const before = gameState.character.inventory.find(i => i.name === 'Torch');
+                if (before && (typeof before.quantity === 'number') && before.quantity > 0) {
+                    removeFromInventory('Torch', 1);
+                    debugLog('PARSE', 'Detected torch use (lighting from pack)');
+                }
+                // Add Torch (lit) to Equipped when lighting one
+                if (!gameState.equippedInUse.some(i => i.name === 'Torch (lit)')) {
+                    gameState.equippedInUse.push({ name: 'Torch (lit)', stats: '20ft bright, 20ft dim, 1 hour duration' });
+                    debugLog('PARSE', 'Added Torch (lit) to Equipped');
+                }
+                if (fromPlayer) gameState.torchUseParsedThisTurn = true;
+                updateCharacterDisplay();
+            }
+            // Torch (put back in pack / stow / extinguish)
+            const torchStowed = /\b(?:you|i)\s+(?:put|placed)\s+(?:the\s+)?torch\s+(?:back\s+)?(?:in|into)\s+(?:your|my)\s+pack\b/i.test(t) ||
+                /\b(?:you|i)\s+(?:stow|stowed|put|puts?)\s+(?:the\s+)?torch\s+(?:away|back)?\b/i.test(t) ||
+                /\b(?:you|i)\s+(?:extinguish|extinguished|douse|doused)\s+(?:the\s+)?torch\b/i.test(t) ||
+                /\b(?:you|i)\s+(?:put|puts?)\s+(?:the\s+)?(?:lit\s+)?torch\s+away\b/i.test(t) ||
+                /\b(?:put|puts?)\s+(?:the\s+)?torch\s+back\s+in\s+(?:your|my)\s+pack\b/i.test(t);
+            if (torchStowed && gameState.equippedInUse.some(i => i.name === 'Torch (lit)')) {
+                gameState.equippedInUse = gameState.equippedInUse.filter(i => i.name !== 'Torch (lit)');
+                const torch = gameState.character.inventory.find(i => i.name === 'Torch');
+                if (torch) {
+                    torch.quantity = (torch.quantity || 0) + 1;
+                } else {
+                    gameState.character.inventory.push({ name: 'Torch', quantity: 1 });
+                }
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Torch put back in pack');
+            }
+            // Rope retrieval
+            if (/\b(?:you\s+)?(?:retrieve|retrieved|recoil|recoiled|pick\s+up|picked\s+up)\s+(?:the\s+)?rope\b/i.test(t)) {
+                const rope = gameState.character.inventory.find(i => i.name === 'Rope (50ft)' || i.name === 'Rope');
+                if (rope) {
+                    rope.quantity = (rope.quantity || 0) + 1;
+                    updateCharacterDisplay();
+                    debugLog('PARSE', 'Detected rope retrieval');
+                } else {
+                    addToInventory('Rope (50ft)', 1);
+                    debugLog('PARSE', 'Detected rope retrieval (was not in pack)');
+                }
+            }
+        }
+
+        // ============================================
+        // TEST UTILITIES
+        // ============================================
+        
+        const TestUtils = {
+            modifyHP(amount) {
+                modifyHP(amount);
+                addSystemMessage(`[DEBUG] HP adjusted by ${amount}`);
+            },
+            
+            fullHeal() {
+                gameState.character.hp = gameState.character.maxHp;
+                updateCharacterDisplay();
+                addSystemMessage('[DEBUG] Fully healed');
+            },
+            
+            addXP(amount) {
+                addXP(amount);
+            },
+            
+            addPotion() {
+                addToInventory('Healing Potion', 1);
+                addSystemMessage('[DEBUG] Added healing potion');
+            },
+            
+            addGold(amount) {
+                addToInventory('Gold', amount);
+                addSystemMessage(`[DEBUG] Added ${amount} gold`);
+            },
+            
+            teleportToRoom(roomId) {
+                if (gameData.module.rooms[roomId]) {
+                    gameState.currentRoom = roomId;
+                    const room = gameData.module.rooms[roomId];
+                    addSystemMessage(`[DEBUG] Teleported to ${room.name}`);
+                    addNarration(room.description);
+                } else {
+                    addSystemMessage(`[DEBUG] Room ${roomId} not found`);
+                }
+            },
+            
+            logState() {
+                console.table({
+                    HP: `${gameState.character.hp}/${gameState.character.maxHp}`,
+                    XP: gameState.character.xp,
+                    Room: gameState.currentRoom,
+                    Gold: gameState.character.inventory.find(i => i.name.includes('Gold'))?.quantity || '0gp'
+                });
+                console.log('Full state:', gameState);
+            },
+            
+            clearHistory() {
+                gameState.conversationHistory = [];
+                addSystemMessage('[DEBUG] Conversation history cleared');
+            }
+        };
+        
+        // Expose to console
+        window.test = TestUtils;
+
+        // ============================================
+        // DEBUG PANEL TOGGLE
+        // ============================================
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                const panel = document.getElementById('debugPanel');
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+
+        // ============================================
+        // START GAME
+        // ============================================
+        
+        window.addEventListener('load', () => {
+            debugLog('INIT', 'Page loaded, initializing game');
+            initializeGame();
+        });
+    </script>
+</body>
+</html>

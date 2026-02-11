@@ -1,0 +1,12 @@
+{
+  "name": "gm-ai-dungeon-crawler",
+  "version": "1.0.0",
+  "description": "AI-powered dungeon crawler with Claude as GM",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
