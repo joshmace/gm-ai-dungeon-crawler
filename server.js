@@ -5,11 +5,11 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
 // CONFIGURATION
 const PORT = process.env.PORT || 8000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-
 // MIME types for static files
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -22,6 +22,37 @@ const MIME_TYPES = {
     '.svg': 'image/svg+xml',
     '.ico': 'image/x-icon'
 };
+
+function httpsJsonRequest({ hostname, path, method = 'GET', headers = {}, body = null }) {
+    return new Promise((resolve, reject) => {
+        const req = https.request({
+            hostname,
+            port: 443,
+            path,
+            method,
+            headers
+        }, (res) => {
+            let responseData = '';
+            res.on('data', chunk => { responseData += chunk; });
+            res.on('end', () => {
+                let json = null;
+                try {
+                    json = responseData ? JSON.parse(responseData) : null;
+                } catch (e) {
+                    return reject(new Error(`Invalid JSON response (${res.statusCode}): ${responseData}`));
+                }
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve({ statusCode: res.statusCode, data: json });
+                } else {
+                    reject(new Error(`API error ${res.statusCode}: ${JSON.stringify(json)}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        if (body) req.write(body);
+        req.end();
+    });
+}
 
 const server = http.createServer((req, res) => {
     // Enable CORS
@@ -81,6 +112,16 @@ const server = http.createServer((req, res) => {
                     });
 
                     anthropicRes.on('end', () => {
+                        if (anthropicRes.statusCode >= 400) {
+                            const reqSize = Buffer.byteLength(anthropicData, 'utf8');
+                            console.error('Anthropic API error', anthropicRes.statusCode, '| Request size:', reqSize, 'bytes');
+                            try {
+                                const errBody = JSON.parse(responseData);
+                                console.error('Anthropic response:', JSON.stringify(errBody, null, 2));
+                            } catch (e) {
+                                console.error('Anthropic response (raw):', responseData.slice(0, 500));
+                            }
+                        }
                         res.writeHead(anthropicRes.statusCode, {
                             'Content-Type': 'application/json'
                         });
@@ -98,9 +139,13 @@ const server = http.createServer((req, res) => {
                 anthropicReq.end();
 
             } catch (error) {
-                console.error('Error parsing request:', error);
+                console.error('Error parsing request:', error.message);
+                if (body && body.length > 0) {
+                    const preview = body.length > 500 ? body.slice(0, 250) + '...[truncated]...' + body.slice(-250) : body;
+                    console.error('Body length:', body.length, 'Preview:', preview);
+                }
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Invalid request' }));
+                res.end(JSON.stringify({ error: 'Invalid request', detail: error.message }));
             }
         });
         return;

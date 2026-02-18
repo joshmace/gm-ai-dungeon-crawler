@@ -1,0 +1,338 @@
+{
+  "module": {
+    "title": "Rules System Test Module",
+    "author": "GM-AI Test Suite",
+    "version": "1.0",
+    "type": "rules_test",
+    "level_range": [1, 5],
+    "setting": "A metaphysical testing ground that manifests challenges keyed to the loaded ruleset",
+    "theme": "rules validation, mechanics verification",
+    "tone": "clear and procedural; success means the GM honored the rules",
+    "estimated_time": "30–60 minutes",
+    "starting_room": "rules_hub",
+    "description": "Module designed to exercise every aspect of the rule system: DC scale, ability checks, combat, 0 HP, exploration, rest, conditions, optional rules (e.g. morale), and XP. Use with rules.json to verify Phase 1 behavior; extend for Phase 2."
+  },
+  "rooms": {
+    "rules_hub": {
+      "id": "rules_hub",
+      "name": "Rules Test Hub",
+      "description": "A neutral hall with glowing archways and a central pillar (Rules Charter). As soon as the player arrives, tell them the available rooms: North = Ability Check Gallery (six DC tests). East = Combat Chamber (one goblin). South = Exploration Corridor (dark, search, stuck door). West = Rest Sanctum (short/long rest). Up = Conditions Room (poison vent). Down = Morale Chamber (two goblins, morale). Tests can be run in any order; return here between tests.",
+      "connections": {
+        "north": "ability_check_gallery",
+        "east": "combat_chamber",
+        "south": "exploration_corridor",
+        "west": "rest_sanctum",
+        "up": "conditions_room",
+        "down": "morale_chamber"
+      },
+      "features": [
+        {
+          "name": "Rules Charter",
+          "description": "Official design philosophy; present to player on entry along with the room list above.",
+          "interaction": "read",
+          "text": "Design philosophy: The GM honors the explicit specifications of the loaded ruleset (DCs, numbers, mechanics, optional rules). The GM is creative in narrative and in areas not specified by the rules. On entry, describe the hub and list the test rooms per the room description so the player can choose where to go.",
+          "triggers": ["on_entry"]
+        },
+        {
+          "name": "Arch Labels",
+          "description": "Each arch is labeled with direction and room name. Same list as in the room description—ensure the player knows all options.",
+          "interaction": "observe",
+          "note": "Use these to run tests in any order"
+        }
+      ],
+      "encounters": [],
+      "atmosphere": "Neutral and functional. No ambushes here.",
+      "gm_notes": "RULE UNDER TEST: Design philosophy. Player can read charter and choose which test to run. Do not add encounters or change exits."
+    },
+    "ability_check_gallery": {
+      "id": "ability_check_gallery",
+      "name": "Ability Check Gallery",
+      "description": "A corridor with six marked stations. Each station requires a single ability check at a specific difficulty from the ruleset DC scale. Use the exact DC values from the loaded rules (trivial 5, easy 10, medium 15, hard 20, very_hard 25, nearly_impossible 30).",
+      "connections": {
+        "south": "rules_hub"
+      },
+      "features": [
+        {
+          "name": "Trivial Gate (DC 5)",
+          "description": "A light wooden bar. Any character can usually lift it with minimal effort.",
+          "interaction": "strength",
+          "dc": 5,
+          "success": "The bar lifts easily. You may pass.",
+          "failure": "The bar sticks momentarily; you may try again or describe another approach.",
+          "note": "Tests trivial DC from rules. Use exact DC 5."
+        },
+        {
+          "name": "Easy Lock (DC 10)",
+          "description": "A simple latch. A quick DEX check can release it.",
+          "interaction": "dexterity",
+          "dc": 10,
+          "success": "The latch clicks open.",
+          "failure": "The latch resists; you may retry.",
+          "note": "Tests easy DC. Use exact DC 10."
+        },
+        {
+          "name": "Medium Puzzle (DC 15)",
+          "description": "A rune panel. Deciphering it requires a focused INT check.",
+          "interaction": "intelligence",
+          "dc": 15,
+          "success": "The runes resolve into a clear instruction; the way is clear.",
+          "failure": "The runes remain cryptic. You may try again.",
+          "note": "Tests medium DC. Use exact DC 15."
+        },
+        {
+          "name": "Hard Percept (DC 20)",
+          "description": "A hidden catch is rumored to be here. Finding it requires a careful WIS (Perception) check.",
+          "interaction": "perception",
+          "dc": 20,
+          "success": "You find the hidden catch and can trigger the mechanism.",
+          "failure": "You don't find it this time.",
+          "note": "Tests hard DC. Use exact DC 20."
+        },
+        {
+          "name": "Very Hard Endurance (DC 25)",
+          "description": "A toxic mist fills one section. Holding breath and pushing through requires a CON check.",
+          "interaction": "constitution",
+          "dc": 25,
+          "success": "You push through without ill effect.",
+          "failure": "You are forced back; you may retry or turn back.",
+          "note": "Tests very_hard DC. Use exact DC 25."
+        },
+        {
+          "name": "Nearly Impossible Persuasion (DC 30)",
+          "description": "An enchanted guardian that can be swayed only by an extraordinary CHA check.",
+          "interaction": "persuasion",
+          "dc": 30,
+          "success": "The guardian steps aside.",
+          "failure": "The guardian does not yield.",
+          "note": "Tests nearly_impossible DC. Use exact DC 30."
+        }
+      ],
+      "encounters": [],
+      "atmosphere": "Quiet and methodical. Each test is isolated.",
+      "gm_notes": "RULE UNDER TEST: core_mechanics.ability_checks.dc_scale and when_to_roll. Request [ROLL_REQUEST: AbilityName] and apply the exact DC from the ruleset. Do not substitute different DCs."
+    },
+    "combat_chamber": {
+      "id": "combat_chamber",
+      "name": "Combat Chamber",
+      "description": "Single-enemy combat test. Tests attack roll (melee/ranged per rules), damage (weapon die + mod), AC, critical hit (natural 20), critical miss (natural 1), and at 0 HP = death per rules.",
+      "connections": {
+        "west": "rules_hub"
+      },
+      "features": [
+        {
+          "name": "Combat Plaque",
+          "description": "Inscription: 'One foe. Use the exact attack and damage rules from the loaded ruleset. At 0 HP, the character dies (unless death saves are enabled).'",
+          "interaction": "read",
+          "note": "GM must use monster AC and stats from manual; attack/damage formula from rules."
+        }
+      ],
+      "encounters": [
+        {
+          "id": "solo_goblin",
+          "name": "Goblin Warrior",
+          "monster_ref": "goblin",
+          "quantity": 1,
+          "trigger": "on_entry",
+          "behavior": "The goblin attacks on sight. No morale test here—single foe, fight to the death for this test.",
+          "tactics": "Straightforward melee. Use exact AC and attacks from the monster manual.",
+          "on_death": {
+            "xp_award": 25,
+            "narrative": "The goblin falls. A small pouch of coins appears.",
+            "treasure": [{"item": "gold", "quantity": 10}]
+          },
+          "special_notes": "HP 7, AC 13, +4 to hit, 1d6+2. Tests: hit/miss vs AC, damage, crit on 20, miss on 1, 0 HP = death."
+        }
+      ],
+      "atmosphere": "Sterile and dangerous. One fight, rules-only.",
+      "gm_notes": "RULE UNDER TEST: combat.attack_roll, combat.damage, combat.hit_points.at_zero, critical_hit (nat 20), critical_miss (nat 1). Use monster stats exactly. Award exactly 25 XP and 10 gold on death."
+    },
+    "exploration_corridor": {
+      "id": "exploration_corridor",
+      "name": "Exploration Corridor",
+      "description": "A dark corridor. Light rules apply (e.g. torch 20 ft bright, 20 ft dim). One section has a searchable alcove; a stuck door blocks the far end. Use rules for searching (quick search = action + Perception; thorough = 10 min, auto-find reasonable things) and doors (stuck = STR check, DC from rules).",
+      "connections": {
+        "north": "rules_hub",
+        "east": "stuck_door_exit"
+      },
+      "features": [
+        {
+          "name": "Darkness",
+          "description": "Corridor is unlit. Light sources use rules: torch 20ft bright / 20ft dim, 1 hour; lantern 30ft bright/dim, 6 hours.",
+          "interaction": "observe",
+          "note": "Tests exploration.light_sources if present in rules."
+        },
+        {
+          "name": "Alcove",
+          "description": "A recess that can be quickly searched (action, Perception) or thoroughly searched (10 minutes, automatic find for reasonable items).",
+          "interaction": "search",
+          "contains": [{"item": "ration", "quantity": 2, "note": "Per rules"}],
+          "note": "Tests exploration.searching: quick search vs thorough search."
+        },
+        {
+          "name": "Stuck Door",
+          "description": "Heavy door, stuck. STR check to force; use a DC from the ruleset (e.g. medium = 15).",
+          "interaction": "strength",
+          "dc": 15,
+          "success": "The door groans open.",
+          "failure": "The door holds. You may retry or seek another way.",
+          "note": "Tests doors/stuck: use rules DC scale (suggest medium 15)."
+        }
+      ],
+      "encounters": [],
+      "atmosphere": "Dark and quiet. Exploration and checks only.",
+      "gm_notes": "RULE UNDER TEST: exploration (light, searching, doors). Honor light radii and duration; quick vs thorough search; stuck door DC from rules."
+    },
+    "rest_sanctum": {
+      "id": "rest_sanctum",
+      "name": "Rest Sanctum",
+      "description": "A safe, quiet room. No encounters. The player may take a short rest (1 hour, spend hit dice to heal, recover some abilities) or a long rest (8 hours, restore all HP, half hit dice, all abilities; once per 24 hours per rules).",
+      "connections": {
+        "east": "rules_hub"
+      },
+      "features": [
+        {
+          "name": "Rest Area",
+          "description": "Safe space for short or long rest. Benefits per rules: short rest = 1 hour, hit dice; long rest = 8 hours, full HP, half hit dice, once per 24 hours.",
+          "interaction": "rest",
+          "note": "GM must apply rest benefits exactly as in rules.resources.resting."
+        }
+      ],
+      "encounters": [],
+      "atmosphere": "Calm and safe. No interruptions.",
+      "gm_notes": "RULE UNDER TEST: resources.resting (short_rest, long_rest). Narrate duration and benefits per rules—do not invent different rest effects."
+    },
+    "conditions_room": {
+      "id": "conditions_room",
+      "name": "Conditions Room",
+      "description": "A chamber with a hazard that can apply a condition (e.g. poison gas: CON save or poisoned). Use rules.combat.conditions for exact effects. When the player gains or loses a condition, include [CONDITION: add id] or [CONDITION: remove id] so the app tracks it.",
+      "connections": {
+        "down": "rules_hub"
+      },
+      "features": [
+        {
+          "name": "Poison Vent",
+          "description": "A vent releases a mild toxin. CON save (DC 15 from ruleset) or become poisoned. On failure, write [CONDITION: add poisoned]. Poisoned per rules: −2 to attack rolls and to all ability/skill checks.",
+          "interaction": "approach",
+          "dc": 15,
+          "success": "You resist the toxin.",
+          "failure": "You are poisoned. Include [CONDITION: add poisoned] in your response. Poisoned = −2 to attack rolls and ability checks until removed.",
+          "note": "Tests combat.conditions. Use [CONDITION: add poisoned] so the character panel updates; apply −2 to attack and checks per rules."
+        }
+      ],
+      "encounters": [],
+      "atmosphere": "Uncomfortable. One hazard, one condition.",
+      "gm_notes": "RULE UNDER TEST: combat.conditions. When the player fails the CON save, include [CONDITION: add poisoned]. Apply poisoned as −2 to attack and checks. To remove later, use [CONDITION: remove poisoned]."
+    },
+    "morale_chamber": {
+      "id": "morale_chamber",
+      "name": "Morale Chamber",
+      "description": "Two goblins are here. Optional rule 'morale' is enabled: NPCs/monsters may flee when reduced to 50% numbers or when leader falls. Test that the GM considers morale (one goblin may flee when the other dies or when both are wounded).",
+      "connections": {
+        "up": "rules_hub"
+      },
+      "features": [
+        {
+          "name": "Morale Plaque",
+          "description": "Inscription: 'Morale is in effect. Foes may flee when half are down or leader falls.'",
+          "interaction": "read",
+          "note": "If optional_rules.morale.enabled is true, GM should consider flight."
+        }
+      ],
+      "encounters": [
+        {
+          "id": "goblin_morale_1",
+          "name": "Goblin Scout",
+          "monster_ref": "goblin",
+          "quantity": 1,
+          "trigger": "on_entry",
+          "behavior": "First of two goblins. When this one dies, the other may flee (morale).",
+          "tactics": "Fight until morale suggests flight. Use monster stats exactly.",
+          "on_death": {
+            "xp_award": 25,
+            "narrative": "The goblin falls. The other may flee or fight on, per morale.",
+            "treasure": [{"item": "gold", "quantity": 10}]
+          }
+        },
+        {
+          "id": "goblin_morale_2",
+          "name": "Goblin Fighter",
+          "monster_ref": "goblin",
+          "quantity": 1,
+          "trigger": "on_entry",
+          "behavior": "Second goblin. May flee when the first is defeated (optional morale rule).",
+          "tactics": "If morale enabled, may flee when ally dies or at 50% strength.",
+          "on_death": {
+            "xp_award": 25,
+            "narrative": "The second goblin falls (or fled; no XP if fled).",
+            "treasure": [{"item": "gold", "quantity": 10}]
+          },
+          "special_notes": "Award 25 XP and 10 gold only if this goblin is defeated; if it flees, no second XP/gold."
+        }
+      ],
+      "atmosphere": "Tense. Two foes, optional morale.",
+      "gm_notes": "RULE UNDER TEST: optional_rules.morale. If enabled, consider having one goblin flee when the other dies or at 50% strength. Use exact stats and per-kill rewards."
+    },
+    "stuck_door_exit": {
+      "id": "stuck_door_exit",
+      "name": "Corridor Exit",
+      "description": "The far side of the stuck door. Leads back to hub or can serve as a shortcut.",
+      "connections": {
+        "west": "exploration_corridor",
+        "north": "rules_hub"
+      },
+      "features": [],
+      "encounters": [],
+      "atmosphere": "Same as exploration corridor.",
+      "gm_notes": "Optional exit from exploration test. No rule test here."
+    }
+  },
+  "victory_conditions": [
+    "Complete at least: Ability Check Gallery (all six DC tiers), Combat Chamber, and one of Exploration / Rest / Conditions / Morale",
+    "Verify that the GM used exact DCs, combat rules, 0 HP = death, rest benefits, conditions, and optional morale where applicable"
+  ],
+  "test_objectives": {
+    "phase_1_basic_rules": [
+      "DC scale: GM uses exact values (5, 10, 15, 20, 25, 30) for trivial through nearly_impossible",
+      "Ability checks: when_to_roll, auto_success, auto_failure respected",
+      "Combat: attack formula, damage formula, AC, nat 20 = crit, nat 1 = miss",
+      "At 0 HP: character dies (or death saves if enabled)",
+      "Optional rules: only enabled ones applied (e.g. morale)"
+    ],
+    "phase_1_experience": [
+      "XP awarded exactly as on_death.xp_award",
+      "Gold/treasure exactly as on_death.treasure",
+      "Level progression from rules.experience.level_progression if present"
+    ],
+    "phase_1_exploration_and_resources": [
+      "Light: radii and duration per rules",
+      "Search: quick vs thorough per rules",
+      "Doors: stuck/locked DCs from rules",
+      "Rest: short rest and long rest benefits per rules"
+    ],
+    "phase_1_conditions": [
+      "Conditions (e.g. poisoned) applied exactly as rules.combat.conditions"
+    ],
+    "phase_2_extensions": [
+      "Add rooms or features for: difficulty_settings, social_interaction, saving_throws, death_saves (if enabled), other optional_rules"
+    ]
+  },
+  "testing_notes": {
+    "suggested_test_sequence": [
+      "1. Start in Rules Hub; read Rules Charter.",
+      "2. Ability Check Gallery: attempt each of the six stations; verify GM requests rolls at the stated DC (5, 10, 15, 20, 25, 30).",
+      "3. Combat Chamber: fight goblin; verify attack/damage/AC/crit/miss and 0 HP = death; verify 25 XP and 10 gold awarded.",
+      "4. Exploration Corridor: use light, quick search, thorough search, stuck door with STR DC 15.",
+      "5. Rest Sanctum: take short rest then long rest; verify benefits match rules.",
+      "6. Conditions Room: trigger poison vent; verify poisoned effect matches rules.",
+      "7. Morale Chamber: fight two goblins; if morale enabled, verify possibility of flight."
+    ],
+    "expected_outcomes": {
+      "ability_gallery": "GM calls for rolls with exact DCs from rules (no ad-hoc DCs).",
+      "combat_chamber": "Goblin AC 13, +4 hit, 1d6+2; 25 XP and 10 gold on death; at 0 HP player dies per rules.",
+      "exploration": "Light and search and door mechanics match rules.",
+      "rest": "Short rest = 1hr + hit dice; long rest = 8hr + full HP + half hit dice, once per 24h.",
+      "conditions": "Poisoned = −2 to attack and checks; GM uses [CONDITION: add/remove poisoned]; panel shows effect.",
+      "morale": "If enabled, second goblin may flee."
+    }
+  }
+}
