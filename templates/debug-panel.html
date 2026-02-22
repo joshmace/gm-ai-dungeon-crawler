@@ -1,0 +1,67 @@
+<!-- Debug Panel Template (Ctrl+Shift+D to toggle) -->
+<div id="debugPanel">
+    <h3>Debug Panel</h3>
+
+    <div class="debug-section">
+        <label>API / Usage (credit-saving):</label>
+        <div class="debug-config-row">
+            <label for="configMaxTokens">Max response tokens</label>
+            <input type="number" id="configMaxTokens" class="debug-config-input" min="500" max="8000" step="100" title="Lower = cheaper replies">
+        </div>
+        <div class="debug-config-row">
+            <label for="configHistoryTurns">History turns</label>
+            <input type="number" id="configHistoryTurns" class="debug-config-input" min="2" max="50" title="Conversation turns sent each request. Lower = cheaper">
+        </div>
+    </div>
+
+    <div class="debug-section">
+        <label>HP Controls:</label>
+        <div class="debug-controls">
+            <button class="debug-button" onclick="TestUtils.modifyHP(-10)">-10 HP</button>
+            <button class="debug-button" onclick="TestUtils.modifyHP(-5)">-5 HP</button>
+            <button class="debug-button" onclick="TestUtils.modifyHP(5)">+5 HP</button>
+            <button class="debug-button" onclick="TestUtils.modifyHP(10)">+10 HP</button>
+            <button class="debug-button" onclick="TestUtils.fullHeal()">Full Heal</button>
+        </div>
+    </div>
+
+    <div class="debug-section">
+        <label>XP Controls:</label>
+        <div class="debug-controls">
+            <button class="debug-button" onclick="TestUtils.addXP(25)">+25 XP</button>
+            <button class="debug-button" onclick="TestUtils.addXP(50)">+50 XP</button>
+            <button class="debug-button" onclick="TestUtils.addXP(100)">+100 XP</button>
+        </div>
+    </div>
+
+    <div class="debug-section">
+        <label>Pack:</label>
+        <div class="debug-controls">
+            <button class="debug-button" onclick="TestUtils.addPotion()">+Potion</button>
+            <button class="debug-button" onclick="TestUtils.addGold(50)">+50 Gold</button>
+        </div>
+    </div>
+
+    <div class="debug-section">
+        <label>Navigation:</label>
+        <div class="debug-controls">
+            <button class="debug-button" onclick="TestUtils.teleportToRoom('entry_hall')">Entry</button>
+            <button class="debug-button" onclick="TestUtils.teleportToRoom('training_room')">Training</button>
+            <button class="debug-button" onclick="TestUtils.teleportToRoom('challenge_chamber')">Challenge</button>
+            <button class="debug-button" onclick="TestUtils.teleportToRoom('boss_arena')">Boss</button>
+        </div>
+    </div>
+
+    <div class="debug-section">
+        <label>State:</label>
+        <div class="debug-controls">
+            <button class="debug-button" onclick="TestUtils.logState()">Log State</button>
+            <button class="debug-button" onclick="TestUtils.clearHistory()">Clear History</button>
+        </div>
+    </div>
+
+    <div class="debug-section">
+        <label>Parse Log:</label>
+        <div class="debug-info" id="debugParseLog">No parsing activity yet...</div>
+    </div>
+</div>

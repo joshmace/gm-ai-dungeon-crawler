@@ -6,6 +6,7 @@
     
     "monsters": {
       "goblin": {
+        "id": "goblin",
         "name": "Goblin",
         "type": "humanoid",
         "size": "small",
@@ -48,8 +49,141 @@
         "treasure": "1d6 silver pieces, occasional trinket",
         "description": "Small, green-skinned humanoid with pointed ears and yellow eyes"
       },
+      "goblin_warrior": {
+        "id": "goblin_warrior",
+        "name": "Goblin Warrior",
+        "type": "humanoid",
+        "size": "small",
+        "hp": 7,
+        "ac": 13,
+        "speed": "30ft",
+        "abilities": {
+          "str": 8,
+          "dex": 14,
+          "con": 10,
+          "int": 10,
+          "wis": 8,
+          "cha": 8
+        },
+        "attacks": [
+          {
+            "name": "Scimitar",
+            "bonus": 4,
+            "damage": "1d6+2",
+            "damage_type": "slashing",
+            "range": "melee"
+          },
+          {
+            "name": "Shortbow",
+            "bonus": 4,
+            "damage": "1d6+2",
+            "damage_type": "piercing",
+            "range": "80/320"
+          }
+        ],
+        "special_abilities": [
+          {
+            "name": "Nimble Escape",
+            "description": "Can disengage or hide as a bonus action"
+          }
+        ],
+        "behavior": "Aggressive front-line goblin that presses melee attacks.",
+        "tactics": "Closes distance quickly and uses scimitar in direct combat.",
+        "xp_value": 25,
+        "treasure": "1d6 silver pieces, occasional trinket",
+        "description": "A battle-hardened goblin carrying chipped armor and a worn scimitar."
+      },
+      "goblin_scout": {
+        "id": "goblin_scout",
+        "name": "Goblin Scout",
+        "type": "humanoid",
+        "size": "small",
+        "hp": 7,
+        "ac": 13,
+        "speed": "30ft",
+        "abilities": {
+          "str": 8,
+          "dex": 14,
+          "con": 10,
+          "int": 10,
+          "wis": 8,
+          "cha": 8
+        },
+        "attacks": [
+          {
+            "name": "Scimitar",
+            "bonus": 4,
+            "damage": "1d6+2",
+            "damage_type": "slashing",
+            "range": "melee"
+          },
+          {
+            "name": "Shortbow",
+            "bonus": 4,
+            "damage": "1d6+2",
+            "damage_type": "piercing",
+            "range": "80/320"
+          }
+        ],
+        "special_abilities": [
+          {
+            "name": "Nimble Escape",
+            "description": "Can disengage or hide as a bonus action"
+          }
+        ],
+        "behavior": "Skittish observer that probes and repositions frequently.",
+        "tactics": "Prefers ranged attacks and retreating behind cover.",
+        "xp_value": 25,
+        "treasure": "1d6 silver pieces, occasional trinket",
+        "description": "A lean goblin lookout with sharp eyes and a shortbow always ready."
+      },
+      "goblin_fighter": {
+        "id": "goblin_fighter",
+        "name": "Goblin Fighter",
+        "type": "humanoid",
+        "size": "small",
+        "hp": 7,
+        "ac": 13,
+        "speed": "30ft",
+        "abilities": {
+          "str": 8,
+          "dex": 14,
+          "con": 10,
+          "int": 10,
+          "wis": 8,
+          "cha": 8
+        },
+        "attacks": [
+          {
+            "name": "Scimitar",
+            "bonus": 4,
+            "damage": "1d6+2",
+            "damage_type": "slashing",
+            "range": "melee"
+          },
+          {
+            "name": "Shortbow",
+            "bonus": 4,
+            "damage": "1d6+2",
+            "damage_type": "piercing",
+            "range": "80/320"
+          }
+        ],
+        "special_abilities": [
+          {
+            "name": "Nimble Escape",
+            "description": "Can disengage or hide as a bonus action"
+          }
+        ],
+        "behavior": "Disciplined goblin combatant that commits to a fight unless morale breaks.",
+        "tactics": "Balances melee and ranged pressure based on distance.",
+        "xp_value": 25,
+        "treasure": "1d6 silver pieces, occasional trinket",
+        "description": "A sturdy goblin skirmisher trained to fight in organized pairs."
+      },
       
       "zombie": {
+        "id": "zombie",
         "name": "Zombie",
         "type": "undead",
         "size": "medium",
@@ -88,6 +222,7 @@
       },
       
       "skeleton_warrior": {
+        "id": "skeleton_warrior",
         "name": "Skeleton Warrior",
         "type": "undead",
         "size": "medium",
@@ -129,6 +264,7 @@
       },
       
       "tomb_guardian": {
+        "id": "tomb_guardian",
         "name": "Tomb Guardian",
         "type": "undead",
         "size": "medium",
@@ -171,6 +307,7 @@
       },
       
       "giant_rat": {
+        "id": "giant_rat",
         "name": "Giant Rat",
         "type": "beast",
         "size": "small",
@@ -213,6 +350,7 @@
       },
       
       "shadow_wraith": {
+        "id": "shadow_wraith",
         "name": "Shadow Wraith",
         "type": "undead",
         "size": "medium",
@@ -257,6 +395,7 @@
       },
       
       "training_dummy": {
+        "id": "training_dummy",
         "name": "Training Dummy",
         "type": "construct",
         "size": "medium",

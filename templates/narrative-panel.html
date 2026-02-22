@@ -1,0 +1,58 @@
+<!-- Narrative Panel Template (Center Column) -->
+<div class="narrative-panel notched">
+  <!-- Header with dungeon/adventure title -->
+  <div class="narrative-header half-top-notched">
+    <div class="half-top-notched">
+      <h1 id="dungeonTitle">Loading...</h1>
+    </div>
+  </div>
+    <!-- Scrollable narrative content area -->
+    <div class="narrative-scroll" id="narrativeScroll">
+      <!-- Narrative entries will be dynamically added here -->
+    </div>
+  <!-- Input Section (fixed to bottom) -->
+  <div class="input-section half-bottom-notched">
+    <div class="half-bottom-notched">
+      <!-- Dice Rolling Section -->
+      <div class="dice-section" id="diceSection">
+        <span class="dice-label" id="rollPrompt">Roll requested:</span>
+        <button
+          class="dice-button secondary-button"
+          onclick="rollDice()"
+          id="rollBtn"
+        >
+          Roll d20
+        </button>
+        <span class="dice-label">or enter result:</span>
+        <input
+          type="number"
+          class="dice-input"
+          id="diceInput"
+          placeholder="1-20"
+          min="1"
+          max="20"
+        />
+        <button
+          class="dice-button secondary-button"
+          onclick="submitDiceRoll()"
+          id="submitRollBtn"
+        >
+          Submit
+        </button>
+      </div>
+      <!-- Action Prompt and Input -->
+      <div class="action-prompt">What do you do?</div>
+
+      <div class="input-wrapper">
+        <input
+          type="text"
+          id="playerInput"
+          placeholder="Describe your action... (press Enter)"
+          onkeypress="handleKeyPress(event)"
+          onkeydown="handleInputKeyDown(event)"
+          disabled
+        />
+      </div>
+    </div>
+  </div>
+</div>

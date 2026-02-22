@@ -4,901 +4,64 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Dungeon Crawler - v2 Testing Build</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Crimson Text', 'Georgia', serif;
-            background: linear-gradient(to bottom, #1a1410 0%, #2d2416 100%);
-            color: #e8dcc4;
-            padding: 20px;
-            min-height: 100vh;
-        }
-
-        .app-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            gap: 20px;
-            transition: all 0.3s ease;
-            padding-left: 280px;
-        }
-
-        /* Character Panel - Fixed Full Height */
-        .character-panel {
-            width: 260px;
-            background: rgba(25, 20, 15, 0.9);
-            border: 2px solid #5a4a3a;
-            border-radius: 8px;
-            overflow-y: auto;
-            overflow-x: hidden;
-            flex-shrink: 0;
-            position: fixed;
-            left: 20px;
-            top: 20px;
-            bottom: 20px;
-            transition: all 0.3s ease;
-        }
-
-        .character-panel::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .character-panel::-webkit-scrollbar-track {
-            background: #1a1410;
-        }
-
-        .character-panel::-webkit-scrollbar-thumb {
-            background: #5a4a3a;
-            border-radius: 4px;
-        }
-
-        .character-header {
-            background: linear-gradient(to bottom, #3d2f1f, #2a1f15);
-            padding: 12px;
-            border-bottom: 2px solid #5a4a3a;
-            text-align: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-
-        .character-header.in-combat {
-            background: linear-gradient(to bottom, #4a1a1a, #2a0f0f);
-            border: 2px solid #c03030;
-            border-bottom-color: #c03030;
-            box-shadow: 0 0 10px rgba(192, 48, 48, 0.3);
-        }
-
-        .character-header.in-combat .character-name {
-            color: #ff6b6b;
-        }
-
-        .character-portrait {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: 2px solid #d4af37;
-            background: linear-gradient(135deg, #5a4a3a, #3a2a1a);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5em;
-            color: #d4af37;
-            margin: 0 auto 8px auto;
-        }
-
-        .character-name {
-            font-size: 1.1em;
-            color: #d4af37;
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-
-        .character-class {
-            color: #b8a888;
-            font-size: 0.85em;
-        }
-
-        .quick-stats {
-            padding: 12px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            border-bottom: 1px solid #5a4a3a;
-        }
-
-        .stat-box {
-            background: rgba(61, 47, 31, 0.4);
-            border: 1px solid #5a4a3a;
-            border-radius: 4px;
-            padding: 8px 6px;
-            text-align: center;
-        }
-
-        .stat-label {
-            font-size: 0.7em;
-            color: #8a7a6a;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 3px;
-        }
-
-        .stat-value {
-            font-size: 1.2em;
-            color: #e8dcc4;
-            font-weight: bold;
-        }
-
-        .stat-value.hp {
-            color: #c85050;
-        }
-
-        .stat-value.ac {
-            color: #7a9aba;
-        }
-
-        .status-line {
-            padding: 6px 12px;
-            border-bottom: 1px solid #5a4a3a;
-            font-size: 0.8em;
-            color: #c85050;
-            min-height: 22px;
-        }
-        .status-line:empty {
-            display: none;
-        }
-        .conditions {
-            padding: 8px 12px;
-            border-bottom: 1px solid #5a4a3a;
-            min-height: 35px;
-        }
-
-        .conditions-empty {
-            font-size: 0.8em;
-            color: #8a7a6a;
-        }
-
-        .condition-tag {
-            display: inline-block;
-            background: rgba(200, 80, 80, 0.3);
-            border: 1px solid #c85050;
-            padding: 4px 8px;
-            border-radius: 8px;
-            font-size: 0.7em;
-            margin-right: 6px;
-            margin-bottom: 6px;
-            max-width: 180px;
-            cursor: default;
-        }
-
-        .condition-tag .condition-name {
-            font-weight: bold;
-            display: block;
-        }
-
-        .condition-tag .condition-effect {
-            font-size: 0.95em;
-            color: #c8b898;
-            display: block;
-            margin-top: 2px;
-        }
-
-        .condition-tag.buff {
-            background: rgba(80, 150, 80, 0.3);
-            border-color: #509650;
-        }
-
-        .xp-progress {
-            padding: 10px 12px;
-            border-bottom: 1px solid #5a4a3a;
-        }
-
-        .xp-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.7em;
-            color: #8a7a6a;
-            margin-bottom: 4px;
-        }
-
-        .xp-bar-container {
-            width: 100%;
-            height: 8px;
-            background: rgba(61, 47, 31, 0.5);
-            border: 1px solid #5a4a3a;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .xp-bar-fill {
-            height: 100%;
-            background: linear-gradient(to right, #d4af37, #f4cf57);
-            border-radius: 3px;
-            transition: width 0.5s ease;
-            box-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
-        }
-
-        .section-header {
-            color: #d4af37;
-            font-size: 0.85em;
-            padding: 10px 12px 6px 12px;
-            border-bottom: 1px solid #5a4a3a;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            background: rgba(61, 47, 31, 0.2);
-        }
-
-        .ability-scores {
-            padding: 10px 12px;
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            border-bottom: 1px solid #5a4a3a;
-        }
-
-        .ability-score {
-            background: rgba(61, 47, 31, 0.3);
-            border: 1px solid #5a4a3a;
-            border-radius: 4px;
-            padding: 8px 6px;
-            text-align: center;
-        }
-
-        .ability-name {
-            font-size: 0.7em;
-            color: #8a7a6a;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 4px;
-        }
-
-        .ability-value {
-            font-size: 1.4em;
-            color: #e8dcc4;
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-
-        .ability-modifier {
-            font-size: 0.9em;
-            color: #d4af37;
-        }
-
-        .skills-list {
-            padding: 10px 12px;
-            border-bottom: 1px solid #5a4a3a;
-        }
-
-        .skill-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 4px 6px;
-            background: rgba(61, 47, 31, 0.2);
-            border-radius: 3px;
-            margin-bottom: 4px;
-            font-size: 0.85em;
-        }
-
-        .skill-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .skill-name {
-            color: #b8a888;
-        }
-
-        .skill-modifier {
-            color: #d4af37;
-            font-weight: bold;
-        }
-
-        .equipment-section, .inventory-section {
-            padding: 10px 12px;
-            border-bottom: 1px solid #5a4a3a;
-        }
-
-        .equipment-item, .inventory-item {
-            background: rgba(61, 47, 31, 0.3);
-            border: 1px solid #5a4a3a;
-            border-radius: 4px;
-            padding: 8px;
-            margin-bottom: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-size: 0.85em;
-        }
-
-        .equipment-item:hover, .inventory-item:hover {
-            background: rgba(61, 47, 31, 0.5);
-            border-color: #8b7355;
-        }
-
-        .equipment-name, .item-name {
-            color: #e8dcc4;
-            font-weight: bold;
-            margin-bottom: 3px;
-        }
-
-        .equipment-stats {
-            font-size: 0.75em;
-            color: #b8a888;
-        }
-
-        .inventory-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 8px;
-        }
-
-        .item-quantity {
-            background: rgba(90, 74, 58, 0.5);
-            padding: 1px 6px;
-            border-radius: 8px;
-            font-size: 0.85em;
-            color: #b8a888;
-        }
-
-        /* Narrative Panel */
-        .narrative-panel {
-            flex: 1;
-            background: rgba(25, 20, 15, 0.8);
-            border: 2px solid #5a4a3a;
-            border-radius: 8px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            position: fixed;
-            top: 20px;
-            bottom: 20px;
-            right: 20px;
-            left: 300px;
-        }
-
-        .narrative-header {
-            background: linear-gradient(to bottom, #3d2f1f, #2a1f15);
-            padding: 15px 25px;
-            border-bottom: 2px solid #5a4a3a;
-            flex-shrink: 0;
-        }
-
-        .narrative-header h1 {
-            font-size: 1.6em;
-            color: #d4af37;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-            font-weight: 400;
-            letter-spacing: 2px;
-        }
-
-        .narrative-scroll {
-            flex: 1;
-            overflow-y: auto;
-            padding: 25px;
-            scroll-behavior: smooth;
-        }
-
-        .narrative-scroll::-webkit-scrollbar {
-            width: 10px;
-        }
-
-        .narrative-scroll::-webkit-scrollbar-track {
-            background: #1a1410;
-        }
-
-        .narrative-scroll::-webkit-scrollbar-thumb {
-            background: #5a4a3a;
-            border-radius: 5px;
-        }
-
-        .narrative-entry {
-            margin-bottom: 20px;
-            animation: fadeIn 0.5s ease-in;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .gm-narration {
-            font-size: 1.05em;
-            color: #e8dcc4;
-            padding: 14px;
-            background: rgba(61, 47, 31, 0.3);
-            border-left: 3px solid #8b7355;
-            border-radius: 4px;
-            line-height: 1.7;
-        }
-
-        .gm-narration::first-letter {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #d4af37;
-        }
-
-        .player-action {
-            color: #a8c8e8;
-            font-style: italic;
-            padding: 10px 14px;
-            background: rgba(40, 60, 80, 0.2);
-            border-left: 3px solid #5a7a9a;
-            border-radius: 4px;
-        }
-
-        .player-action::before {
-            content: "> ";
-            color: #7a9aba;
-            font-style: normal;
-        }
-
-        .system-message {
-            color: #b8a888;
-            font-size: 0.9em;
-            padding: 6px 14px;
-        }
-
-        .parse-hint {
-            color: #8a7a5a;
-            font-size: 0.8em;
-            font-style: italic;
-            background: rgba(90, 74, 58, 0.15);
-            border-left: 3px solid #6a5a4a;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-        }
-
-        .loading-indicator {
-            color: #8a7a6a;
-            font-style: italic;
-            padding: 10px 14px;
-        }
-
-        .loading-indicator::after {
-            content: '...';
-            animation: ellipsis 1.5s infinite;
-        }
-
-        @keyframes ellipsis {
-            0% { content: '.'; }
-            33% { content: '..'; }
-            66% { content: '...'; }
-        }
-
-        /* Input Section */
-        .input-section {
-            padding: 15px 25px;
-            background: linear-gradient(to top, #3d2f1f, #2a1f15);
-            border-top: 2px solid #5a4a3a;
-            flex-shrink: 0;
-        }
-
-        .action-prompt {
-            color: #b8a888;
-            font-size: 0.85em;
-            margin-bottom: 8px;
-        }
-
-        .input-wrapper {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        input[type="text"], input[type="number"] {
-            padding: 10px 14px;
-            background: #1a1410;
-            border: 2px solid #5a4a3a;
-            border-radius: 4px;
-            color: #e8dcc4;
-            font-family: 'Crimson Text', 'Georgia', serif;
-            font-size: 1em;
-        }
-
-        input[type="text"] {
-            flex: 1;
-        }
-
-        input[type="text"]:focus, input[type="number"]:focus {
-            outline: none;
-            border-color: #8b7355;
-            box-shadow: 0 0 10px rgba(139, 115, 85, 0.3);
-        }
-
-        input:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        button {
-            padding: 10px 20px;
-            background: linear-gradient(to bottom, #5a4a3a, #4a3a2a);
-            border: 2px solid #6a5a4a;
-            border-radius: 4px;
-            color: #e8dcc4;
-            font-family: 'Crimson Text', 'Georgia', serif;
-            font-size: 0.95em;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        button:hover:not(:disabled) {
-            background: linear-gradient(to bottom, #6a5a4a, #5a4a3a);
-            border-color: #8b7355;
-            box-shadow: 0 0 15px rgba(139, 115, 85, 0.4);
-        }
-
-        button:active:not(:disabled) {
-            transform: translateY(1px);
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .secondary-button {
-            padding: 6px 12px;
-            font-size: 0.85em;
-            background: rgba(90, 74, 58, 0.3);
-            border: 1px solid #5a4a3a;
-        }
-
-        .dice-section {
-            display: none;
-            gap: 8px;
-            align-items: center;
-            padding: 10px 0;
-            margin-bottom: 8px;
-            border: 2px solid #d4af37;
-            border-radius: 4px;
-            background: rgba(212, 175, 55, 0.1);
-            padding: 12px;
-            flex-wrap: wrap;
-        }
-
-        .dice-section.active {
-            display: flex;
-        }
-
-        .dice-label {
-            color: #d4af37;
-            font-size: 0.85em;
-            font-weight: bold;
-        }
-
-        .dice-input {
-            width: 56px;
-            min-width: 56px;
-            padding: 5px 8px;
-            text-align: center;
-        }
-        /* Remove number input spinners so the field isn't cramped */
-        .dice-input::-webkit-outer-spin-button,
-        .dice-input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .dice-input[type="number"] {
-            -moz-appearance: textfield;
-            appearance: textfield;
-        }
-
-        .dice-button {
-            padding: 6px 12px;
-            font-size: 0.8em;
-        }
-
-        .error-message {
-            background: rgba(200, 80, 80, 0.2);
-            border: 1px solid #c85050;
-            color: #e8a8a8;
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 12px;
-        }
-
-        /* Debug Panel */
-        #debugPanel {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(10, 10, 10, 0.95);
-            border: 2px solid #d4af37;
-            border-radius: 8px;
-            padding: 15px;
-            z-index: 1000;
-            min-width: 250px;
-            max-height: 80vh;
-            overflow-y: auto;
-            display: none;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
-        }
-
-        #debugPanel h3 {
-            color: #d4af37;
-            margin-bottom: 10px;
-            font-size: 1em;
-            border-bottom: 1px solid #5a4a3a;
-            padding-bottom: 5px;
-        }
-
-        .debug-section {
-            margin-bottom: 15px;
-        }
-
-        .debug-section label {
-            display: block;
-            color: #b8a888;
-            font-size: 0.8em;
-            margin-bottom: 3px;
-        }
-
-        .debug-controls {
-            display: flex;
-            gap: 5px;
-            flex-wrap: wrap;
-            margin-bottom: 10px;
-        }
-
-        .debug-button {
-            padding: 5px 10px;
-            font-size: 0.75em;
-            background: rgba(90, 74, 58, 0.5);
-            border: 1px solid #5a4a3a;
-            color: #e8dcc4;
-            cursor: pointer;
-            border-radius: 3px;
-        }
-
-        .debug-button:hover {
-            background: rgba(90, 74, 58, 0.8);
-            border-color: #8b7355;
-        }
-
-        .debug-info {
-            font-size: 0.75em;
-            color: #8a7a6a;
-            font-family: 'Courier New', monospace;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 8px;
-            border-radius: 3px;
-            margin-top: 5px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .debug-config-input {
-            width: 4.5em;
-            padding: 4px 6px;
-            font-size: 0.9em;
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid #5a4a3a;
-            border-radius: 3px;
-            color: #e8dcc4;
-        }
-        .debug-config-input:focus {
-            outline: none;
-            border-color: #8b7355;
-        }
-        .debug-config-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 6px;
-        }
-        .debug-config-row label {
-            margin-bottom: 0;
-            min-width: 10em;
-        }
-
-        #loadingOverlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(26, 20, 16, 0.95);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        #loadingOverlay h2 {
-            color: #d4af37;
-            font-size: 2em;
-        }
-
-        #loadingOverlay p {
-            color: #b8a888;
-            font-size: 1.2em;
-        }
-
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #5a4a3a;
-            border-top-color: #d4af37;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-    </style>
+    <link rel="stylesheet" href="./styles/main.css">
+    <script src="https://kit.fontawesome.com/f4b50dbafe.js" crossorigin="anonymous"></script>
 </head>
 <body>
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay">
-        <h2>Loading Game Data...</h2>
-        <div class="spinner"></div>
-        <p id="loadingStatus">Initializing...</p>
-    </div>
+    <!-- Template placeholders - populated by template loader -->
+    <div id="template-loading-overlay"></div>
+    <div id="template-debug-panel"></div>
+    <div class="app-container" id="app-container"></div>
 
-    <!-- Debug Panel (Ctrl+Shift+D to toggle) -->
-    <div id="debugPanel">
-        <h3>Debug Panel</h3>
+    <script>
+        // ============================================
+        // TEMPLATE LOADER
+        // ============================================
+        
+        const TEMPLATES = {
+            'loading-overlay': './templates/loading-overlay.html',
+            'debug-panel': './templates/debug-panel.html',
+            'character-panel': './templates/character-panel.html',
+            'narrative-panel': './templates/narrative-panel.html',
+            'encounter-panel': './templates/encounter-panel.html'
+        };
 
-        <div class="debug-section">
-            <label>API / Usage (credit-saving):</label>
-            <div class="debug-config-row">
-                <label for="configMaxTokens">Max response tokens</label>
-                <input type="number" id="configMaxTokens" class="debug-config-input" min="500" max="8000" step="100" title="Lower = cheaper replies">
-            </div>
-            <div class="debug-config-row">
-                <label for="configHistoryTurns">History turns</label>
-                <input type="number" id="configHistoryTurns" class="debug-config-input" min="2" max="50" title="Conversation turns sent each request. Lower = cheaper">
-            </div>
-        </div>
+        async function loadTemplate(name) {
+            const response = await fetch(TEMPLATES[name]);
+            if (!response.ok) throw new Error(`Failed to load template: ${name}`);
+            return await response.text();
+        }
 
-        <div class="debug-section">
-            <label>HP Controls:</label>
-            <div class="debug-controls">
-                <button class="debug-button" onclick="TestUtils.modifyHP(-10)">-10 HP</button>
-                <button class="debug-button" onclick="TestUtils.modifyHP(-5)">-5 HP</button>
-                <button class="debug-button" onclick="TestUtils.modifyHP(5)">+5 HP</button>
-                <button class="debug-button" onclick="TestUtils.modifyHP(10)">+10 HP</button>
-                <button class="debug-button" onclick="TestUtils.fullHeal()">Full Heal</button>
-            </div>
-        </div>
+        async function loadAllTemplates() {
+            try {
+                const [loadingOverlay, debugPanel, characterPanel, narrativePanel, encounterPanel] = await Promise.all([
+                    loadTemplate('loading-overlay'),
+                    loadTemplate('debug-panel'),
+                    loadTemplate('character-panel'),
+                    loadTemplate('narrative-panel'),
+                    loadTemplate('encounter-panel')
+                ]);
 
-        <div class="debug-section">
-            <label>XP Controls:</label>
-            <div class="debug-controls">
-                <button class="debug-button" onclick="TestUtils.addXP(25)">+25 XP</button>
-                <button class="debug-button" onclick="TestUtils.addXP(50)">+50 XP</button>
-                <button class="debug-button" onclick="TestUtils.addXP(100)">+100 XP</button>
-            </div>
-        </div>
-
-        <div class="debug-section">
-            <label>Pack:</label>
-            <div class="debug-controls">
-                <button class="debug-button" onclick="TestUtils.addPotion()">+Potion</button>
-                <button class="debug-button" onclick="TestUtils.addGold(50)">+50 Gold</button>
-            </div>
-        </div>
-
-        <div class="debug-section">
-            <label>Navigation:</label>
-            <div class="debug-controls">
-                <button class="debug-button" onclick="TestUtils.teleportToRoom('entry_hall')">Entry</button>
-                <button class="debug-button" onclick="TestUtils.teleportToRoom('training_room')">Training</button>
-                <button class="debug-button" onclick="TestUtils.teleportToRoom('challenge_chamber')">Challenge</button>
-                <button class="debug-button" onclick="TestUtils.teleportToRoom('boss_arena')">Boss</button>
-            </div>
-        </div>
-
-        <div class="debug-section">
-            <label>State:</label>
-            <div class="debug-controls">
-                <button class="debug-button" onclick="TestUtils.logState()">Log State</button>
-                <button class="debug-button" onclick="TestUtils.clearHistory()">Clear History</button>
-            </div>
-        </div>
-
-        <div class="debug-section">
-            <label>Parse Log:</label>
-            <div class="debug-info" id="debugParseLog">No parsing activity yet...</div>
-        </div>
-    </div>
-
-    <div class="app-container">
-        <!-- Character Panel -->
-        <div class="character-panel" id="characterPanel">
-            <div class="character-header" id="characterHeader">
-                <div class="character-portrait">W</div>
-                <div class="character-name" id="charName">Loading...</div>
-                <div class="character-class" id="charClass">...</div>
-            </div>
-
-            <div class="quick-stats">
-                <div class="stat-box">
-                    <div class="stat-label">HP</div>
-                    <div class="stat-value hp" id="hpDisplay">--/--</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">AC</div>
-                    <div class="stat-value ac" id="acDisplay">--</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">Level</div>
-                    <div class="stat-value" id="levelDisplay">--</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-label">XP</div>
-                    <div class="stat-value" id="xpDisplay">--</div>
-                </div>
-            </div>
-
-            <div class="conditions" id="conditionsDisplay"></div>
-
-            <div class="xp-progress">
-                <div class="xp-label">
-                    <span>XP Progress</span>
-                    <span id="xpProgressText">-- / --</span>
-                </div>
-                <div class="xp-bar-container">
-                    <div class="xp-bar-fill" id="xpBarFill" style="width: 0%;"></div>
-                </div>
-            </div>
-
-            <div class="section-header">Abilities</div>
-            <div class="ability-scores" id="abilityScores"></div>
-
-            <div class="section-header">Skills</div>
-            <div class="skills-list" id="skillsList"></div>
-
-            <div class="section-header">Equipped</div>
-            <div class="equipment-section" id="equippedList"></div>
-
-            <div class="section-header">Pack</div>
-            <div class="inventory-section" id="packList"></div>
-        </div>
-
-        <!-- Narrative Panel -->
-        <div class="narrative-panel">
-            <div class="narrative-header">
-                <h1 id="dungeonTitle">Loading...</h1>
-            </div>
-
-            <div class="narrative-scroll" id="narrativeScroll">
-                <!-- Narrative entries will be added here -->
-            </div>
-
-            <div class="input-section">
-                <!-- Dice Rolling Section -->
-                <div class="dice-section" id="diceSection">
-                    <span class="dice-label" id="rollPrompt">Roll requested:</span>
-                    <button class="dice-button secondary-button" onclick="rollDice()" id="rollBtn">Roll d20</button>
-                    <span class="dice-label">or enter result:</span>
-                    <input type="number" class="dice-input" id="diceInput" placeholder="1-20" min="1" max="20">
-                    <button class="dice-button secondary-button" onclick="submitDiceRoll()" id="submitRollBtn">Submit</button>
-                </div>
-
-                <div class="action-prompt">What do you do?</div>
+                document.getElementById('template-loading-overlay').outerHTML = loadingOverlay;
+                document.getElementById('template-debug-panel').outerHTML = debugPanel;
                 
-                <div class="input-wrapper">
-                    <input type="text" id="playerInput" placeholder="Describe your action... (press Enter)" onkeypress="handleKeyPress(event)" disabled>
-                </div>
-            </div>
-        </div>
-    </div>
+                const appContainer = document.getElementById('app-container');
+                appContainer.innerHTML = characterPanel + narrativePanel + encounterPanel;
+
+                return true;
+            } catch (error) {
+                console.error('Template loading failed:', error);
+                document.body.innerHTML = `
+                    <div style="color: #e8dcc4; background: #1a1410; padding: 40px; text-align: center; min-height: 100vh;">
+                        <h2 style="color: #c85050;">Template Loading Error</h2>
+                        <p style="margin-top: 20px;">Failed to load UI templates. Please ensure template files exist in ./templates/</p>
+                        <p style="margin-top: 10px; color: #8a7a6a;">${error.message}</p>
+                    </div>
+                `;
+                return false;
+            }
+        }
+    </script>
 
     <script>
         // ============================================
@@ -921,6 +84,16 @@
             /** Conversation turns sent with each request. Lower = less input cost. Easily configurable via Debug Panel → API / Usage. */
             MAX_HISTORY_TURNS: 10
         };
+
+        /** Condition id (lowercase) -> Font Awesome icon classes. Add/change icons here for each condition from rules.combat.conditions. */
+        const CONDITION_ICONS = {
+            poisoned: 'fa-sharp-duotone fa-light fa-flask-round-poison',
+            blessed: 'fa-sharp-duotone fa-light fa-sparkles',
+            stunned: 'fa-sharp-duotone fa-light fa-ban',
+            wounded: 'fa-sharp-duotone fa-light fa-bandage',
+            exhausted: 'fa-sharp-duotone fa-light fa-face-weary'
+        };
+        const CONDITION_ICON_DEFAULT = 'fa-sharp-duotone fa-light fa-circle-question';
 
         /** Sync Debug Panel API/Usage inputs with CONFIG and update CONFIG when user changes them. */
         function initApiUsageConfig() {
@@ -1024,6 +197,14 @@
             /** After a d20 roll: natural value (1-20) and whether it was an attack roll (for crit damage / auto-miss). */
             lastD20Natural: null,
             lastRollWasAttack: false,
+            /** When combat ends, store currentRoom here so monster panel can linger until player takes another action. Cleared in submitAction(). */
+            lastCombatRoom: null,
+            /** Encounter panel history (newest encountered first). Entries persist and update status (active/defeated). */
+            encounterHistory: [],
+            /** Command history for Up/Down navigation (newest first; max 50). */
+            commandHistory: [],
+            commandHistoryIndex: -1,
+            commandHistoryDraft: '',
         };
 
         // ============================================
@@ -1113,6 +294,23 @@
             return (a.damage || '').trim() || null;
         }
 
+        /** Fallback: get monster damage formula from any room with an active encounter (in case currentRoom is wrong). */
+        function getMonsterDamageFormulaFromAnyRoom() {
+            const rooms = gameData.module && gameData.module.rooms;
+            if (!rooms) return null;
+            for (const room of Object.values(rooms)) {
+                if (!room || !room.encounters || room.encounters.length === 0) continue;
+                for (const enc of room.encounters) {
+                    if (getEncounterHP(enc).defeated) continue;
+                    const monster = resolveMonster(enc.monster_ref);
+                    if (!monster || !monster.attacks || monster.attacks.length === 0) continue;
+                    const d = (monster.attacks[0].damage || '').trim();
+                    if (d) return d;
+                }
+            }
+            return null;
+        }
+
         /** Roll a dice formula string (e.g. "1d6+2", "2d6+3") and return { total, breakdown }. */
         function rollDiceFormula(formula) {
             if (!formula || typeof formula !== 'string') return { total: 0, breakdown: '' };
@@ -1139,12 +337,187 @@
         function getEncounterHP(encounter) {
             const monster = resolveMonster(encounter.monster_ref);
             if (!monster) return { current: 0, max: 0, defeated: true };
+            const maxHP = (encounter.hp != null && encounter.hp > 0) ? Number(encounter.hp) : (monster.hp != null ? monster.hp : 0);
             const damage = gameState.damageToEncounters[encounter.id] || 0;
-            const current = Math.max(0, monster.hp - damage);
-            return { current, max: monster.hp, defeated: current <= 0 };
+            const current = Math.max(0, maxHP - damage);
+            return { current, max: maxHP, defeated: current <= 0 };
         }
 
-        /** Expected XP and gold for defeated encounters in the current room. Module on_death takes precedence; XP falls back to monster manual. Gold only validated when module specifies treasure (exact numbers). */
+        /** Best combat fallback room: prefer non-defeated encounters, else any room with encounters. */
+        function getFirstRoomIdWithEncounters() {
+            const rooms = gameData.module && gameData.module.rooms;
+            if (!rooms) return null;
+            const ids = Object.keys(rooms).sort();
+            for (const id of ids) {
+                const r = rooms[id];
+                if (!r || !r.encounters || r.encounters.length === 0) continue;
+                if (r.encounters.some(enc => !getEncounterHP(enc).defeated)) return id;
+            }
+            for (const id of ids) {
+                const r = rooms[id];
+                if (r && r.encounters && r.encounters.length > 0) return id;
+            }
+            return null;
+        }
+
+        /** When combat is starting, ensure currentRoom has encounters so the monster panel populates. Call after setting inCombat = true. */
+        function ensureCombatRoomHasEncounters() {
+            const rooms = gameData.module && gameData.module.rooms;
+            if (!rooms) return;
+            const cur = rooms[gameState.currentRoom];
+            const curHasActiveEncounters = cur && cur.encounters && cur.encounters.some(enc => !getEncounterHP(enc).defeated);
+            if (curHasActiveEncounters) return;
+            const fallback = getFirstRoomIdWithEncounters();
+            if (fallback) {
+                gameState.currentRoom = fallback;
+                debugLog('PARSE', `Combat started but current room had no active encounters; set currentRoom to ${fallback} for monster panel`);
+            }
+        }
+
+        /** Stable key for encounter-history entries. */
+        function getEncounterHistoryKey(roomId, encounter) {
+            return `${roomId || 'unknown'}::${encounter && encounter.id ? encounter.id : 'unknown'}`;
+        }
+
+        /** Add/update encounters for a room into panel history (new encounters appear at top). */
+        function recordEncounterHistoryForRoom(roomId) {
+            const rooms = gameData.module && gameData.module.rooms;
+            if (!rooms || !roomId) return;
+            const room = rooms[roomId];
+            if (!room || !room.encounters || room.encounters.length === 0) return;
+            for (const enc of room.encounters) {
+                const key = getEncounterHistoryKey(roomId, enc);
+                const monster = resolveMonster(enc.monster_ref);
+                const hpInfo = getEncounterHP(enc);
+                const ac = monster && (monster.ac != null ? monster.ac : (monster.AC != null ? monster.AC : '—'));
+                const attacks = monster && Array.isArray(monster.attacks)
+                    ? monster.attacks.map(a => ({
+                        name: a.name,
+                        bonus: a.bonus,
+                        damage: a.damage,
+                        damage_type: a.damage_type,
+                        range: a.range
+                    }))
+                    : [];
+                const idx = gameState.encounterHistory.findIndex(e => e.key === key);
+                const base = {
+                    key,
+                    roomId,
+                    roomName: room.name || roomId,
+                    encounterId: enc.id,
+                    displayName: enc.name || (monster && monster.name) || enc.monster_ref || 'Unknown',
+                    monsterRef: enc.monster_ref || null,
+                    acSnapshot: ac != null ? ac : '—',
+                    attacksSnapshot: attacks
+                };
+                if (idx === -1) {
+                    gameState.encounterHistory.unshift({
+                        ...base,
+                        lastKnownCurrentHp: hpInfo.current,
+                        lastKnownMaxHp: hpInfo.max,
+                        defeated: hpInfo.defeated
+                    });
+                } else {
+                    gameState.encounterHistory[idx] = {
+                        ...gameState.encounterHistory[idx],
+                        ...base,
+                        lastKnownCurrentHp: hpInfo.current,
+                        lastKnownMaxHp: hpInfo.max,
+                        defeated: hpInfo.defeated
+                    };
+                }
+            }
+        }
+
+        /** Populate the right-side monster panel from persistent encounter history (newest first). */
+        function updateMonsterPanel() {
+            const container = document.getElementById('monsterStatsPanel');
+            if (!container) return;
+            const rooms = gameData.module && gameData.module.rooms;
+            if (!rooms) {
+                container.className = 'monster-panel-empty';
+                container.innerHTML = 'No monsters in this room.';
+                return;
+            }
+            let roomIdToShow = gameState.currentRoom;
+            if (gameState.inCombat) {
+                roomIdToShow = gameState.currentRoom;
+            } else if (gameState.lastCombatRoom != null && gameState.lastCombatRoom !== '') {
+                roomIdToShow = gameState.lastCombatRoom;
+            }
+            // Keep history up to date from the currently relevant encounter room.
+            recordEncounterHistoryForRoom(roomIdToShow);
+
+            if (!gameState.encounterHistory || gameState.encounterHistory.length === 0) {
+                container.className = 'monster-panel-empty';
+                container.innerHTML = 'No monsters encountered yet.';
+                return;
+            }
+            let html = '';
+            for (const hist of gameState.encounterHistory) {
+                const room = rooms[hist.roomId];
+                const enc = room && room.encounters ? room.encounters.find(e => e.id === hist.encounterId) : null;
+                const monsterRef = (enc && enc.monster_ref) || hist.monsterRef;
+                const monster = monsterRef ? resolveMonster(monsterRef) : null;
+                const hpInfo = enc ? getEncounterHP(enc) : {
+                    current: hist.lastKnownCurrentHp != null ? hist.lastKnownCurrentHp : 0,
+                    max: hist.lastKnownMaxHp != null ? hist.lastKnownMaxHp : 0,
+                    defeated: !!hist.defeated
+                };
+                if (!monster) {
+                    const status = hpInfo.defeated ? 'Defeated' : 'Active';
+                    html += `<div class="monster-stat-block${hpInfo.defeated ? ' defeated' : ''}"><div class="monster-stat-name">${hist.displayName}</div><div class="monster-stat-line">Status: ${status}</div><div class="monster-stat-line">Unknown monster: ${monsterRef || '—'}</div></div>`;
+                    continue;
+                }
+                const ac = monster.ac != null ? monster.ac : (monster.AC != null ? monster.AC : (hist.acSnapshot != null ? hist.acSnapshot : '—'));
+                const defeatedClass = hpInfo.defeated ? ' defeated' : '';
+                html += `<div class="monster-stat-block${defeatedClass}">`;
+                html += `<div class="monster-stat-name">${hist.displayName}</div>`;
+                html += `<div class="monster-stat-line">Status: ${hpInfo.defeated ? 'Defeated' : 'Active'}</div>`;
+                if (hist.roomName) html += `<div class="monster-stat-line">Room: ${hist.roomName}</div>`;
+                html += `<div class="monster-stat-line">AC ${ac}</div>`;
+                html += `<div class="monster-stat-line">HP ${hpInfo.current}/${hpInfo.max}</div>`;
+                const attacks = (monster.attacks && monster.attacks.length > 0) ? monster.attacks : (hist.attacksSnapshot || []);
+                if (attacks.length > 0) {
+                    html += '<div class="monster-stat-attacks">';
+                    for (const a of attacks) {
+                        const range = (a.range || 'melee').toString().toLowerCase();
+                        const rangeStr = range === 'melee' ? 'melee' : `ranged ${a.range}`;
+                        html += `<div class="monster-stat-attack">${a.name}: +${a.bonus != null ? a.bonus : '0'} to hit, ${(a.damage || '—')} ${(a.damage_type || '')} (${rangeStr})</div>`;
+                    }
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+            container.className = '';
+            container.innerHTML = html || '<span class="monster-panel-empty">No active encounter.</span>';
+        }
+
+        /**
+         * Resolve encounter rewards with strict precedence:
+         * 1) Module encounter overrides (on_death first, then direct encounter fields)
+         * 2) Monster manual fallback
+         * Note: explicit module empty treasure ([]) means "no treasure" and MUST NOT fall back.
+         */
+        function resolveEncounterRewards(encounter, monster) {
+            const od = encounter && encounter.on_death ? encounter.on_death : null;
+            const moduleHasXP = (od && od.xp_award != null) || (encounter && encounter.xp_award != null);
+            const moduleXP = (od && od.xp_award != null) ? od.xp_award : (encounter && encounter.xp_award != null ? encounter.xp_award : null);
+            const xp = moduleHasXP ? moduleXP : (monster && monster.xp_value != null ? monster.xp_value : null);
+
+            const moduleHasTreasure = (od && Array.isArray(od.treasure)) || (encounter && Array.isArray(encounter.treasure));
+            const moduleTreasure = (od && Array.isArray(od.treasure)) ? od.treasure : (encounter && Array.isArray(encounter.treasure) ? encounter.treasure : null);
+            const treasure = moduleHasTreasure ? moduleTreasure : (monster && monster.treasure != null ? monster.treasure : null);
+
+            return {
+                xp,
+                treasure,
+                moduleHasXP,
+                moduleHasTreasure
+            };
+        }
+
+        /** Expected XP and gold for defeated encounters in the current room. Module overrides always win; monster manual is fallback only. */
         function getExpectedRewardsForCurrentRoom() {
             const room = gameData.module && gameData.module.rooms && gameData.module.rooms[gameState.currentRoom];
             if (!room || !room.encounters) return { xpValues: [], goldAmounts: [] };
@@ -1153,11 +526,12 @@
             for (const enc of room.encounters) {
                 if (!getEncounterHP(enc).defeated) continue;
                 const monster = resolveMonster(enc.monster_ref);
-                const od = enc.on_death;
-                const xp = (od && od.xp_award != null) ? od.xp_award : (monster && monster.xp_value != null ? monster.xp_value : null);
+                const rewards = resolveEncounterRewards(enc, monster);
+                const xp = rewards.xp;
                 if (xp != null) xpValues.push(xp);
-                if (od && od.treasure && Array.isArray(od.treasure)) {
-                    for (const t of od.treasure) {
+                // Gold is validated from module treasure arrays only (exact quantities).
+                if (rewards.moduleHasTreasure && Array.isArray(rewards.treasure)) {
+                    for (const t of rewards.treasure) {
                         if ((t.item || '').toLowerCase() === 'gold' && t.quantity != null) goldAmounts.push(Number(t.quantity));
                     }
                 }
@@ -1185,24 +559,26 @@
                 return `${a.name} +${a.bonus} for ${a.damage} ${a.damage_type} (${rangeStr})`;
             }).join(' | ');
             const attackStr = attackLines || 'no attacks';
-            let line = `${encounter.name} (${monster.name}): ${hpStr}, AC ${monster.ac} (use this exact AC for hit/miss). Attacks: ${attackStr}`;
-            // On death: module takes precedence; fall back to monster manual when module doesn't specify
-            const hasModuleTreasure = encounter.on_death && encounter.on_death.treasure && encounter.on_death.treasure.length > 0;
-            const hasModuleXP = encounter.on_death && encounter.on_death.xp_award != null;
-            const xp = hasModuleXP ? encounter.on_death.xp_award : (monster.xp_value != null ? monster.xp_value : null);
-            if (encounter.on_death || (monster.xp_value != null) || (monster.treasure != null)) {
+            let line = `${encounter.name} (${monster.name}, id ${encounter.id}): ${hpStr}, AC ${monster.ac} (use this exact AC for hit/miss). Attacks: ${attackStr}`;
+            // Rewards: module overrides always win; manual used only when module doesn't define the field.
+            const rewards = resolveEncounterRewards(encounter, monster);
+            const xp = rewards.xp;
+            if (encounter.on_death || (monster.xp_value != null) || (monster.treasure != null) || rewards.moduleHasXP || rewards.moduleHasTreasure) {
                 if (xp != null) line += ` | On death: award exactly ${xp} XP`;
-                if (hasModuleTreasure) {
-                    const treasureStr = encounter.on_death.treasure.map(t => t.item === 'gold' ? `${t.quantity} gp` : t.item).join(', ');
+                if (rewards.moduleHasTreasure) {
+                    const treasureList = Array.isArray(rewards.treasure) ? rewards.treasure : [];
+                    const treasureStr = treasureList.length > 0
+                        ? treasureList.map(t => t.item === 'gold' ? `${t.quantity} gp` : t.item).join(', ')
+                        : 'none';
                     line += ` | Treasure (module): ${treasureStr}`;
-                    const goldEntry = encounter.on_death.treasure.find(t => (t.item || '').toLowerCase() === 'gold');
+                    const goldEntry = treasureList.find(t => (t.item || '').toLowerCase() === 'gold');
                     const goldQty = goldEntry && goldEntry.quantity != null ? Number(goldEntry.quantity) : null;
                     const phrases = [];
                     if (xp != null) phrases.push(`say "You gain ${xp} XP"`);
                     if (goldQty != null) phrases.push(`say "You discover ${goldQty} gold" (or "${goldQty} gp")`);
                     if (phrases.length) line += ` | Use these exact numbers: ${phrases.join('; ')}`;
-                } else if (monster.treasure != null && String(monster.treasure).trim() !== '') {
-                    line += ` | Treasure (from monster manual): ${monster.treasure}`;
+                } else if (rewards.treasure != null && String(rewards.treasure).trim() !== '') {
+                    line += ` | Treasure (from monster manual): ${rewards.treasure}`;
                     if (xp != null) line += ` | Say "You gain ${xp} XP"`;
                 } else if (xp != null) {
                     line += ` | Say "You gain ${xp} XP"`;
@@ -1467,7 +843,7 @@
             if (startingRoom.features) {
                 for (const feature of startingRoom.features) {
                     if (feature.triggers && feature.triggers.includes('on_entry') && feature.text) {
-                        addNarration(`<i>${feature.text}</i>`);
+                        addNarration(feature.text);
                     }
                 }
             }
@@ -1528,8 +904,6 @@
             const ac = getEffectiveAC();
             document.getElementById('hpDisplay').textContent = `${char.hp}/${char.maxHp}`;
             document.getElementById('acDisplay').textContent = ac;
-            document.getElementById('levelDisplay').textContent = char.level;
-            document.getElementById('xpDisplay').textContent = char.xp.toLocaleString();
             
             // Update XP progress bar (use ruleset level progression when available)
             const xpLevels = getXPLevels();
@@ -1550,39 +924,72 @@
             const headerEl = document.getElementById('characterHeader');
             if (headerEl) headerEl.classList.toggle('in-combat', gameState.inCombat);
             
-            // Update conditions: show name and effect from rules; tooltip shows full effect detail
+            // Update conditions: icon-only with tooltip showing name and effect
             const conditionsHTML = char.conditions.length === 0
-                ? '<span class="conditions-empty">None</span>'
+                ? ''
                 : char.conditions.map(condition => {
-                    const id = condition.id || condition.name || condition;
+                    const id = (condition.id || condition.name || condition).toString().toLowerCase();
                     const info = getConditionInfo(id);
-                    const typeClass = info.type === 'buff' ? 'buff' : '';
-                    const title = info.effect_detail ? ` title="${info.effect_detail.replace(/"/g, '&quot;')}"` : '';
-                    return `<div class="condition-tag ${typeClass}"${title}><span class="condition-name">${info.name}</span><br><span class="condition-effect">${info.effect_summary || ''}</span></div>`;
+                    const iconClass = CONDITION_ICONS[id] || CONDITION_ICON_DEFAULT;
+                    const tooltip = [info.name, info.effect_summary].filter(Boolean).join(': ');
+                    const title = tooltip ? ` title="${tooltip.replace(/"/g, '&quot;')}"` : '';
+                    const typeClass = info.type === 'buff' ? ' buff' : '';
+                    return `<span class="condition-icon${typeClass}"${title}><i class="${iconClass}"></i></span>`;
                 }).join('');
-            document.getElementById('conditionsDisplay').innerHTML = conditionsHTML;
+            const conditionsEl = document.getElementById('conditionsDisplay');
+            conditionsEl.innerHTML = conditionsHTML;
+            if (conditionsHTML && window.FontAwesome && window.FontAwesome.dom && typeof window.FontAwesome.dom.i2svg === 'function') {
+                window.FontAwesome.dom.i2svg({ node: conditionsEl });
+            }
             
             // Update Equipped: armor, weapons, and items in use (e.g. torch lit). (Future: different behavior when inventory/equipment items are clicked.)
             const equippedItems = [...char.equipment, ...(gameState.equippedInUse || [])];
-            const equippedHTML = equippedItems.map(item => `
-                <div class="equipment-item">
+            const equippedHTML = equippedItems.map(item => {
+                let typeClass = '';
+                let icon = '';
+                if (item.isArmor) {
+                    typeClass = 'armor';
+                    icon = '<i class="fa-sharp-duotone fa-solid fa-shield-halved"></i>';
+                } else if (item.isWeapon && item.weaponType === 'ranged') {
+                    typeClass = 'ranged';
+                    icon = '<i class="fa-sharp-duotone fa-solid fa-bow-arrow"></i>';
+                } else if (item.isWeapon && (item.weaponType === 'melee' || !item.weaponType)) {
+                    typeClass = 'melee';
+                    icon = '<i class="fa-sharp-duotone fa-solid fa-sword"></i>';
+                }
+                return `
+                <div class="equipment-item${typeClass ? ' ' + typeClass : ''}">
+                    ${icon}
                     <div class="equipment-name">${item.name}</div>
                     <div class="equipment-stats">${item.stats || ''}</div>
                 </div>
-            `).join('');
-            document.getElementById('equippedList').innerHTML = equippedHTML;
+            `;
+            }).join('');
+            const equippedEl = document.getElementById('equippedList');
+            equippedEl.innerHTML = equippedHTML;
+            if (window.FontAwesome && window.FontAwesome.dom && typeof window.FontAwesome.dom.i2svg === 'function') {
+                window.FontAwesome.dom.i2svg({ node: equippedEl });
+            }
             
-            // Update Pack: backpack items with quantities (show x0 when used)
-            const packHTML = char.inventory.map(item => {
+            // Update Pack: backpack items with quantities (show x0 when used). Gold always first.
+            const sortedInventory = [...char.inventory].sort((a, b) => (a.name === 'Gold' ? -1 : 0) - (b.name === 'Gold' ? -1 : 0));
+            const packHTML = sortedInventory.map(item => {
                 const qty = item.quantity;
                 const qtyStr = item.name === 'Gold' ? ` ${qty}` : `x${qty}`;
+                const goldClass = item.name === 'Gold' ? ' gold' : '';
+                const goldIcon = item.name === 'Gold' ? '<i class="fa-sharp-duotone fa-light fa-sack"></i>' : '';
                 return `
-                <div class="inventory-item">
-                    <span class="item-name">${item.name}</span>
+                <div class="inventory-item${goldClass}">
+                    <span class="item-name">${goldIcon} ${item.name}</span>
                     <span class="item-quantity">${qtyStr}</span>
                 </div>
             `}).join('');
-            document.getElementById('packList').innerHTML = packHTML;
+            const packEl = document.getElementById('packList');
+            packEl.innerHTML = packHTML;
+            if (window.FontAwesome && window.FontAwesome.dom && typeof window.FontAwesome.dom.i2svg === 'function') {
+                window.FontAwesome.dom.i2svg({ node: packEl });
+            }
+            updateMonsterPanel();
         }
 
         // ============================================
@@ -1596,6 +1003,7 @@
             
             if (gameState.character.hp === 0) {
                 gameState.inCombat = false;
+                gameState.lastCombatRoom = gameState.currentRoom;
                 addSystemMessage("You have died! Your adventure ends here.");
                 disableInput(true);
             }
@@ -2177,12 +1585,40 @@
         // ============================================
         
         function disableInput(disabled) {
-            document.getElementById('playerInput').disabled = disabled;
+            const input = document.getElementById('playerInput');
+            input.disabled = disabled;
+            if (!disabled) input.focus();
         }
 
         function handleKeyPress(event) {
             if (event.key === 'Enter') {
                 submitAction();
+            }
+        }
+
+        function handleInputKeyDown(event) {
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+            const history = gameState.commandHistory;
+            if (!history.length) return;
+            const input = document.getElementById('playerInput');
+            if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                if (gameState.commandHistoryIndex === -1) {
+                    gameState.commandHistoryDraft = input.value;
+                    gameState.commandHistoryIndex = 0;
+                } else if (gameState.commandHistoryIndex < history.length - 1) {
+                    gameState.commandHistoryIndex += 1;
+                }
+                input.value = history[gameState.commandHistoryIndex];
+            } else {
+                event.preventDefault();
+                if (gameState.commandHistoryIndex <= 0) {
+                    gameState.commandHistoryIndex = -1;
+                    input.value = gameState.commandHistoryDraft;
+                } else {
+                    gameState.commandHistoryIndex -= 1;
+                    input.value = history[gameState.commandHistoryIndex];
+                }
             }
         }
 
@@ -2192,6 +1628,7 @@
             
             if (!action || gameState.waitingForRoll) return;
             
+            gameState.lastCombatRoom = null; // clear lingering monster panel when player takes another action
             tryParseWeaponAway(action);
             tryParseWeaponSwitch(action);
             tryParseArmorState(action);
@@ -2201,6 +1638,12 @@
             
             addPlayerAction(action);
             input.value = '';
+            gameState.commandHistoryIndex = -1;
+            gameState.commandHistoryDraft = '';
+            if (gameState.commandHistory[0] !== action) {
+                gameState.commandHistory.unshift(action);
+                if (gameState.commandHistory.length > 50) gameState.commandHistory.pop();
+            }
             
             gameState.conversationHistory.push({
                 role: "user",
@@ -2434,8 +1877,14 @@ Use the EXACT attack bonus and damage from the block. If Active Encounters is em
 
 ## STATE TRACKING — SAY EXACTLY WHAT IS IN THE JSON
 **The app parses your narrative and applies the numbers you write.** Whatever you say is what the player sees and what gets added to their sheet. If you write "You discover 8 gold" the player receives 8 gold. So you **must** use the exact numbers from the Active Encounters block — do not invent or round. The narrative and the reward must match.
-- Damage (to the player): When a monster hits, write **[MONSTER_DAMAGE]** (e.g. "The goblin hits you for [MONSTER_DAMAGE] damage"). The app rolls the monster's damage dice and replaces the tag. Do not substitute your own number.
-- Healing: "You heal 6 HP"
+- Use explicit state tags (preferred; deterministic). These tags are hidden from the player:
+  - Player damage: **[DAMAGE_TO_PLAYER: 4]**
+  - Player healing: **[HEAL_PLAYER: 6]**
+  - Monster damage: **[DAMAGE_TO_MONSTER: encounter_id, 5]** (use encounter id from Active Encounters, e.g. goblin_morale_2)
+  - Monster defeated: **[MONSTER_DEFEATED: encounter_id]**
+  - Monster fled: **[MONSTER_FLED: encounter_id]** (for now this is tracked as defeated in panel/state)
+- Monster attack damage: keep using **[MONSTER_DAMAGE]** in narrative (e.g. "The goblin hits you for [MONSTER_DAMAGE] damage") and pair it with **[DAMAGE_TO_PLAYER: [MONSTER_DAMAGE]]** so the app can apply the same rolled number deterministically.
+- Healing narration should include the explicit tag too (e.g. "You heal 6 HP [HEAL_PLAYER: 6]").
 - **XP:** When narrating a defeat, say exactly the number from the block. If the block says "award exactly 25 XP" and "Say \"You gain 25 XP\"", write **"You gain 25 XP"** — not 20, not 30. The player will receive whatever number you write.
 - **Gold / treasure:** When the block says "Treasure (module): 10 gp" and "Say \"You discover 10 gold\"", write **"You discover 10 gold"** (or "10 gp") — not 8, not 12. Use the exact numbers and item names from the block so the player's inventory matches your words.
 - Pack item use: When the player uses a consumable or item from their Pack, say so explicitly (e.g. "You drink a healing potion", "You use the rope to climb", "You eat some rations"). For torch: when they light one from their pack, say "You pull out a torch and light it" — this updates Pack and shows the lit torch in Equipped. When they put it away, say "You put the torch back in your pack" or "You stow the torch" — this removes it from Equipped and adds 1 back to Pack. If they retrieve the rope later, say "You retrieve the rope".
@@ -2501,16 +1950,20 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             let scene = parseSceneDirectives(response);
             // Replace [MONSTER_DAMAGE] with a real dice roll so monster damage is always random (GM must not pick a number).
             if (/\[MONSTER_DAMAGE\]/i.test(scene.cleanText)) {
-                const formula = getMonsterDamageFormulaForCurrentRoom();
-                if (formula) {
-                    const result = rollDiceFormula(formula);
-                    scene = { cleanText: scene.cleanText.replace(/\[MONSTER_DAMAGE\]/gi, String(result.total)) };
-                    debugLog('PARSE', `Monster damage roll: ${result.breakdown}`);
-                } else {
-                    scene = { cleanText: scene.cleanText.replace(/\[MONSTER_DAMAGE\]/gi, '?') };
+                let formula = getMonsterDamageFormulaForCurrentRoom();
+                if (!formula) formula = getMonsterDamageFormulaFromAnyRoom();
+                if (!formula) {
+                    formula = '1d6';
+                    debugLog('PARSE', 'No monster damage formula found; using fallback 1d6');
                 }
+                const result = rollDiceFormula(formula);
+                scene = { cleanText: scene.cleanText.replace(/\[MONSTER_DAMAGE\]/gi, String(result.total)) };
+                debugLog('PARSE', `Monster damage roll: ${result.breakdown}`);
             }
-            const displayResponse = scene.cleanText.replace(/\[COMBAT:\s*(on|off|true|false|yes|no)\]/gi, '').trim();
+            const displayResponse = scene.cleanText
+                .replace(/\[COMBAT:\s*(on|off|true|false|yes|no)\]/gi, '')
+                .replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, '')
+                .trim();
             
             // Parse for state changes BEFORE displaying (use text with [MONSTER_DAMAGE] already replaced)
             parseStateChanges(scene.cleanText);
@@ -2521,9 +1974,11 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             
             if (match) {
                 const ability = match[1].trim();
-                if (ability.toLowerCase() === 'damage') {
+                const abilityLower = ability.toLowerCase();
+                if (abilityLower === 'damage' || abilityLower.includes('attack')) {
                     gameState.inCombat = true;
-                    if (!gameState.readiedWeaponName) {
+                    ensureCombatRoomHasEncounters();
+                    if (abilityLower === 'damage' && !gameState.readiedWeaponName) {
                         const sources = gameData.character && gameData.character.equipment
                             ? [...(gameData.character.equipment.wielded || []), ...(gameData.character.equipment.carried || [])]
                             : [];
@@ -2555,8 +2010,10 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 for (const enc of room.encounters) {
                     const monster = resolveMonster(enc.monster_ref);
                     if (!monster) continue;
-                    const names = [enc.name, monster.name].filter(Boolean);
+                    // Prefer encounter-specific names (avoid broad matching on generic monster names like "Goblin").
+                    const names = [enc.name].filter(Boolean);
                     const escapedNames = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+                    if (!escapedNames) continue;
                     const patterns = [
                         new RegExp(`(?:the\\s+)?(?:${escapedNames})\\s+takes\\s+(\\d+)\\s+(?:damage|HP)`, 'gi'),
                         new RegExp(`(?:hits?|strikes?|deals?)\\s+(?:the\\s+)?(?:${escapedNames})\\s+for\\s+(\\d+)\\s*(?:damage|HP)?`, 'gi'),
@@ -2584,6 +2041,15 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                             debugLog('PARSE', `Monster defeated (narrative): ${enc.name}`);
                         }
                     }
+                    const fleePattern = new RegExp(`(?:${escapedNames})\\s+(?:flees?|fled|runs?\\s+away|retreats?|escapes?|withdraws?)|(?:flees?|fled|runs?\\s+away|retreats?|escapes?|withdraws?)\\s+(?:the\\s+)?(?:${escapedNames})`, 'gi');
+                    if (fleePattern.test(text)) {
+                        const current = gameState.damageToEncounters[enc.id] || 0;
+                        if (current < monster.hp) {
+                            gameState.damageToEncounters[enc.id] = monster.hp;
+                            roomWithUpdate = roomId;
+                            debugLog('PARSE', `Monster fled (tracked as defeated): ${enc.name}`);
+                        }
+                    }
                 }
             }
             if (roomWithUpdate) {
@@ -2593,10 +2059,172 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                     const allDefeated = room.encounters.every(enc => getEncounterHP(enc).defeated);
                     if (allDefeated) {
                         gameState.inCombat = false;
+                        gameState.lastCombatRoom = roomWithUpdate;
                         debugLog('PARSE', 'Combat ended: all enemies defeated');
+                    } else {
+                        // Still in active combat in this room.
+                        gameState.inCombat = true;
                     }
                 }
             }
+        }
+
+        /** Normalize ids/names for robust tag target matching. */
+        function normalizeEntityToken(s) {
+            return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+        }
+
+        /** Find encounter by explicit tag token (encounter id/name/monster_ref/monster name). Prefers current room. */
+        function findEncounterForStateTag(targetToken) {
+            const rooms = gameData.module && gameData.module.rooms;
+            if (!rooms) return null;
+            const token = normalizeEntityToken(targetToken);
+            if (!token) return null;
+
+            function scanRoom(roomId) {
+                const room = rooms[roomId];
+                if (!room || !room.encounters) return null;
+                for (const enc of room.encounters) {
+                    const monster = resolveMonster(enc.monster_ref);
+                    const candidates = [
+                        enc.id,
+                        enc.name,
+                        enc.monster_ref,
+                        monster && monster.id,
+                        monster && monster.name
+                    ];
+                    if (candidates.some(c => normalizeEntityToken(c) === token)) {
+                        return { roomId, room, encounter: enc, monster };
+                    }
+                }
+                return null;
+            }
+
+            if (gameState.currentRoom) {
+                const cur = scanRoom(gameState.currentRoom);
+                if (cur) return cur;
+            }
+            for (const roomId of Object.keys(rooms)) {
+                if (roomId === gameState.currentRoom) continue;
+                const hit = scanRoom(roomId);
+                if (hit) return hit;
+            }
+            return null;
+        }
+
+        /**
+         * Parse explicit state tags (authoritative) and apply directly.
+         * Supported tags:
+         * - [DAMAGE_TO_PLAYER: 4]
+         * - [HEAL_PLAYER: 6]
+         * - [DAMAGE_TO_MONSTER: goblin_fighter, 5]
+         * - [MONSTER_DEFEATED: goblin_fighter]
+         * - [MONSTER_FLED: goblin_scout]
+         */
+        function parseExplicitStateTags(text) {
+            const out = {
+                text,
+                hasPlayerDamageTag: false,
+                hasPlayerHealTag: false,
+                hasMonsterDamageTag: false
+            };
+            if (!text) return out;
+
+            let roomWithUpdate = null;
+            let m;
+
+            const dmgPlayerRe = /\[DAMAGE_TO_PLAYER:\s*(\d+)\s*\]/gi;
+            while ((m = dmgPlayerRe.exec(text)) !== null) {
+                out.hasPlayerDamageTag = true;
+                const damage = parseInt(m[1], 10);
+                if (damage >= 1 && damage <= 999) {
+                    if (!gameState.combatStateFromTag) {
+                        gameState.inCombat = true;
+                        ensureCombatRoomHasEncounters();
+                    }
+                    modifyHP(-damage);
+                    debugLog('PARSE', `Tag damage TO PLAYER: ${damage}`);
+                }
+            }
+
+            const healPlayerRe = /\[HEAL_PLAYER:\s*(\d+)\s*\]/gi;
+            while ((m = healPlayerRe.exec(text)) !== null) {
+                out.hasPlayerHealTag = true;
+                const healing = parseInt(m[1], 10);
+                if (healing >= 1 && healing <= 999) {
+                    modifyHP(healing);
+                    debugLog('PARSE', `Tag healing TO PLAYER: ${healing}`);
+                }
+            }
+
+            const dmgMonsterRe = /\[DAMAGE_TO_MONSTER:\s*([^,\]]+)\s*,\s*(\d+)\s*\]/gi;
+            while ((m = dmgMonsterRe.exec(text)) !== null) {
+                out.hasMonsterDamageTag = true;
+                const target = m[1].trim();
+                const damage = parseInt(m[2], 10);
+                if (!(damage >= 1 && damage <= 999)) continue;
+                const found = findEncounterForStateTag(target);
+                if (!found) {
+                    debugLog('PARSE', `Tag damage to monster ignored (no target match): ${target}`);
+                    continue;
+                }
+                gameState.damageToEncounters[found.encounter.id] = (gameState.damageToEncounters[found.encounter.id] || 0) + damage;
+                gameState.inCombat = true;
+                roomWithUpdate = found.roomId;
+                debugLog('PARSE', `Tag damage TO MONSTER: ${found.encounter.name} +${damage}`);
+            }
+
+            const defeatedMonsterRe = /\[MONSTER_DEFEATED:\s*([^\]]+)\s*\]/gi;
+            while ((m = defeatedMonsterRe.exec(text)) !== null) {
+                out.hasMonsterDamageTag = true;
+                const target = m[1].trim();
+                const found = findEncounterForStateTag(target);
+                if (!found) {
+                    debugLog('PARSE', `Tag monster defeated ignored (no target match): ${target}`);
+                    continue;
+                }
+                const hp = getEncounterHP(found.encounter);
+                const currentDamage = gameState.damageToEncounters[found.encounter.id] || 0;
+                gameState.damageToEncounters[found.encounter.id] = Math.max(currentDamage, hp.max);
+                gameState.inCombat = true;
+                roomWithUpdate = found.roomId;
+                debugLog('PARSE', `Tag monster defeated: ${found.encounter.name} (set to 0/${hp.max})`);
+            }
+
+            const fledMonsterRe = /\[MONSTER_FLED:\s*([^\]]+)\s*\]/gi;
+            while ((m = fledMonsterRe.exec(text)) !== null) {
+                out.hasMonsterDamageTag = true;
+                const target = m[1].trim();
+                const found = findEncounterForStateTag(target);
+                if (!found) {
+                    debugLog('PARSE', `Tag monster fled ignored (no target match): ${target}`);
+                    continue;
+                }
+                const hp = getEncounterHP(found.encounter);
+                const currentDamage = gameState.damageToEncounters[found.encounter.id] || 0;
+                gameState.damageToEncounters[found.encounter.id] = Math.max(currentDamage, hp.max);
+                gameState.inCombat = true;
+                roomWithUpdate = found.roomId;
+                debugLog('PARSE', `Tag monster fled (tracked as defeated): ${found.encounter.name} (set to 0/${hp.max})`);
+            }
+
+            if (roomWithUpdate) {
+                gameState.currentRoom = roomWithUpdate;
+                // Do NOT call ensureCombatRoomHasEncounters() here: it would jump to another room with
+                // active encounters (e.g. morale_chamber) when this room just ended combat, making Scout/Fighter appear early.
+                const room = gameData.module && gameData.module.rooms && gameData.module.rooms[roomWithUpdate];
+                if (room && room.encounters && room.encounters.length > 0) {
+                    const allDefeated = room.encounters.every(enc => getEncounterHP(enc).defeated);
+                    if (allDefeated) {
+                        gameState.inCombat = false;
+                        gameState.lastCombatRoom = roomWithUpdate;
+                        debugLog('PARSE', 'Combat ended: all enemies defeated (explicit tag)');
+                    }
+                }
+            }
+
+            out.text = text.replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, ' ');
+            return out;
         }
         
         /** If narrative indicates the player entered a different room, update currentRoom so combat indicator etc. are correct. */
@@ -2604,16 +2232,24 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             const rooms = gameData.module && gameData.module.rooms;
             if (!rooms || !text) return;
             const t = text.toLowerCase();
+            const normalized = t.replace(/\bmoral chamber\b/g, 'morale chamber');
             const movementWord = /\b(?:enter|reach|arrive|step into|are now in|find yourself in|head (?:in)?to|go (?:in)?to)\b/.test(t);
             if (!movementWord) return;
             for (const [roomId, room] of Object.entries(rooms)) {
-                if (!room || !room.name) continue;
+                if (!room) continue;
                 if (roomId === gameState.currentRoom) continue;
-                const roomName = room.name.toLowerCase();
-                if (t.includes(roomName)) {
+                const roomName = (room.name || '').toLowerCase();
+                const roomIdPhrase = roomId.replace(/_/g, ' ').toLowerCase();
+                if (roomName && normalized.includes(roomName)) {
                     gameState.currentRoom = roomId;
                     updateCharacterDisplay();
                     debugLog('PARSE', `Room changed to: ${roomId} (${room.name})`);
+                    return;
+                }
+                if (roomIdPhrase && normalized.includes(roomIdPhrase)) {
+                    gameState.currentRoom = roomId;
+                    updateCharacterDisplay();
+                    debugLog('PARSE', `Room changed to: ${roomId} (id phrase "${roomIdPhrase}")`);
                     return;
                 }
             }
@@ -2627,10 +2263,12 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             if (onMatch) {
                 gameState.inCombat = true;
                 gameState.combatStateFromTag = true;
+                ensureCombatRoomHasEncounters();
                 updateCharacterDisplay();
                 debugLog('PARSE', 'Combat state: on (GM tag)');
             } else if (offMatch) {
                 gameState.inCombat = false;
+                gameState.lastCombatRoom = gameState.currentRoom;
                 gameState.combatStateFromTag = true;
                 updateCharacterDisplay();
                 debugLog('PARSE', 'Combat state: off (GM tag)');
@@ -2644,6 +2282,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             const t = text.toLowerCase();
             if (/\bcombat\s+(?:begins?|starts?)\b/.test(t) || /\b(?:the\s+)?(?:fight|battle)\s+(?:begins?|starts?|is\s+on)\b/.test(t) || /\b(?:you\s+are\s+)(?:in\s+)?combat\b/.test(t)) {
                 gameState.inCombat = true;
+                ensureCombatRoomHasEncounters();
                 updateCharacterDisplay();
                 debugLog('PARSE', 'Combat began (GM narrative fallback)');
             }
@@ -2660,6 +2299,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 /\b(?:i'll\s+)(?:run\s+away|retreat|flee|escape)\b/.test(t);
             if (gmNarrative || playerDeclares) {
                 gameState.inCombat = false;
+                gameState.lastCombatRoom = gameState.currentRoom;
                 updateCharacterDisplay();
                 debugLog('PARSE', 'Combat ended: retreat/flee');
             }
@@ -2760,44 +2400,43 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             tryParseCombatTag(plainText);   // GM tag takes precedence
             tryParseCombatBegins(plainText);
             tryParseRetreat(plainText);
-            tryParseCombatBegins(plainText);
             tryParseWeaponAway(plainText);
             tryParseWeaponSwitch(plainText);
             tryParseArmorState(plainText);
             tryParseConditions(plainText);
-            parseMonsterDamage(plainText);
+            const explicitState = parseExplicitStateTags(plainText);
+            plainText = explicitState.text.replace(/\s+/g, ' ').trim();
+            if (!explicitState.hasMonsterDamageTag) {
+                parseMonsterDamage(plainText); // fallback only when no explicit monster damage tags are present
+            }
             updateCharacterDisplay();
             
             // Parse HP changes - DAMAGE (only when the PLAYER receives damage, not when the player deals damage)
             // Many patterns to catch varied GM phrasings; stop at first match to avoid double-counting
             const damageToPlayerPatterns = [
-                /(?:you\s+)(?:take|taking|suffer|lose)\s+(\d+)\s+(?:points?\s+of\s+)?(?:damage|HP)/i,
-                /(?:take|taking|suffer|lose)\s+(\d+)\s+(?:points?\s+of\s+)?(?:damage|HP)/i,
-                /(?:you'?re?)\s+hit\s+for\s+(\d+)/i,
-                /hits?\s+you\s+for\s+(\d+)(?:\s+damage)?/i,
-                /(?:hits?|strikes?|deals?)\s+(?:you|your)\s+(?:for\s+)?(\d+)\s*(?:damage|HP)?/i,
-                /(?:hits?|strikes?)\s+for\s+(\d+)\s+(?:damage|HP)/i,
-                /deals?\s+(\d+)\s+(?:damage|HP)\s+(?:to\s+)?(?:you|your)/i,
-                /dealing\s+(\d+)\s+(?:damage|HP)\s+to\s+you/i,
-                /(\d+)\s+(?:damage|HP)\s+(?:to\s+you|against\s+you|upon\s+you)/i,
-                /(?:inflicts?|deals?)\s+(\d+)\s+(?:damage|HP)\s+(?:on|upon|to)\s+you/i,
-                /(?:struck|wounds?)\s+(?:you\s+)?for\s+(\d+)/i,
-                /(?:attack|blow|strike)\s+(?:hits?|strikes?)\s+(?:you\s+)?for\s+(\d+)/i,
-                /\b(\d+)\s+(?:damage|HP)\s+(?:to\s+you|—\s*you|,\s*you)/i,
-                // Fallback: "hit/strike/take/suffer" and "X damage" in same stretch (handles "The goblin hits. You take 5 damage.")
-                /(?:hits?|strikes?|taking?|suffer(?:ing)?|wounds?)[\s\S]{0,120}(\d+)\s+(?:damage|HP)\b/i
+                /(?:you|your character)\s+(?:take|taking|suffer|lose)\s+(\d+)\s+(?:points?\s+of\s+)?(?:damage|HP)\b/i,
+                /(?:you(?:\s+are|'re)?|your character(?:\s+is)?)\s+(?:hit|struck|wounded)\s+for\s+(\d+)\b/i,
+                /(?:hits?|strikes?|deals?|inflicts?|wounds?)\s+(?:you|your character)\s+(?:for\s+)?(\d+)\s*(?:damage|HP)?\b/i,
+                /deals?\s+(\d+)\s+(?:damage|HP)\s+(?:to|against|upon)\s+(?:you|your character)\b/i,
+                /dealing\s+(\d+)\s+(?:damage|HP)\s+(?:to|against|upon)\s+(?:you|your character)\b/i,
+                /(\d+)\s+(?:damage|HP)\s+(?:to|against|upon)\s+(?:you|your character)\b/i
             ];
             
-            for (const pattern of damageToPlayerPatterns) {
-                const match = plainText.match(pattern);
-                if (match) {
-                    const damage = parseInt(match[1], 10);
-                    if (damage >= 1 && damage <= 999) {
-                        debugLog('PARSE', `Detected damage TO PLAYER: ${damage}`);
-                        if (!gameState.combatStateFromTag) gameState.inCombat = true; // GM tag overrides
-                        modifyHP(-damage);
+            if (!explicitState.hasPlayerDamageTag) {
+                for (const pattern of damageToPlayerPatterns) {
+                    const match = plainText.match(pattern);
+                    if (match) {
+                        const damage = parseInt(match[1], 10);
+                        if (damage >= 1 && damage <= 999) {
+                            debugLog('PARSE', `Detected damage TO PLAYER: ${damage}`);
+                            if (!gameState.combatStateFromTag) {
+                                gameState.inCombat = true;
+                                ensureCombatRoomHasEncounters();
+                            }
+                            modifyHP(-damage);
+                        }
+                        break;
                     }
-                    break;
                 }
             }
             
@@ -2807,13 +2446,15 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 /(\d+)\s+HP\s+(?:restored|healed)/i
             ];
             
-            for (const pattern of healPatterns) {
-                const match = plainText.match(pattern);
-                if (match) {
-                    const healing = parseInt(match[1]);
-                    debugLog('PARSE', `Detected healing: ${healing}`);
-                    modifyHP(healing);
-                    break;
+            if (!explicitState.hasPlayerHealTag) {
+                for (const pattern of healPatterns) {
+                    const match = plainText.match(pattern);
+                    if (match) {
+                        const healing = parseInt(match[1]);
+                        debugLog('PARSE', `Detected healing: ${healing}`);
+                        modifyHP(healing);
+                        break;
+                    }
                 }
             }
             
@@ -3021,7 +2662,14 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
         // START GAME
         // ============================================
         
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
+            console.log('[INIT] Page loaded, loading templates...');
+            const templatesLoaded = await loadAllTemplates();
+            if (!templatesLoaded) {
+                console.error('[INIT] Template loading failed, cannot start game');
+                return;
+            }
+            console.log('[INIT] Templates loaded, initializing game');
             debugLog('INIT', 'Page loaded, initializing game');
             initializeGame();
         });

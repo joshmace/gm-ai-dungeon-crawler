@@ -130,7 +130,7 @@
         {
           "id": "solo_goblin",
           "name": "Goblin Warrior",
-          "monster_ref": "goblin",
+          "monster_ref": "goblin_warrior",
           "quantity": 1,
           "trigger": "on_entry",
           "behavior": "The goblin attacks on sight. No morale test here—single foe, fight to the death for this test.",
@@ -242,7 +242,7 @@
         {
           "id": "goblin_morale_1",
           "name": "Goblin Scout",
-          "monster_ref": "goblin",
+          "monster_ref": "goblin_scout",
           "quantity": 1,
           "trigger": "on_entry",
           "behavior": "First of two goblins. When this one dies, the other may flee (morale).",
@@ -256,7 +256,7 @@
         {
           "id": "goblin_morale_2",
           "name": "Goblin Fighter",
-          "monster_ref": "goblin",
+          "monster_ref": "goblin_fighter",
           "quantity": 1,
           "trigger": "on_entry",
           "behavior": "Second goblin. May flee when the first is defeated (optional morale rule).",

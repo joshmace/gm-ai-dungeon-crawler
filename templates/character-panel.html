@@ -1,0 +1,63 @@
+<!-- Character Panel Template (Left Column) -->
+<div class="character-panel notched" id="characterPanel">
+  <!-- Header with portrait and basic info -->
+  <div class="character-header notched" id="characterHeader">
+    <div class="notched">
+      <div class="character-portrait">
+        <i class="fa-sharp-duotone fa-solid fa-helmet-battle"></i>
+      </div>
+      <div class="character-name" id="charName">Loading...</div>
+      <div class="conditions-icons" id="conditionsDisplay"></div>
+      <div class="character-class" id="charClass">...</div>
+      <!-- XP Progress Bar -->
+      <div class="xp-progress">
+        <div class="xp-label">
+          <span>XP</span>
+          <span id="xpProgressText">-- / --</span>
+        </div>
+        <div class="xp-bar-container">
+          <div class="xp-bar-fill" id="xpBarFill" style="width: 0%"></div>
+        </div>
+      </div>
+      <!-- Quick Stats Grid -->
+      <div class="quick-stats">
+        <div class="stat-box hp">
+          <div class="stat-label">
+            <i class="fa-sharp-duotone fa-solid fa-heart"></i>
+          </div>
+          <div class="stat-value" id="hpDisplay">--/--</div>
+        </div>
+        <div class="stat-box ac">
+          <div class="stat-label">
+            <i class="fa-sharp-duotone fa-solid fa-shield"></i>
+          </div>
+          <div class="stat-value" id="acDisplay">--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ability Scores -->
+  <div class="notched">
+    <div class="notched">
+      <div class="section-header">Abilities</div>
+      <div class="ability-scores" id="abilityScores"></div>
+
+      <!-- Skills -->
+      <div class="section-header">Skills</div>
+      <div class="skills-list" id="skillsList"></div>
+    </div>
+  </div>
+
+  <!-- Equipped Items -->
+  <div class="notched">
+    <div class="notched">
+      <div class="section-header">Equipment</div>
+      <div class="equipment-section" id="equippedList"></div>
+
+      <!-- Pack/Inventory -->
+      <div class="section-header">Pack</div>
+      <div class="inventory-section" id="packList"></div>
+    </div>
+  </div>
+</div>
