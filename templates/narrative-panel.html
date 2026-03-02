@@ -2,14 +2,28 @@
 <div class="narrative-panel notched">
   <!-- Header with dungeon/adventure title -->
   <div class="narrative-header half-top-notched">
-    <div class="half-top-notched">
+    <div class="half-top-notched narrative-header-inner">
       <h1 id="dungeonTitle">Loading...</h1>
+      <span id="modeIndicator" class="mode-indicator" title="Current play mode"></span>
+      <button type="button" class="copy-narrative-button" id="copyNarrativeBtn" title="Copy narrative for playtest feedback">Copy narrative</button>
     </div>
   </div>
     <!-- Scrollable narrative content area -->
     <div class="narrative-scroll" id="narrativeScroll">
       <!-- Narrative entries will be dynamically added here -->
     </div>
+  <!-- Death overlay (shown when character dies) -->
+  <div class="death-overlay" id="deathOverlay">
+    <div class="death-overlay-content">
+      <h2>You have died</h2>
+      <p class="death-overlay-subtitle">Your adventure ends here.</p>
+      <div class="death-overlay-narration" id="deathOverlayNarration"></div>
+      <div class="death-overlay-buttons">
+        <button type="button" class="primary-button" id="deathBtnRestart">Restart adventure</button>
+        <button type="button" class="secondary-button" id="deathBtnLoadSave">Load save</button>
+      </div>
+    </div>
+  </div>
   <!-- Input Section (fixed to bottom) -->
   <div class="input-section half-bottom-notched">
     <div class="half-bottom-notched">

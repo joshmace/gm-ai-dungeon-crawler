@@ -2,6 +2,7 @@
   "character": {
     "version": "1.0",
     "system": "OSR",
+    "game_pack_id": "shattered_realms_rules_test",
     
     "basic_info": {
       "name": "Aldric Ironhand",
@@ -206,8 +207,8 @@
     },
     
     "experience": {
-      "current": 5250,
-      "next_level": 8000,
+      "current": 525,
+      "next_level": 800,
       "progress_percent": 65.6
     },
     

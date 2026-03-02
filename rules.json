@@ -136,22 +136,22 @@
       
       "level_progression": {
         "1": 0,
-        "2": 2000,
-        "3": 4000,
-        "4": 8000,
-        "5": 16000,
-        "6": 32000,
-        "7": 64000,
-        "8": 128000,
-        "9": 256000,
-        "10": 512000
+        "2": 200,
+        "3": 400,
+        "4": 800,
+        "5": 1600,
+        "6": 3200,
+        "7": 6400,
+        "8": 12800,
+        "9": 25600,
+        "10": 51200
       },
       
       "leveling_up": {
         "hp_increase": "Roll hit die + CON modifier (minimum 1)",
         "new_abilities": "Gain class features per class progression",
-        "ability_score_increase": "Every 4 levels, +2 to one stat or +1 to two stats (max 20)",
-        "proficiency_bonus": "Increases at levels 5, 9, 13, 17"
+        "ability_score_increase": "Every 2 levels, +2 to one stat or +1 to two stats (max 20)",
+        "proficiency_bonus": "Increases at levels 2, 4, 6, 8, 10"
       }
     },
     

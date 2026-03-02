@@ -394,6 +394,58 @@
         "description": "Incorporeal darkness in vaguely humanoid shape, with hollow eyes that hunger for life"
       },
       
+      "dead_king": {
+        "id": "dead_king",
+        "name": "The Dead King",
+        "type": "undead",
+        "size": "medium",
+        "hp": 45,
+        "ac": 16,
+        "speed": "30ft",
+        "abilities": {
+          "str": 18,
+          "dex": 8,
+          "con": 18,
+          "int": 12,
+          "wis": 14,
+          "cha": 16
+        },
+        "attacks": [
+          {
+            "name": "Crown's Wrath (longsword)",
+            "bonus": 7,
+            "damage": "2d8+4",
+            "damage_type": "slashing",
+            "range": "melee"
+          },
+          {
+            "name": "Necrotic Gaze",
+            "bonus": 6,
+            "damage": "2d6",
+            "damage_type": "necrotic",
+            "range": "melee",
+            "special": "Target must succeed DC 14 CON save or be frightened until end of next turn"
+          }
+        ],
+        "special_abilities": [
+          {
+            "name": "Royal Presence",
+            "description": "Immune to turn undead and fear. When first reduced below half HP, gains temporary 10 HP and makes one additional attack this round."
+          },
+          {
+            "name": "Undead Fortitude",
+            "description": "If reduced to 0 HP by non-radiant damage, DC 15 CON save. On success, drop to 1 HP instead (once per encounter)."
+          }
+        ],
+        "immunities": ["poison", "exhaustion"],
+        "resistances": ["necrotic"],
+        "behavior": "Ancient ruler who refused death; curses the living who disturb his rest. Speaks in broken, echoing Common. Fights from the throne until destroyed.",
+        "tactics": "Uses Crown's Wrath in melee; Necrotic Gaze when wounded or to break morale. Does not leave the throne room.",
+        "xp_value": 450,
+        "treasure": "Crown (cursed if worn), signet ring, 50 GP in ancient coins",
+        "description": "A skeletal figure in tattered royal robes and a corroded crown, wielding a blackened longsword. Eyes burn with cold blue fire. The source of the village's haunting."
+      },
+      
       "training_dummy": {
         "id": "training_dummy",
         "name": "Training Dummy",

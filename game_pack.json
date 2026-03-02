@@ -1,0 +1,9 @@
+{
+  "id": "shattered_realms_rules_test",
+  "name": "Shattered Realms / Rules Test",
+  "version": "1.0",
+  "setting": "./setting_shattered_realms.json",
+  "rules": "./rules.json",
+  "bestiary": "./monster_manual.json",
+  "adventure_module": "./test_module_rules.json"
+}

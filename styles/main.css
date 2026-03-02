@@ -32,8 +32,8 @@ body {
 .app-container {
   display: flex;
   width: 100%;
-  height: calc(100vh - 40px);
-  max-height: calc(100vh - 40px);
+  height: calc(100vh - 20px);
+  max-height: calc(100vh - 20px);
   gap: 10px;
   align-items: stretch;
   overflow: hidden;
@@ -425,6 +425,7 @@ body {
    Narrative Panel (Center Column - 60%)
    ============================================ */
 .narrative-panel {
+  position: relative;
   flex: 0 0 60%;
   width: 60%;
   min-width: 0;
@@ -438,12 +439,61 @@ body {
   flex-shrink: 0;
 }
 
+.narrative-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 12px;
+}
+
 .narrative-header h1 {
   padding: 10px 20px 0;
   font-family: "Bokor", serif;
   font-size: 1.6em;
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
   font-weight: 400;
+  margin: 0;
+}
+
+.mode-indicator {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  text-transform: capitalize;
+}
+
+.mode-indicator.mode-combat {
+  background: rgba(186, 0, 0, 0.35);
+  color: #ff9b9b;
+}
+
+.mode-indicator.mode-travel {
+  background: rgba(0, 118, 198, 0.25);
+  color: #8ec5e8;
+}
+
+.copy-narrative-button {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ltColor);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.copy-narrative-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.copy-narrative-button:disabled {
+  opacity: 0.7;
+  cursor: default;
 }
 
 .narrative-scroll {
@@ -454,7 +504,7 @@ body {
   scroll-behavior: smooth;
   background: rgba(20, 20, 20, 0.9);
   border-width: 0 2px;
-  border-color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.35);
   border-style: solid;
 }
 
@@ -527,18 +577,31 @@ body {
   padding: 6px 14px;
 }
 
+/* Mechanics callouts: dice results, HP, hit/miss — parsed by rules engine, distinct from flavor */
+.mechanics-callout {
+  font-family: "Courier New", Consolas, monospace;
+  font-size: 0.9em;
+  color: rgba(200, 220, 255, 0.95);
+  background: rgba(30, 45, 70, 0.6);
+  border-left: 3px solid rgba(100, 140, 200, 0.8);
+  padding: 8px 12px;
+  margin: 6px 0;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
 .parse-hint {
-  color: #8a7a5a;
+  color: var(--ltColor);
   font-size: 0.8em;
   font-style: italic;
-  background: rgba(90, 74, 58, 0.15);
-  border-left: 3px solid #6a5a4a;
+  background: var(--dkColor);
+  border-left: 3px solid var(--ltColor);
   border-radius: 4px;
   font-family: "Courier New", monospace;
 }
 
 .loading-indicator {
-  color: #8a7a6a;
+  color: var(--ltColor);
   font-style: italic;
   padding: 10px 14px;
 }
@@ -616,6 +679,7 @@ input:disabled {
    Buttons
    ============================================ */
 button {
+  font-family: "Fraunces", serif;
   padding: 10px 20px;
   background: var(--dkColor);
   border: 2px solid var(--ltColor);
@@ -675,11 +739,12 @@ button:disabled {
   font-weight: bold;
 }
 
-.dice-input {
-  width: 56px;
-  min-width: 56px;
+input[type="number"].dice-input {
+  width: 70px;
+  min-width: 70px;
   padding: 5px 8px;
   text-align: center;
+  font-size: 0.3em;
 }
 
 .dice-input::-webkit-outer-spin-button,
@@ -726,14 +791,7 @@ button:disabled {
 }
 
 .monster-panel::-webkit-scrollbar {
-  width: 8px;
-}
-.monster-panel::-webkit-scrollbar-track {
-  background: #1a1410;
-}
-.monster-panel::-webkit-scrollbar-thumb {
-  background: #5a4a3a;
-  border-radius: 4px;
+  width: 0px;
 }
 
 .monster-panel-header {
@@ -762,7 +820,7 @@ button:disabled {
   border-bottom: none;
 }
 .monster-stat-block.defeated {
-  opacity: 0.6;
+  opacity: 0.2;
 }
 
 .monster-stat-name {
@@ -773,7 +831,7 @@ button:disabled {
 }
 
 .monster-stat-line {
-  color: var(--ltColor);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 0.9em;
   margin: 3px 0;
 }
@@ -898,7 +956,7 @@ button:disabled {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(26, 20, 16, 0.95);
+  background: rgba(0, 0, 0, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -908,12 +966,12 @@ button:disabled {
 }
 
 #loadingOverlay h2 {
-  color: #d4af37;
+  color: #ffffff;
   font-size: 2em;
 }
 
 #loadingOverlay p {
-  color: #b8a888;
+  color: var(--ltColor);
   font-size: 1.2em;
 }
 
@@ -930,4 +988,74 @@ button:disabled {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ============================================
+   Death Overlay & Start Choice
+   ============================================ */
+.death-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.death-overlay-content {
+  text-align: center;
+  padding: 2rem;
+  max-width: 360px;
+}
+
+.death-overlay-content h2 {
+  color: #c85050;
+  font-size: 1.75em;
+  margin-bottom: 0.5rem;
+}
+
+.death-overlay-subtitle {
+  color: var(--ltColor);
+  margin-bottom: 0.75rem;
+}
+
+.death-overlay-narration {
+  color: rgba(255, 255, 255, 0.95);
+  font-style: italic;
+  font-size: 1.05em;
+  line-height: 1.5;
+  max-height: 8em;
+  overflow-y: auto;
+  margin-bottom: 1.5rem;
+  padding: 0 0.5rem;
+}
+
+.death-overlay-narration:empty {
+  display: none;
+}
+
+.death-overlay-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.start-choice-p {
+  color: var(--ltColor);
+  margin-bottom: 0.5rem;
+}
+
+.start-choice-meta {
+  font-size: 0.9em;
+  color: var(--ltColor);
+  margin-bottom: 1rem;
+}
+
+.start-choice-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 1rem;
 }

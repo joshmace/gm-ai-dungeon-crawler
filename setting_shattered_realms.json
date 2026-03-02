@@ -4,8 +4,7 @@
     "version": "1.0",
     "type": "generic_fantasy",
     "tone": "dark fantasy with hope",
-    "
-": "A basic fantasy setting that can be used with any module. Provides world context without constraining adventures.",
+    "description": "A basic fantasy setting that can be used with any module. Provides world context without constraining adventures.",
     
     "world_overview": {
       "description": "A world recovering from a magical cataclysm known as the Sundering. Ancient civilizations have fallen, magic is unstable, and the dead do not always rest. Heroes are needed.",

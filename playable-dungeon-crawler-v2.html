@@ -34,16 +34,15 @@
 
         async function loadAllTemplates() {
             try {
-                const [loadingOverlay, debugPanel, characterPanel, narrativePanel, encounterPanel] = await Promise.all([
+                const [loadingOverlay, characterPanel, narrativePanel, encounterPanel] = await Promise.all([
                     loadTemplate('loading-overlay'),
-                    loadTemplate('debug-panel'),
                     loadTemplate('character-panel'),
                     loadTemplate('narrative-panel'),
                     loadTemplate('encounter-panel')
                 ]);
 
                 document.getElementById('template-loading-overlay').outerHTML = loadingOverlay;
-                document.getElementById('template-debug-panel').outerHTML = debugPanel;
+                // Debug panel removed for Phase 2; re-enable later when enhanced (was: debug-panel template)
                 
                 const appContainer = document.getElementById('app-container');
                 appContainer.innerHTML = characterPanel + narrativePanel + encounterPanel;
@@ -70,14 +69,13 @@
         
         const CONFIG = {
             DEBUG_MODE: true,
-            /** Swappable data: character, module (adventure), monsters, rules. Changing these changes the game. Schemas must match (see character/module/monster/rules JSON structure). */
+            /** Game Pack manifest: references setting, rules, bestiary, adventure_module. Character is per-user and keyed by Game Pack. */
+            GAME_PACK: './game_pack_village_three_knots.json',
             DATA_FILES: {
-                character: './character_aldric.json',
-                module: './test_module_rules.json',
-                monsters: './monster_manual.json',
-                rules: './rules.json'
+                character: './character_aldric.json'
             },
             API_ENDPOINT: '/api/messages',
+            /** GM model; overridden by server from /api/config (system-level AI_MODEL). */
             MODEL: 'claude-sonnet-4-20250514',
             /** Max tokens per GM reply. Lower = less output cost. Easily configurable via Debug Panel → API / Usage. */
             MAX_TOKENS: 1200,
@@ -154,15 +152,16 @@
         
         const gameData = {
             character: null,
-            module: null,
-            monsters: null,
-            rules: null
+            setting: null,
+            rules: null,
+            bestiary: null,
+            module: null
         };
 
-        // XP progression table (fallback when rules.json has no experience.level_progression)
+        // XP progression table (fallback when rules.json has no experience.level_progression). Matches rules.json scale (1/10 of classic).
         const XP_LEVELS_DEFAULT = {
-            1: 0, 2: 2000, 3: 4000, 4: 8000, 5: 16000,
-            6: 32000, 7: 64000, 8: 128000, 9: 256000, 10: 512000
+            1: 0, 2: 200, 3: 400, 4: 800, 5: 1600,
+            6: 3200, 7: 6400, 8: 12800, 9: 25600, 10: 51200
         };
 
         /** Level thresholds from rules.experience.level_progression when present, else default. Used for XP bar and level-up. */
@@ -178,7 +177,86 @@
             }
             return XP_LEVELS_DEFAULT;
         }
-        
+
+        const SAVE_KEY = 'gm-ai-dungeon-save';
+        const SAVE_VERSION = 1;
+
+        /** Serializable slice of game state for save. */
+        function getStateToSave() {
+            return {
+                character: JSON.parse(JSON.stringify(gameState.character)),
+                currentRoom: gameState.currentRoom,
+                triggeredEvents: [...(gameState.triggeredEvents || [])],
+                conversationHistory: gameState.conversationHistory.map(m => ({ role: m.role, content: m.content })),
+                damageToEncounters: { ...(gameState.damageToEncounters || {}) },
+                inCombat: !!gameState.inCombat,
+                mode: gameState.mode || 'exploration',
+                equippedInUse: [...(gameState.equippedInUse || [])],
+                lastCombatRoom: gameState.lastCombatRoom,
+                encounterHistory: (gameState.encounterHistory || []).map(e => ({ ...e })),
+                readiedWeaponName: gameState.readiedWeaponName,
+                armorEquipped: !!gameState.armorEquipped,
+                lastUserRollType: gameState.lastUserRollType
+            };
+        }
+
+        function saveGame() {
+            if (!gameState.character || gameState.isDead) return;
+            try {
+                const payload = {
+                    version: SAVE_VERSION,
+                    gamePack: CONFIG.GAME_PACK,
+                    moduleTitle: gameData.module && gameData.module.module ? gameData.module.module.title : '',
+                    savedAt: Date.now(),
+                    state: getStateToSave()
+                };
+                localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+                debugLog('SAVE', 'Game saved');
+            } catch (e) {
+                console.warn('Save failed:', e);
+            }
+        }
+
+        function getSaveMetadata() {
+            try {
+                const raw = localStorage.getItem(SAVE_KEY);
+                if (!raw) return null;
+                const data = JSON.parse(raw);
+                return data && data.version === SAVE_VERSION ? data : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function hasValidSave() {
+            const meta = getSaveMetadata();
+            return meta && meta.gamePack === CONFIG.GAME_PACK;
+        }
+
+        function loadGame() {
+            const meta = getSaveMetadata();
+            if (!meta || meta.gamePack !== CONFIG.GAME_PACK) return false;
+            const s = meta.state;
+            if (!s || !s.character) return false;
+            gameState.character = s.character;
+            gameState.currentRoom = s.currentRoom;
+            gameState.triggeredEvents = s.triggeredEvents || [];
+            gameState.conversationHistory = s.conversationHistory || [];
+            gameState.damageToEncounters = s.damageToEncounters || {};
+            gameState.inCombat = !!s.inCombat;
+            gameState.mode = s.mode || (s.inCombat ? 'combat' : 'exploration');
+            gameState.equippedInUse = s.equippedInUse || [];
+            gameState.lastCombatRoom = s.lastCombatRoom;
+            gameState.encounterHistory = s.encounterHistory || [];
+            gameState.readiedWeaponName = s.readiedWeaponName || null;
+            gameState.armorEquipped = !!s.armorEquipped;
+            gameState.lastUserRollType = s.lastUserRollType || null;
+            gameState.isDead = false;
+            gameState.pendingLevelUpAck = null;
+            debugLog('SAVE', 'Game loaded');
+            return true;
+        }
+
         const gameState = {
             character: null,
             currentRoom: null,
@@ -190,6 +268,8 @@
             damageToEncounters: {},
             /** True when combat has started (either side attacked). Cleared when all nearby enemies defeated, player dies, or player retreats. */
             inCombat: false,
+            /** Current pillar: 'exploration' | 'combat' | 'travel'. Exactly one active; drives mode-specific prompt. */
+            mode: 'exploration',
             /** Items put in use during play (e.g. Torch (lit) when player lights one from pack). Shown in Equipped. */
             equippedInUse: [],
             /** Set when we parse torch use from player message; skip GM parse for same turn to avoid double-count. */
@@ -205,6 +285,16 @@
             commandHistory: [],
             commandHistoryIndex: -1,
             commandHistoryDraft: '',
+            /** True when character has died; death overlay shown, input disabled until choice. */
+            isDead: false,
+            /** True when the last user message was a dice roll submit; skip parsing monster damage from GM narrative to avoid double-count. */
+            lastUserMessageWasDiceRoll: false,
+            /** When in combat: 'attack' | 'damage' | 'ability' if the last user message was a roll submit; null if last was free text. Used to enforce mandatory combat step. */
+            lastUserRollType: null,
+            /** After an attack roll submit: total, monster AC, and whether it hit. Used to inject explicit HIT/MISS into prompt so GM cannot narrate wrong outcome. Not persisted. */
+            lastAttackRollTotal: null,
+            lastAttackRollAC: null,
+            lastAttackWasHit: null,
         };
 
         // ============================================
@@ -213,39 +303,62 @@
         
         async function loadGameData() {
             try {
+                updateLoadingStatus('Loading Game Pack manifest...');
+                const manifestResponse = await fetch(CONFIG.GAME_PACK);
+                if (!manifestResponse.ok) throw new Error('Failed to load Game Pack manifest');
+                const manifest = await manifestResponse.json();
+                
                 updateLoadingStatus('Loading character data...');
-                const charResponse = await fetch(CONFIG.DATA_FILES.character);
+                const characterPath = manifest.character || CONFIG.DATA_FILES.character;
+                const charResponse = await fetch(characterPath);
                 if (!charResponse.ok) throw new Error('Failed to load character');
                 const charData = await charResponse.json();
                 gameData.character = charData.character;
+                if (manifest.id && gameData.character.game_pack_id && gameData.character.game_pack_id !== manifest.id) {
+                    console.warn('[DATA] Character game_pack_id does not match Game Pack manifest:', gameData.character.game_pack_id, 'vs', manifest.id);
+                }
                 
-                updateLoadingStatus('Loading module...');
-                const modResponse = await fetch(CONFIG.DATA_FILES.module);
-                if (!modResponse.ok) throw new Error('Failed to load module');
-                const modData = await modResponse.json();
-                // Store the full module data (includes module metadata AND rooms)
-                gameData.module = modData;
-                
-                updateLoadingStatus('Loading monster manual...');
-                const monsResponse = await fetch(CONFIG.DATA_FILES.monsters);
-                if (!monsResponse.ok) throw new Error('Failed to load monsters');
-                const monsData = await monsResponse.json();
-                gameData.monsters = monsData.monster_manual.monsters;
+                updateLoadingStatus('Loading setting...');
+                try {
+                    const setResponse = await fetch(manifest.setting);
+                    if (setResponse.ok) {
+                        const setData = await setResponse.json();
+                        gameData.setting = setData.setting != null ? setData.setting : setData;
+                    } else {
+                        gameData.setting = null;
+                    }
+                } catch (e) {
+                    gameData.setting = null;
+                    debugLog('DATA', 'Setting load optional:', e.message);
+                }
                 
                 updateLoadingStatus('Loading rules...');
                 try {
-                    const rulesResponse = await fetch(CONFIG.DATA_FILES.rules);
+                    const rulesResponse = await fetch(manifest.rules);
                     if (rulesResponse.ok) {
                         const rulesData = await rulesResponse.json();
                         gameData.rules = rulesData.rules;
                     } else {
                         gameData.rules = null;
-                        debugLog('DATA', 'Rules file missing or failed; using fallback prompt text');
                     }
                 } catch (e) {
                     gameData.rules = null;
-                    debugLog('DATA', 'Rules load error (optional):', e.message);
+                    debugLog('DATA', 'Rules load optional:', e.message);
                 }
+                
+                updateLoadingStatus('Loading bestiary...');
+                const bestResponse = await fetch(manifest.bestiary);
+                if (!bestResponse.ok) throw new Error('Failed to load bestiary');
+                const bestData = await bestResponse.json();
+                gameData.bestiary = bestData.monster_manual && bestData.monster_manual.monsters
+                    ? bestData.monster_manual.monsters
+                    : (bestData.monsters || bestData);
+                
+                updateLoadingStatus('Loading adventure module...');
+                const modResponse = await fetch(manifest.adventure_module);
+                if (!modResponse.ok) throw new Error('Failed to load adventure module');
+                const modData = await modResponse.json();
+                gameData.module = modData;
                 
                 debugLog('DATA', 'All game data loaded successfully');
                 return true;
@@ -267,11 +380,11 @@
         // ============================================
         
         function resolveMonster(monsterId) {
-            if (!gameData.monsters || !gameData.monsters[monsterId]) {
+            if (!gameData.bestiary || !gameData.bestiary[monsterId]) {
                 debugLog('MONSTER', `WARNING: Monster ${monsterId} not found in manual`);
                 return null;
             }
-            return gameData.monsters[monsterId];
+            return gameData.bestiary[monsterId];
         }
 
         /** First active (non-defeated) encounter in current room, or null. */
@@ -292,6 +405,19 @@
             if (!monster || !monster.attacks || monster.attacks.length === 0) return null;
             const a = monster.attacks[0];
             return (a.damage || '').trim() || null;
+        }
+
+        /** Attack bonus and weapon name for first attack of first active encounter in current room. Used for [MONSTER_ATTACK] callout. */
+        function getMonsterAttackInfoForCurrentRoom() {
+            const enc = getFirstActiveEncounterInCurrentRoom();
+            if (!enc) return null;
+            const monster = resolveMonster(enc.monster_ref);
+            if (!monster || !monster.attacks || monster.attacks.length === 0) return null;
+            const a = monster.attacks[0];
+            const bonus = (a.bonus != null) ? Number(a.bonus) : 0;
+            const weaponName = (a.name || 'attack').trim();
+            const range = (a.range || 'melee').toLowerCase();
+            return { bonus, weaponName, range };
         }
 
         /** Fallback: get monster damage formula from any room with an active encounter (in case currentRoom is wrong). */
@@ -628,6 +754,26 @@
             return lines.join('\n');
         }
 
+        /** Build a compact SETTING block from gameData.setting for flavor and Travel mode. Limits tokens. */
+        function buildSettingBlockForPrompt() {
+            const s = gameData.setting;
+            if (!s || typeof s !== 'object') return '';
+            const lines = [];
+            if (s.name) lines.push(`Name: ${s.name}.`);
+            if (s.tone) lines.push(`Tone: ${s.tone}.`);
+            if (s.world_overview && typeof s.world_overview === 'object') {
+                if (s.world_overview.description) lines.push(`World: ${s.world_overview.description}`);
+                if (s.world_overview.current_era) lines.push(`Era: ${s.world_overview.current_era}.`);
+                if (s.world_overview.tone) lines.push(`Setting tone: ${s.world_overview.tone}.`);
+            }
+            if (s.major_regions && typeof s.major_regions === 'object') {
+                const regionNames = Object.keys(s.major_regions).map(k => k.replace(/_/g, ' '));
+                lines.push(`Major regions (use for flavor and travel): ${regionNames.join(', ')}.`);
+            }
+            if (lines.length === 0) return '';
+            return '\n## SETTING (use for flavor and consistency)\n' + lines.join('\n');
+        }
+
         /** Return condition info from rules (supports object { name, effect_summary, effect_detail, type } or legacy string). */
         function getConditionInfo(id) {
             const c = gameData.rules && gameData.rules.combat && gameData.rules.combat.conditions && gameData.rules.combat.conditions[id];
@@ -645,6 +791,44 @@
         function getConditionIdsFromRules() {
             const cond = gameData.rules && gameData.rules.combat && gameData.rules.combat.conditions;
             return cond && typeof cond === 'object' ? Object.keys(cond) : [];
+        }
+
+        const MAX_LEVEL = 10;
+
+        /** Hit die size for level-up HP (from character hit_dice e.g. "3d10" -> 10, or class default). */
+        function getHitDieSize() {
+            const hd = gameData.character && gameData.character.combat_stats
+                && gameData.character.combat_stats.hit_points
+                && gameData.character.combat_stats.hit_points.hit_dice
+                && gameData.character.combat_stats.hit_points.hit_dice.total;
+            if (hd && typeof hd === 'string') {
+                const m = hd.match(/d(\d+)/i);
+                if (m) return parseInt(m[1], 10);
+            }
+            const cls = (gameState.character && gameState.character.class || '').toLowerCase();
+            if (cls.includes('wizard') || cls.includes('sorcerer')) return 6;
+            if (cls.includes('fighter') || cls.includes('paladin') || cls.includes('ranger')) return 10;
+            if (cls.includes('cleric') || cls.includes('druid') || cls.includes('bard') || cls.includes('rogue')) return 8;
+            return 8;
+        }
+
+        /** Process level-up: if XP meets next threshold and level < 10, add level and HP. */
+        function processLevelUp() {
+            const char = gameState.character;
+            if (!char || char.level >= MAX_LEVEL) return;
+            const xpLevels = getXPLevels();
+            while (char.level < MAX_LEVEL && xpLevels[char.level + 1] != null && char.xp >= xpLevels[char.level + 1]) {
+                const sides = getHitDieSize();
+                const roll = Math.floor(Math.random() * sides) + 1;
+                const conMod = (char.abilities && char.abilities.con && char.abilities.con.modifier) || 0;
+                const gain = Math.max(1, roll + conMod);
+                char.level += 1;
+                char.maxHp += gain;
+                char.hp += gain;
+                gameState.pendingLevelUpAck = { level: char.level, hpGain: gain };
+                addSystemMessage(`Level up! You are now level ${char.level}. Gained ${gain} HP (${roll}${conMod >= 0 ? '+' : ''}${conMod} CON).`);
+                debugLog('STATE', `Level up to ${char.level}, +${gain} HP`);
+            }
         }
 
         /**
@@ -730,11 +914,29 @@
                 alert('Failed to load game data. Check console for details and ensure all JSON files are in the same directory.');
                 return;
             }
-            
-            // Initialize game state from loaded data
+            if (hasValidSave()) {
+                showStartChoice();
+                return;
+            }
+            initializeGameStateFromData();
+            finishGameStart(true);
+        }
+
+        function initializeGameStateFromData() {
             updateLoadingStatus('Initializing game state...');
-            
-            // Convert loaded character data to game state format
+            gameState.isDead = false;
+            gameState.triggeredEvents = [];
+            gameState.conversationHistory = [];
+            gameState.damageToEncounters = {};
+            gameState.inCombat = false;
+            gameState.mode = 'exploration';
+            gameState.equippedInUse = [];
+            gameState.lastCombatRoom = null;
+            gameState.encounterHistory = [];
+            gameState.commandHistory = [];
+            gameState.commandHistoryIndex = -1;
+            gameState.commandHistoryDraft = '';
+            gameState.pendingLevelUpAck = null;
             gameState.character = {
                 name: gameData.character.basic_info.name,
                 class: gameData.character.basic_info.class,
@@ -785,7 +987,7 @@
                 } else {
                     stats = item.properties ? item.properties.join(' - ') : '';
                 }
-                gameState.character.equipment.push({
+                const eq = {
                     name: item.name,
                     stats,
                     equipped: item.equipped !== undefined ? item.equipped : false,
@@ -793,12 +995,16 @@
                     isArmor,
                     weaponType: typeInfo.type,
                     weaponRange: typeInfo.range
-                });
+                };
+                if (isArmor && item.ac != null) eq.ac = item.ac;
+                if (isWeapon && item.damage) {
+                    eq.damage = item.damage;
+                    eq.damage_type = item.damage_type || '';
+                    eq.range = item.range || (typeInfo.range ? String(typeInfo.range) : 'melee');
+                    eq.properties = item.properties;
+                }
+                gameState.character.equipment.push(eq);
             }
-            // No weapon readied at start; only armor is "equipped" for display
-            gameState.readiedWeaponName = null;
-            gameState.armorEquipped = true;
-            
             // Convert inventory
             for (const item of gameData.character.equipment.backpack) {
                 gameState.character.inventory.push({
@@ -816,43 +1022,71 @@
             
             // Set starting room
             gameState.currentRoom = gameData.module.module.starting_room;
-            
-            updateLoadingStatus('Rendering interface...');
-            
-            // Initialize character sheet display
-            initializeCharacterSheet();
-            
-            // Update title
-            document.getElementById('dungeonTitle').textContent = gameData.module.module.title;
-            
-            // Hide loading overlay
-            document.getElementById('loadingOverlay').style.display = 'none';
+            gameState.readiedWeaponName = null;
+            gameState.armorEquipped = true;
+        }
 
-            // Sync API/usage config inputs with CONFIG (and keep CONFIG updated when user changes them)
+        function showStartChoice() {
+            const overlay = document.getElementById('loadingOverlay');
+            if (!overlay) return;
+            const meta = getSaveMetadata();
+            const savedAt = meta && meta.savedAt ? new Date(meta.savedAt).toLocaleString() : '';
+            overlay.innerHTML = `
+                <h2>Saved game found</h2>
+                <p class="start-choice-p">Continue your adventure or start a new game.</p>
+                ${savedAt ? `<p class="start-choice-meta">Saved: ${savedAt}</p>` : ''}
+                <div class="start-choice-buttons">
+                    <button type="button" class="primary-button" id="btnContinue">Continue</button>
+                    <button type="button" class="secondary-button" id="btnNewGame">New game</button>
+                </div>
+            `;
+            document.getElementById('btnContinue').onclick = () => {
+                if (loadGame()) {
+                    finishGameStart(false);
+                } else {
+                    initializeGameStateFromData();
+                    finishGameStart(true);
+                }
+            };
+            document.getElementById('btnNewGame').onclick = () => {
+                // if (!confirm('Are you sure? Your saved progress will be lost.')) return;
+                initializeGameStateFromData();
+                finishGameStart(true);
+            };
+        }
+
+        function finishGameStart(showWelcome) {
+            hideDeathOverlay();
+            updateLoadingStatus('Rendering interface...');
+            initializeCharacterSheet();
+            document.getElementById('dungeonTitle').textContent = gameData.module.module.title;
+            const modeEl = document.getElementById('modeIndicator');
+            if (modeEl) {
+                modeEl.textContent = 'Exploration';
+                modeEl.className = 'mode-indicator mode-exploration';
+            }
+            document.getElementById('loadingOverlay').style.display = 'none';
             initApiUsageConfig();
-            
-            // Enable input
             document.getElementById('playerInput').disabled = false;
-            
-            // Add welcome message
-            const startingRoom = gameData.module.rooms[gameState.currentRoom];
-            addSystemMessage(`Welcome to ${gameData.module.module.title}!`);
-            addNarration(startingRoom.description);
-            
-            // Check for on_entry features
-            if (startingRoom.features) {
-                for (const feature of startingRoom.features) {
-                    if (feature.triggers && feature.triggers.includes('on_entry') && feature.text) {
-                        addNarration(feature.text);
+            if (showWelcome) {
+                const startingRoom = gameData.module.rooms[gameState.currentRoom];
+                addSystemMessage(`Welcome to ${gameData.module.module.title}!`);
+                addNarration(startingRoom.description);
+                if (startingRoom.features) {
+                    for (const feature of startingRoom.features) {
+                        if (feature.triggers && feature.triggers.includes('on_entry') && feature.text) {
+                            addNarration(feature.text);
+                        }
                     }
                 }
+                addSystemMessage('Press Ctrl+Shift+D to toggle debug panel. Type your action and press Enter.');
+            } else {
+                addSystemMessage('Game loaded.');
+                addResumeContext();
             }
-            
-            addSystemMessage('Press Ctrl+Shift+D to toggle debug panel. Type your action and press Enter.');
-            
-            // Focus input
             document.getElementById('playerInput').focus();
-            
+            const copyBtn = document.getElementById('copyNarrativeBtn');
+            if (copyBtn) copyBtn.onclick = () => copyNarrativeToClipboard();
             debugLog('INIT', 'Game initialization complete');
         }
 
@@ -889,11 +1123,13 @@
             updateCharacterDisplay();
         }
 
-        /** AC from armor if worn, otherwise 10 + DEX (unarmored). */
+        /** AC from armor if worn, otherwise 10 + DEX (unarmored). Prefers gameState equipment (found/bought armor). */
         function getEffectiveAC() {
             const char = gameState.character;
             if (!char || !char.abilities) return char ? char.ac : 10;
             if (!gameState.armorEquipped) return 10 + char.abilities.dex.modifier;
+            const fromState = char.equipment && char.equipment.find(e => e.isArmor && e.equipped);
+            if (fromState && fromState.ac != null) return fromState.ac;
             const worn = gameData.character && gameData.character.equipment && gameData.character.equipment.worn;
             const armor = worn && worn.find(w => (w.type || '').toLowerCase() === 'armor');
             return (armor && armor.ac != null) ? armor.ac : char.ac;
@@ -923,6 +1159,13 @@
             // Combat indicator: red highlight on character header when in combat
             const headerEl = document.getElementById('characterHeader');
             if (headerEl) headerEl.classList.toggle('in-combat', gameState.inCombat);
+            // Mode indicator in narrative header (Exploration / Combat / Travel)
+            const modeEl = document.getElementById('modeIndicator');
+            if (modeEl) {
+                const mode = gameState.mode || 'exploration';
+                modeEl.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+                modeEl.className = 'mode-indicator mode-' + mode;
+            }
             
             // Update conditions: icon-only with tooltip showing name and effect
             const conditionsHTML = char.conditions.length === 0
@@ -977,7 +1220,7 @@
                 const qty = item.quantity;
                 const qtyStr = item.name === 'Gold' ? ` ${qty}` : `x${qty}`;
                 const goldClass = item.name === 'Gold' ? ' gold' : '';
-                const goldIcon = item.name === 'Gold' ? '<i class="fa-sharp-duotone fa-light fa-sack"></i>' : '';
+                const goldIcon = item.name === 'Gold' ? '<i class="fa-sharp-duotone fa-solid fa-sack"></i>' : '';
                 return `
                 <div class="inventory-item${goldClass}">
                     <span class="item-name">${goldIcon} ${item.name}</span>
@@ -1000,20 +1243,25 @@
             debugLog('STATE', `Modifying HP by ${amount}`);
             gameState.character.hp = Math.max(0, Math.min(gameState.character.maxHp, gameState.character.hp + amount));
             updateCharacterDisplay();
-            
             if (gameState.character.hp === 0) {
                 gameState.inCombat = false;
+                gameState.mode = 'exploration';
                 gameState.lastCombatRoom = gameState.currentRoom;
+                saveGame(); // save state just before marking dead so "Load save" restores to last moment
+                gameState.isDead = true;
                 addSystemMessage("You have died! Your adventure ends here.");
                 disableInput(true);
+            } else {
+                saveGame();
             }
         }
         
         function addXP(amount) {
             debugLog('STATE', `Adding ${amount} XP`);
             gameState.character.xp += amount;
-            addSystemMessage(`Gained ${amount} XP!`);
+            processLevelUp();
             updateCharacterDisplay();
+            saveGame();
         }
         
         function addToInventory(itemName, quantity = 1) {
@@ -1033,6 +1281,7 @@
                 gameState.character.inventory.push({ name: itemName, quantity });
             }
             updateCharacterDisplay();
+            saveGame();
         }
         
         function removeFromInventory(itemName, quantity = 1) {
@@ -1041,10 +1290,111 @@
             if (item) {
                 if (typeof item.quantity === 'number') {
                     item.quantity = Math.max(0, item.quantity - quantity);
-                    // Keep item with qty 0 so it can be retrieved (e.g. rope)
+                } else if (typeof item.quantity === 'string' && item.name === 'Gold') {
+                    const m = item.quantity.match(/(\d+)/);
+                    if (m) {
+                        const current = parseInt(m[1], 10);
+                        const next = Math.max(0, current - quantity);
+                        item.quantity = next > 0 ? `${next}gp` : '0gp';
+                    }
                 }
             }
             updateCharacterDisplay();
+            saveGame();
+        }
+
+        /** Deduct gold; returns true if the player had enough and was deducted. */
+        function deductGold(amount) {
+            if (amount <= 0) return true;
+            const item = gameState.character.inventory.find(i => i.name === 'Gold');
+            if (!item) return false;
+            const m = (item.quantity || '').toString().match(/(\d+)/);
+            const current = m ? parseInt(m[1], 10) : 0;
+            if (current < amount) return false;
+            item.quantity = (current - amount) > 0 ? `${current - amount}gp` : '0gp';
+            updateCharacterDisplay();
+            saveGame();
+            return true;
+        }
+
+        /** Current gold amount (number). */
+        function getGold() {
+            const item = gameState.character.inventory.find(i => i.name === 'Gold');
+            if (!item) return 0;
+            const m = (item.quantity || '').toString().match(/(\d+)/);
+            return m ? parseInt(m[1], 10) : 0;
+        }
+
+        /** Default specs for common weapons/armor when not in character data. Name (key) normalized to lowercase. */
+        const DEFAULT_EQUIPMENT_SPECS = {
+            longsword: { name: 'Longsword', damage: '1d8', damage_type: 'slashing', range: 'melee', properties: ['versatile (1d10)'] },
+            shortsword: { name: 'Shortsword', damage: '1d6', damage_type: 'piercing', range: 'melee' },
+            dagger: { name: 'Dagger', damage: '1d4', damage_type: 'piercing', range: 'melee', properties: ['finesse', 'light', 'thrown 20/60'] },
+            shortbow: { name: 'Shortbow', damage: '1d6', damage_type: 'piercing', range: '80/320', properties: ['ammunition', 'two-handed'] },
+            longbow: { name: 'Longbow', damage: '1d8', damage_type: 'piercing', range: '150/600', properties: ['ammunition', 'heavy', 'two-handed'] },
+            'chain mail': { name: 'Chain Mail', type: 'armor', ac: 16, properties: ['heavy'] },
+            'leather armor': { name: 'Leather Armor', type: 'armor', ac: 11, properties: [] },
+            'studded leather': { name: 'Studded Leather', type: 'armor', ac: 12, properties: [] },
+            shield: { name: 'Shield', type: 'armor', ac: 2, properties: [] }
+        };
+
+        /** Build catalog of equipment specs from gameData + defaults (name -> spec). Used for find/buy parsing. */
+        function getEquipmentCatalog() {
+            const catalog = new Map();
+            const add = (name, spec) => {
+                if (name && spec) catalog.set(String(name).trim().toLowerCase(), { ...spec, name: spec.name || name });
+            };
+            const data = gameData.character && gameData.character.equipment;
+            if (data) {
+                for (const item of [...(data.worn || []), ...(data.wielded || []), ...(data.carried || [])]) {
+                    const n = (item.name || '').trim().toLowerCase();
+                    if (!n) continue;
+                    if (item.damage) add(n, { name: item.name, damage: item.damage, damage_type: item.damage_type, range: item.range || 'melee', properties: item.properties });
+                    else if ((item.type || '').toLowerCase() === 'armor') add(n, { name: item.name, type: 'armor', ac: item.ac, properties: item.properties || [] });
+                }
+            }
+            for (const [k, v] of Object.entries(DEFAULT_EQUIPMENT_SPECS)) {
+                if (!catalog.has(k)) catalog.set(k, typeof v.name !== 'undefined' ? v : { ...v, name: k });
+            }
+            return catalog;
+        }
+
+        /** Add a weapon or armor to character equipment (from find/buy). Spec: weapon { name, damage, damage_type?, range?, properties? } or armor { name, type:'armor', ac, properties? }. */
+        function addEquipmentItem(spec) {
+            if (!spec || !spec.name) return;
+            const isArmor = (spec.type || '').toLowerCase() === 'armor';
+            const isWeapon = !!spec.damage;
+            if (!isWeapon && !isArmor) return;
+            const typeInfo = isWeapon ? getWeaponTypeInfo(spec) : { type: null, range: null };
+            let stats = '';
+            if (isWeapon) {
+                const base = `${spec.damage} ${spec.damage_type || ''}`.trim();
+                stats = typeInfo.type === 'ranged' && typeInfo.range
+                    ? `${base} (ranged ${typeInfo.range})`
+                    : `${base} (${typeInfo.type || 'melee'})`;
+            } else {
+                stats = Array.isArray(spec.properties) ? spec.properties.join(' - ') : (spec.properties || '');
+            }
+            const eq = {
+                name: spec.name,
+                stats,
+                equipped: false,
+                isWeapon,
+                isArmor,
+                weaponType: typeInfo.type,
+                weaponRange: typeInfo.range
+            };
+            if (isArmor && spec.ac != null) eq.ac = spec.ac;
+            if (isWeapon) {
+                eq.damage = spec.damage;
+                eq.damage_type = spec.damage_type || '';
+                eq.range = spec.range || (typeInfo.range ? String(typeInfo.range) : 'melee');
+                eq.properties = spec.properties;
+            }
+            gameState.character.equipment.push(eq);
+            updateCharacterDisplay();
+            saveGame();
+            debugLog('STATE', `Added equipment: ${spec.name}`);
         }
 
         /** Add a condition by id (from rules.combat.conditions). Id is case-insensitive; stored as lowercase. */
@@ -1062,6 +1412,7 @@
             gameState.character.conditions.push({ id: normId });
             debugLog('STATE', `Condition added: ${normId}`);
             updateCharacterDisplay();
+            saveGame();
         }
 
         /** Remove a condition by id. */
@@ -1075,7 +1426,61 @@
             if (gameState.character.conditions.length < before) {
                 debugLog('STATE', `Condition removed: ${normId}`);
                 updateCharacterDisplay();
+                saveGame();
             }
+        }
+
+        /** @param {string} [finalNarration] - GM's final narration (death blow); shown on overlay, not in narrative panel. */
+        function showDeathOverlay(finalNarration) {
+            const el = document.getElementById('deathOverlay');
+            if (!el) return;
+            el.style.display = 'flex';
+            const narrationEl = document.getElementById('deathOverlayNarration');
+            if (narrationEl) {
+                if (finalNarration && finalNarration.trim()) {
+                    const cleaned = finalNarration
+                        .replace(/\[ROLL_REQUEST:[^\]]*\]/gi, '')
+                        .replace(/\[(?:COMBAT|DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, '')
+                        .trim();
+                    narrationEl.innerHTML = cleaned ? normalizeNarrativeFormatting(cleaned) : '';
+                    narrationEl.style.display = cleaned ? 'block' : 'none';
+                } else {
+                    narrationEl.innerHTML = '';
+                    narrationEl.style.display = 'none';
+                }
+            }
+            const loadBtn = document.getElementById('deathBtnLoadSave');
+            if (loadBtn) {
+                loadBtn.style.display = hasValidSave() ? '' : 'none';
+                loadBtn.onclick = () => {
+                    if (loadGame()) {
+                        hideDeathOverlay();
+                        initializeCharacterSheet();
+                        updateCharacterDisplay();
+                        updateMonsterPanel();
+                        addSystemMessage('Game loaded.');
+                        addResumeContext();
+                        document.getElementById('playerInput').disabled = false;
+                        document.getElementById('playerInput').focus();
+                    }
+                };
+            }
+            const restartBtn = document.getElementById('deathBtnRestart');
+            if (restartBtn) {
+                restartBtn.onclick = () => {
+                    hideDeathOverlay();
+                    const scroll = document.getElementById('narrativeScroll');
+                    if (scroll) scroll.innerHTML = '';
+                    initializeGameStateFromData();
+                    finishGameStart(true);
+                };
+            }
+        }
+
+        function hideDeathOverlay() {
+            gameState.isDead = false;
+            const el = document.getElementById('deathOverlay');
+            if (el) el.style.display = 'none';
         }
 
         // ============================================
@@ -1111,6 +1516,21 @@
             scrollToBottom();
         }
 
+        /** When loading a saved game: add GM-style context (where you are). Context message is sufficient; no need to replay last GM message. */
+        function addResumeContext() {
+            const roomId = gameState.currentRoom;
+            const rooms = gameData.module && gameData.module.rooms;
+            const room = rooms && roomId ? rooms[roomId] : null;
+            if (room) {
+                const name = room.name || roomId || 'the area';
+                const desc = room.description || '';
+                const context = desc
+                    ? `You find yourself in ${name}. ${desc}`
+                    : `You find yourself in ${name}.`;
+                addNarration(context);
+            }
+        }
+
         /** Strip optional scene imagery tags from GM text so they are not shown. (Future: module JSON may reference pre-made maps/images.) */
         function parseSceneDirectives(text) {
             if (!text) return { cleanText: '' };
@@ -1142,6 +1562,20 @@
             scrollToBottom();
         }
 
+        /** Append a mechanics callout (Section 2 format). Rules engine uses these for state; display only flavor in GM narrative. */
+        function addMechanicsCallout(text) {
+            if (!text || !text.trim()) return;
+            const scroll = document.getElementById('narrativeScroll');
+            const entry = document.createElement('div');
+            entry.className = 'narrative-entry mechanics-callout-entry';
+            const div = document.createElement('div');
+            div.className = 'mechanics-callout';
+            div.textContent = text.trim();
+            entry.appendChild(div);
+            scroll.appendChild(entry);
+            scrollToBottom();
+        }
+
         function addLoadingIndicator() {
             const scroll = document.getElementById('narrativeScroll');
             const entry = document.createElement('div');
@@ -1158,6 +1592,47 @@
             if (indicator) {
                 indicator.remove();
             }
+        }
+
+        /** Build plain-text copy of narrative panel for playtest feedback. Copies to clipboard; returns the text. */
+        function copyNarrativeToClipboard() {
+            const scroll = document.getElementById('narrativeScroll');
+            if (!scroll) return '';
+            const lines = [];
+            lines.push('---');
+            lines.push('Narrative panel (for playtest feedback)');
+            lines.push('---');
+            lines.push('');
+            for (const entry of scroll.querySelectorAll('.narrative-entry')) {
+                if (entry.id === 'loadingIndicator') continue;
+                const gm = entry.querySelector('.gm-narration');
+                const player = entry.querySelector('.player-action');
+                const system = entry.querySelector('.system-message');
+                const callout = entry.querySelector('.mechanics-callout');
+                const getText = (el) => (el && el.innerText != null ? el.innerText : (el && el.textContent != null ? el.textContent : '')).trim();
+                if (gm && gm.textContent.trim()) {
+                    lines.push('[GM] ' + getText(gm));
+                } else if (player && player.textContent.trim()) {
+                    lines.push('[Player] ' + getText(player));
+                } else if (system && system.textContent.trim()) {
+                    lines.push('[System] ' + getText(system));
+                } else if (callout && callout.textContent.trim()) {
+                    lines.push('[Callout] ' + getText(callout));
+                }
+            }
+            const text = lines.join('\n');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    const btn = document.getElementById('copyNarrativeBtn');
+                    if (btn) {
+                        const orig = btn.textContent;
+                        btn.textContent = 'Copied!';
+                        btn.disabled = true;
+                        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+                    }
+                }).catch(() => {});
+            }
+            return text;
         }
 
         function addErrorMessage(text) {
@@ -1203,17 +1678,25 @@
             return { type: 'melee', range: null };
         }
         
-        /** Get readied weapon damage: dice and modifier (STR for melee, DEX for ranged). */
-        function getEquippedWeaponDamage() {
-            const sources = gameData.character && gameData.character.equipment
+        /** Get the readied weapon object (for name, damage_type, melee/ranged). */
+        function getReadiedWeaponObject() {
+            const fromState = (gameState.character.equipment || []).filter(e => e.isWeapon && e.damage);
+            const fromData = gameData.character && gameData.character.equipment
                 ? [...(gameData.character.equipment.wielded || []), ...(gameData.character.equipment.carried || [])]
                 : [];
+            const sources = [...fromState, ...fromData];
             const weapons = sources.filter(w => w.damage);
-            if (!weapons.length) return { dice: '1d8', modifier: gameState.character.abilities.str.modifier, label: '1d8', count: 1, sides: 8 };
-            // Use readied weapon by name, or first equipped
+            if (!weapons.length) return null;
             const readied = gameState.readiedWeaponName;
             let weapon = readied ? weapons.find(w => w.name && w.name.toLowerCase() === readied.toLowerCase()) : null;
             if (!weapon) weapon = weapons.find(w => w.equipped) || weapons[0];
+            return weapon;
+        }
+
+        /** Get readied weapon damage: dice and modifier (STR for melee, DEX for ranged). Uses gameState equipment first (includes found/bought weapons). */
+        function getEquippedWeaponDamage() {
+            const weapon = getReadiedWeaponObject();
+            if (!weapon) return { dice: '1d8', modifier: gameState.character.abilities.str.modifier, label: '1d8', count: 1, sides: 8 };
             const useDex = isRangedWeapon(weapon);
             const mod = useDex ? gameState.character.abilities.dex.modifier : gameState.character.abilities.str.modifier;
             return parseWeaponDice(weapon.damage, mod);
@@ -1332,6 +1815,14 @@
         // DICE ROLLING
         // ============================================
         
+        /** Infer roll context type for mechanics callout (Section 2). */
+        function inferRollContextType(abilityStr) {
+            const a = (abilityStr || '').toLowerCase().trim();
+            if (a === 'damage' || a.includes('damage')) return 'damage';
+            if (a.includes('attack') || a === 'melee attack' || a === 'ranged attack') return 'attack';
+            return 'ability';
+        }
+
         function showDiceSection(prompt = "Roll requested:", rollType = null) {
             const diceSection = document.getElementById('diceSection');
             const rollPrompt = document.getElementById('rollPrompt');
@@ -1341,38 +1832,46 @@
             
             const rt = rollType || (prompt.match(/Roll\s+(.+?)(?::|$)/i)?.[1]?.trim() || '');
             const dice = getDiceForRollRequest(rt);
+            const contextType = inferRollContextType(rt);
             
             if (dice.type === 'weapon') {
                 const w = getEquippedWeaponDamage();
                 const diceExpr = w.count === 1 ? `1d${w.sides}` : `${w.count}d${w.sides}`;
                 const isCrit = gameState.lastD20Natural === 20 && gameState.lastRollWasAttack;
-                const modHint = w.modifier !== 0 ? `; then add ${signed(w.modifier)}` : '';
+                const modLabel = w.modifier !== 0 ? signed(w.modifier) : '';
                 if (isCrit) {
-                    rollPrompt.textContent = `Critical hit! Roll weapon dice (${diceExpr}); result is doubled${modHint}.`;
-                    rollBtn.textContent = `Roll ${diceExpr} (crit: double dice${w.modifier !== 0 ? `, ${signed(w.modifier)}` : ''})`;
+                    rollPrompt.textContent = `Critical hit! Roll for Damage (${diceExpr}${w.modifier !== 0 ? ` ${modLabel}` : ''}) — result is doubled.`;
+                    rollBtn.textContent = `Roll ${diceExpr}${modLabel ? ` (${modLabel})` : ''}`;
                 } else {
-                    rollPrompt.textContent = `Roll weapon dice (${diceExpr})${w.modifier !== 0 ? `; system adds ${signed(w.modifier)}` : ''}.`;
-                    rollBtn.textContent = `Roll ${diceExpr}${w.modifier !== 0 ? ` (${signed(w.modifier)})` : ''}`;
+                    rollPrompt.textContent = `Roll for Damage (${diceExpr}${w.modifier !== 0 ? ` ${modLabel}` : ''}).`;
+                    rollBtn.textContent = `Roll ${diceExpr}${modLabel ? ` (${modLabel})` : ''}`;
                 }
                 diceInput.placeholder = `1-${w.count * w.sides}`;
                 diceInput.min = String(w.count);
                 diceInput.max = String(w.count * w.sides);
             } else if (dice.type === 'custom') {
                 const diceExpr = dice.count === 1 ? `1d${dice.sides}` : `${dice.count}d${dice.sides}`;
-                const modHint = dice.modifier !== 0 ? `; system adds ${signed(dice.modifier)}` : '';
-                rollPrompt.textContent = `Roll ${diceExpr}${modHint}.`;
-                rollBtn.textContent = `Roll ${diceExpr}${dice.modifier !== 0 ? ` (${signed(dice.modifier)})` : ''}`;
+                const modLabel = dice.modifier !== 0 ? signed(dice.modifier) : '';
+                rollPrompt.textContent = `Roll ${diceExpr}${modLabel ? ` (${modLabel})` : ''}.`;
+                rollBtn.textContent = `Roll ${diceExpr}${modLabel ? ` (${modLabel})` : ''}`;
                 diceInput.placeholder = `${dice.minFace}-${dice.maxFace}`;
                 diceInput.min = String(dice.minFace);
                 diceInput.max = String(dice.maxFace);
             } else {
+                const isAttack = contextType === 'attack';
                 const abilityInfo = getAbilityModifierForRoll(dice.ability);
-                const modStr = abilityInfo && abilityInfo.modifier != null ? signed(abilityInfo.modifier) : null;
-                const label = abilityInfo && abilityInfo.label ? abilityInfo.label : rt;
-                rollPrompt.textContent = modStr
-                    ? `Roll d20 for ${label} (system adds ${modStr}).`
-                    : (prompt.endsWith(':') ? prompt : prompt + ':');
-                rollBtn.textContent = modStr ? `Roll d20 (${modStr})` : 'Roll d20';
+                const modStr = abilityInfo && abilityInfo.modifier != null ? signed(abilityInfo.modifier) : '';
+                if (isAttack) {
+                    const atk = getAttackModifierForRoll(rt);
+                    const totalMod = atk ? atk.modifier : (abilityInfo ? abilityInfo.modifier : 0);
+                    const labelPart = atk && atk.label ? atk.label : (abilityInfo && abilityInfo.label ? abilityInfo.label : '');
+                    rollPrompt.textContent = labelPart ? `Roll for Attack (1d20 ${labelPart}).` : `Roll for Attack (1d20${modStr ? ` ${modStr}` : ''}).`;
+                    rollBtn.textContent = `Roll 1d20 (${signed(totalMod)})`;
+                } else {
+                    const label = abilityInfo && abilityInfo.label ? abilityInfo.label : (rt || 'Check');
+                    rollPrompt.textContent = `Roll for Ability Check (1d20${modStr ? ` ${modStr}` : ''}).`;
+                    rollBtn.textContent = `Roll 1d20 (${modStr || '0'})`;
+                }
                 diceInput.placeholder = '1-20';
                 diceInput.min = '1';
                 diceInput.max = '20';
@@ -1380,7 +1879,7 @@
             
             diceSection.classList.add('active');
             gameState.waitingForRoll = true;
-            gameState.pendingRollContext = { dice };
+            gameState.pendingRollContext = { dice, rollType: contextType, abilityName: rt };
             disableInput(true);
         }
 
@@ -1517,27 +2016,25 @@
             let totalToSend;
             let rollMessageSuffix = '';
             const ctx = gameState.pendingRollContext?.dice || diceCtx;
+            const pendingCtx = gameState.pendingRollContext;
+            const rollType = (pendingCtx && pendingCtx.rollType) || inferRollContextType((pendingCtx && pendingCtx.abilityName) || '');
             if (!ctx) return;
             
             if (ctx.type === 'weapon') {
                 const isCrit = options.isCriticalHit || (gameState.lastD20Natural === 20 && gameState.lastRollWasAttack);
                 const breakdown = options.damageBreakdown;
                 const w = getEquippedWeaponDamage();
+                const damageTotal = isCrit ? roll * 2 + w.modifier : roll + w.modifier;
+                totalToSend = damageTotal;
                 if (breakdown) {
                     message = isCrit
                         ? `You rolled damage (critical hit): <span class="dice-roll">${breakdown}</span>`
                         : `You rolled damage: <span class="dice-roll">${breakdown}</span>`;
-                    totalToSend = roll;
                 } else {
-                    if (isCrit) {
-                        totalToSend = roll * 2 + w.modifier;
-                        const modStr = w.modifier >= 0 ? ` + ${w.modifier}` : ` - ${Math.abs(w.modifier)}`;
-                        message = `You rolled damage (critical hit): <span class="dice-roll">${roll} (dice)×2${w.modifier !== 0 ? modStr : ''} = ${totalToSend}</span>`;
-                    } else {
-                        totalToSend = roll + w.modifier;
-                        const modStr = w.modifier >= 0 ? ` + ${w.modifier}` : ` - ${Math.abs(w.modifier)}`;
-                        message = `You rolled damage: <span class="dice-roll">${w.label} = ${roll} (manual)${w.modifier !== 0 ? modStr : ''} = ${totalToSend}</span>`;
-                    }
+                    const modStr = w.modifier >= 0 ? ` + ${w.modifier}` : ` - ${Math.abs(w.modifier)}`;
+                    message = isCrit
+                        ? `You rolled damage (critical hit): <span class="dice-roll">${roll} (dice)×2${w.modifier !== 0 ? modStr : ''} = ${damageTotal}</span>`
+                        : `You rolled damage: <span class="dice-roll">${w.label} = ${roll} (manual)${w.modifier !== 0 ? modStr : ''} = ${damageTotal}</span>`;
                 }
                 if (isCrit) rollMessageSuffix = ' Critical hit damage.';
                 gameState.lastD20Natural = null;
@@ -1546,7 +2043,7 @@
                 const breakdown = options.customBreakdown;
                 if (breakdown) {
                     message = `You rolled ${ctx.label}: <span class="dice-roll">${breakdown}</span>`;
-                    totalToSend = roll;
+                    totalToSend = roll + (ctx.modifier || 0);
                 } else {
                     totalToSend = roll + (ctx.modifier || 0);
                     const modStr = ctx.modifier ? (ctx.modifier >= 0 ? ` + ${ctx.modifier}` : ` - ${Math.abs(ctx.modifier)}`) : '';
@@ -1568,10 +2065,97 @@
                 else if (roll === 1) rollMessageSuffix = ' Natural 1 (critical failure).';
             }
             
-            addSystemMessage(message);
+            // Build mechanics callout (Section 2 format) and apply state from callouts
+            const signed = (n) => (n >= 0 ? `+ ${n}` : `- ${Math.abs(n)}`);
+            if (rollType === 'attack' && ctx.type !== 'weapon') {
+                const enc = getFirstActiveEncounterInCurrentRoom();
+                const monster = enc ? resolveMonster(enc.monster_ref) : null;
+                const ac = monster && (monster.ac != null) ? monster.ac : (gameData.character && gameData.character.combat_stats ? gameData.character.combat_stats.armor_class : 13);
+                const hit = totalToSend >= ac;
+                const weaponObj = getReadiedWeaponObject();
+                const weaponLabel = weaponObj ? `${(weaponObj.name || 'weapon').toLowerCase().replace(/\s+/g, ' ')}/${isRangedWeapon(weaponObj) ? 'ranged' : 'melee'}` : 'melee';
+                const modForCallout = (ctx.ability ? getAbilityModifierForRoll(ctx.ability) : getAttackModifierForRoll('attack'));
+                const modVal = modForCallout && modForCallout.modifier != null ? modForCallout.modifier : 0;
+                const callout = `Attack Roll 1d20: ${roll} (${signed(modVal)}) = ${totalToSend} (${weaponLabel})\n${hit ? 'HIT' : 'MISS'}: ${totalToSend} vs AC ${ac}`;
+                addMechanicsCallout(callout);
+                // Store so next GM prompt gets explicit HIT/MISS and cannot narrate wrong outcome
+                const forcedMiss = (roll === 1);
+                gameState.lastAttackRollTotal = totalToSend;
+                gameState.lastAttackRollAC = ac;
+                gameState.lastAttackWasHit = !forcedMiss && hit;
+            } else if (rollType === 'damage' && (ctx.type === 'weapon' || ctx.type === 'custom')) {
+                const w = ctx.type === 'weapon' ? getEquippedWeaponDamage() : null;
+                const weaponObj = ctx.type === 'weapon' ? getReadiedWeaponObject() : null;
+                const damageType = (weaponObj && weaponObj.damage_type) ? weaponObj.damage_type : (ctx.type === 'custom' ? '' : 'slashing');
+                const diceExpr = w ? (w.count === 1 ? `1d${w.sides}` : `${w.count}d${w.sides}`) : (ctx.label || '');
+                const modVal = w ? w.modifier : (ctx.modifier || 0);
+                const isCritDmg = options.isCriticalHit && ctx.type === 'weapon';
+                const diceNatural = isCritDmg ? roll * 2 : roll;
+                let hpLine = '';
+                // Only apply damage to encounter for weapon rolls (not custom e.g. healing)
+                let defeatedEncForReward = null; // used after damage callout so XP/treasure callout comes second
+                if (ctx.type === 'weapon') {
+                    const enc = getFirstActiveEncounterInCurrentRoom();
+                    if (enc) {
+                        const hpBefore = getEncounterHP(enc).current;
+                        gameState.damageToEncounters[enc.id] = (gameState.damageToEncounters[enc.id] || 0) + totalToSend;
+                        gameState.inCombat = true;
+                        gameState.mode = 'combat';
+                        const hpInfo = getEncounterHP(enc);
+                        const mon = resolveMonster(enc.monster_ref);
+                        hpLine = `\n${enc.name || (mon && mon.name) || 'Enemy'}: HP ${Math.max(0, hpInfo.current)}/${hpInfo.max}`;
+                        const room = gameData.module && gameData.module.rooms && gameData.module.rooms[gameState.currentRoom];
+                        if (room && room.encounters && room.encounters.every(e => getEncounterHP(e).defeated)) {
+                            gameState.inCombat = false;
+                            gameState.mode = 'exploration';
+                            gameState.lastCombatRoom = gameState.currentRoom;
+                        }
+                        updateCharacterDisplay();
+                        if (hpBefore > 0 && hpInfo.defeated && enc.on_death) defeatedEncForReward = enc;
+                    }
+                }
+                const typeSuffix = damageType ? ` (${damageType})` : '';
+                const callout = `Damage Roll ${diceExpr}: ${diceNatural} (${signed(modVal)}) = ${totalToSend}${typeSuffix}${hpLine}`;
+                addMechanicsCallout(callout);
+                // XP and treasure callout always after damage callout (Section 2.4)
+                if (defeatedEncForReward) {
+                    const enc = defeatedEncForReward;
+                    const xp = enc.on_death.xp_award != null ? enc.on_death.xp_award : 0;
+                    let goldAmount = 0;
+                    if (enc.on_death.treasure && Array.isArray(enc.on_death.treasure)) {
+                        for (const t of enc.on_death.treasure) {
+                            if ((t.item || '').toLowerCase() === 'gold') {
+                                goldAmount += typeof t.quantity === 'number' ? t.quantity : parseInt(t.quantity, 10) || 0;
+                            } else {
+                                addToInventory(t.item || 'Item', t.quantity || 1);
+                            }
+                        }
+                    }
+                    if (goldAmount > 0) addToInventory('Gold', goldAmount);
+                    if (xp > 0) addXP(xp);
+                    const charName = gameState.character && gameState.character.name ? gameState.character.name : 'The character';
+                    const xpTreasureLine = goldAmount > 0
+                        ? `${charName} gains ${xp} XP and discovers ${goldAmount} gold!`
+                        : `${charName} gains ${xp} XP!`;
+                    addMechanicsCallout(xpTreasureLine);
+                }
+                saveGame();
+            } else if (rollType === 'ability' && ctx.type !== 'weapon') {
+                const abilityInfo = ctx.ability ? getAbilityModifierForRoll(ctx.ability) : null;
+                const abLabel = (abilityInfo && abilityInfo.label) ? abilityInfo.label.replace(/\s*\(.*\)/, '').toUpperCase().slice(0, 3) : 'CHK';
+                const modVal = abilityInfo && abilityInfo.modifier != null ? abilityInfo.modifier : 0;
+                const callout = `Ability Roll 1d20: ${roll} (${signed(modVal)}) = ${totalToSend} (${abLabel})\nResult: ${totalToSend} (compare to DC in narrative)`;
+                addMechanicsCallout(callout);
+            }
+            
+            // Mechanics callouts are sufficient; do not duplicate with system-message for attack/damage/ability
+            const addedCallout = rollType === 'attack' || rollType === 'damage' || rollType === 'ability';
+            if (!addedCallout) addSystemMessage(message);
             hideDiceSection();
             
             const rollMessage = `I rolled a ${totalToSend != null ? totalToSend : roll}.${rollMessageSuffix}`;
+            if (rollType === 'damage' && ctx.type === 'weapon') gameState.lastUserMessageWasDiceRoll = true; // skip parsing monster damage from GM narrative (we applied it from callout)
+            if (rollType === 'attack' || rollType === 'damage' || rollType === 'ability') gameState.lastUserRollType = rollType; // so next GM prompt can enforce combat step
             gameState.conversationHistory.push({
                 role: "user",
                 content: rollMessage
@@ -1645,6 +2229,10 @@
                 if (gameState.commandHistory.length > 50) gameState.commandHistory.pop();
             }
             
+            gameState.lastUserRollType = null; // player is taking a new action (not responding to a roll)
+            gameState.lastAttackRollTotal = null;
+            gameState.lastAttackRollAC = null;
+            gameState.lastAttackWasHit = null;
             gameState.conversationHistory.push({
                 role: "user",
                 content: action
@@ -1680,6 +2268,7 @@
             
             try {
                 const systemPrompt = buildSystemPrompt();
+                if (gameState.pendingLevelUpAck) gameState.pendingLevelUpAck = null;
                 const messages = [...gameState.conversationHistory];
                 
                 debugLog('AI', 'Calling AI GM', { 
@@ -1748,6 +2337,9 @@
         function buildSystemPrompt() {
             const char = gameState.character;
             const room = gameData.module.rooms[gameState.currentRoom];
+            // Keep mode in sync with inCombat when not explicitly in travel
+            if (gameState.inCombat) gameState.mode = 'combat';
+            else if (gameState.mode !== 'travel') gameState.mode = 'exploration';
             
             // Defensive check
             if (!char || !char.abilities) {
@@ -1764,7 +2356,7 @@
             // Build encounter info if present
             let encounterInfo = '';
             if (room.encounters && room.encounters.length > 0) {
-                encounterInfo = '\n\n## Active Encounters — use these EXACT stats; current HP is tracked for you (monster is DEFEATED when it reaches 0):\n';
+                encounterInfo = '\n\n## Active Encounters — use these EXACT stats; current HP is tracked by the app (monster is DEFEATED at 0 HP; you MUST narrate death and must NOT have it act further):\n';
                 for (const enc of room.encounters) {
                     encounterInfo += buildEncounterDescription(enc, true) + '\n';
                 }
@@ -1772,13 +2364,65 @@
                 encounterInfo = '\n\n## Active Encounters: NONE — there are no monsters in this room. Do not add or invent any monsters.\n';
             }
             
-            const layoutBlock = buildModuleLayoutForPrompt();
+            const hasActiveEncounter = getFirstActiveEncounterInCurrentRoom() != null;
+            const lastRoll = gameState.lastUserRollType;
+            let combatFlowBlock = '';
+            if (hasActiveEncounter) {
+                const steps = `1. **Player action** — Player declares what they do (e.g. "I attack the goblin"). You respond with flavor only and [ROLL_REQUEST: Attack]. Nothing else. Wait for the roll.
+2. **After attack roll** — Player just submitted their attack roll. You respond with flavor only. If roll >= monster AC: include [ROLL_REQUEST: Damage]. If roll < AC: flavor only (narrate the miss). Nothing else. Wait for the roll or for player's next action.
+3. **After damage roll** — Player just submitted their damage roll. You respond with flavor only (the blow's effect). If the monster is defeated (damage >= its remaining HP), narrate its death in flavor; do not narrate XP or gold. Then: if any enemy is still alive, their turn begins (go to step 4). If all are defeated, include [COMBAT: off] and end.
+4. **Monster turn** — You respond with flavor only: one sentence for the monster attacking, then **[MONSTER_ATTACK]** (nothing else). Example: "The goblin snarls and swings its scimitar at you. [MONSTER_ATTACK]" Do NOT narrate hit or miss; the app will show the callouts and add the outcome line (including "Your turn — what do you do?"). Do not write the monster's roll or damage number.`;
+                let currentStep = '';
+                if (lastRoll === 'attack') {
+                    const atkTotal = gameState.lastAttackRollTotal;
+                    const atkAC = gameState.lastAttackRollAC;
+                    const atkHit = gameState.lastAttackWasHit;
+                    if (atkTotal != null && atkAC != null && atkHit !== null) {
+                        currentStep = `**ATTACK RESULT (you must obey this):** The player's attack roll total is **${atkTotal}**. Monster AC is **${atkAC}**. This is a **${atkHit ? 'HIT' : 'MISS'}**. You MUST ${atkHit ? 'respond with flavor describing a hit and include [ROLL_REQUEST: Damage]. Do NOT narrate a miss.' : 'respond with flavor describing a MISS only. Do NOT include [ROLL_REQUEST: Damage]. Do NOT say the attack hit, found its mark, or wounded the monster.'} Do not do step 3 or 4. Do not write the roll or AC in your narrative.`;
+                    } else {
+                        currentStep = '**CURRENT STEP:** The player just submitted their **attack roll**. You MUST do **step 2 only**: Respond with flavor only. If their roll >= the monster\'s AC (see Active Encounters), include [ROLL_REQUEST: Damage]. If roll < AC, narrate the miss in flavor only. Do not do step 3 or 4. Do not write the roll or AC in your narrative.';
+                    }
+                } else if (lastRoll === 'damage') {
+                    currentStep = '**CURRENT STEP:** The player just submitted their **damage roll**. You MUST do **step 3 only**: Respond with flavor only (the effect of the blow). If the monster is defeated, narrate its death; do not narrate XP or gold. Then either start the monster\'s turn (step 4) in the same response, or if all enemies are defeated include [COMBAT: off]. Do not request another attack roll yet.';
+                } else if (lastRoll === 'ability') {
+                    currentStep = '**CURRENT STEP:** The player just submitted an **ability/skill roll**. Respond to that check in flavor and outcome. If combat continues, return to step 1 (player action) or step 4 (monster turn) as appropriate.';
+                } else {
+                    currentStep = '**CURRENT STEP:** The player just sent a **free-form action** (they did not submit a roll). You MUST do **step 1 only**: If they are attacking, respond with flavor only and [ROLL_REQUEST: Attack]. If they did something else (e.g. dodge, search), respond to that. Do not do the monster\'s turn yet unless their message clearly ends their turn (e.g. "I wait").';
+                }
+                combatFlowBlock = `
+
+## COMBAT FLOW — MANDATORY DURING THIS ENCOUNTER
+**While an encounter is active, you MUST follow these steps in order. Do not skip, combine, or reorder steps.**
+
+${steps}
+
+${currentStep}
+`;
+            }
             
+            const layoutBlock = buildModuleLayoutForPrompt();
             const rulesetBlock = buildRulesetBlockForPrompt();
+            const settingBlock = buildSettingBlockForPrompt();
+            const mode = gameState.mode || 'exploration';
+            let modeBlock = '';
+            if (mode === 'exploration') {
+                modeBlock = `
+## CURRENT MODE: EXPLORATION
+You have high freedom to improvise within the module and setting. Call for ability/skill checks when appropriate; honor roll results. Use the module layout and features strictly—do not add rooms or exits. Brief respites (short rest, a few hours) may be described in brief. For locations with distinct maps, adhere to the module description closely and improvise only minor details.
+`;
+            } else if (mode === 'travel') {
+                modeBlock = `
+## CURRENT MODE: TRAVEL
+The player is traveling a long distance. Ask or infer their plan or destination. Narrate the journey in summary, not moment-by-moment. Respect any travel rules from the setting, rules, or module. When they arrive at the destination, include [MODE: exploration] in your response so the app returns to exploration.
+`;
+            }
             return `You are the Game Master for this dungeon crawl: ${gameData.module.module.title}.
+**Current mode:** ${mode.charAt(0).toUpperCase() + mode.slice(1)}.
+${settingBlock}
+${modeBlock}
 
 # SOURCE OF TRUTH — STRICT ADHERENCE
-All concrete specifications (numbers, stats, DCs, rewards, mechanics, items) MUST come from the data blocks below: the active ruleset, the module (rooms, encounters, features), the character sheet, and Active Encounters. Do NOT invent or substitute values. **When you narrate rewards (XP, gold), you must say exactly the numbers from the Active Encounters block** — e.g. if it says "Say \"You discover 10 gold\"", write "You discover 10 gold" in your response. The app applies whatever numbers you write; if you say "8 gold" the player gets 8. So always use the numbers from the block so the narrative and the player's sheet match. Creativity in pacing and flavor is fine; the numbers must match the data.
+All concrete specifications (numbers, stats, DCs, mechanics) MUST come from the data blocks below. Do NOT invent or substitute values. **XP and gold on enemy defeat** are applied by the app via a mechanics callout (from the encounter's on_death); do NOT write XP or gold amounts in your narrative—describe the moment in flavor only (e.g. "A pouch of coins appears."). For other rewards (e.g. finding gold in a room), you may describe the find; the app may parse numbers from your text in those cases. Creativity in pacing and flavor is fine; do not repeat mechanics that the app already shows in callouts.
 
 # CRITICAL RULES
 
@@ -1798,10 +2442,20 @@ ${layoutBlock}
 - Shorter (20-40 words) for simple acknowledgments or quick narration
 - NEVER write 200+ word responses
 
-## WHO ROLLS — PLAYER ONLY ROLLS FOR THEIR OWN ACTIONS
-The player rolls ONLY for their own character's actions: their attack roll (d20), their damage roll (weapon dice), their skill/ability checks (Perception, Strength, etc.).
-- You (the GM) resolve ALL monster/NPC actions. Never ask the player to roll for the goblin, the monster, or any enemy. When the monster attacks, you determine the monster's attack roll (d20 + bonus) and hit/miss; when it **hits**, you must write **[MONSTER_DAMAGE]** in place of the damage number (e.g. "The goblin hits you for [MONSTER_DAMAGE] damage"). The app will replace [MONSTER_DAMAGE] with a real dice roll so damage is always random. Do NOT pick a number yourself for monster damage. Do NOT use [ROLL_REQUEST: ...] for monster attacks.
-- Only use [ROLL_REQUEST: ...] when the PLAYER's character is doing something that requires a roll (player attacks, player searches, player makes a check, player rolls damage after hitting).
+## WHAT NOT TO NARRATE (COMBAT NARRATIVE FORMAT)
+**Standard: Anything that appears in (or could appear in) a mechanics callout must NOT appear in your narrative.** The app shows dice rolls, results, and numbers in callouts; your job is flavor only.
+
+**Do NOT narrate any of the following:**
+- **Player attack:** No roll total, no AC, no "hit" or "miss" with numbers. Never write "18 vs 13 AC = hit", "your roll beats its AC", "to hit", "= hit", "= miss", or any roll/AC comparison. The app shows this in a callout. Narrate only the fiction: e.g. "Your longsword finds its mark!" or "The goblin dodges."
+- **Player damage / monster HP:** No damage numbers, no "X damage", no "the goblin has 3 HP left". The app shows damage and HP in callouts.
+- **Monster attack / monster damage:** No monster roll, no "the goblin rolls 17", no "hits you for 6 damage". On the monster's turn, include **[MONSTER_ATTACK]** and do NOT narrate hit or miss (e.g. "The goblin swings at you. [MONSTER_ATTACK] Your turn — what do you do?"). The app shows the callouts and adds a one-line outcome (hit or miss). You may still use **[MONSTER_DAMAGE]** alone for damage-only.
+- **XP or treasure on defeat:** No "you gain 25 XP", no "you discover 10 gold". The app shows and applies rewards in a callout. Optional flavor without numbers is fine (e.g. "A pouch drops to the ground.").
+
+**Do narrate:** Flavor only—what the player sees, hears, and feels. Describe the blow, the dodge, the death, the room; never the numbers. When a creature reaches 0 HP, narrate its death (it falls, crumples, is slain) and do not have it act again.
+
+## WHO ROLLS
+- **Player** rolls only for their own actions: attack (d20), damage (weapon dice), ability/skill checks. Use [ROLL_REQUEST: Attack], [ROLL_REQUEST: Damage], [ROLL_REQUEST: Strength], etc. The app shows the result in a callout.
+- **Monster attacks:** Include **[MONSTER_ATTACK]** (setup flavor only; do not narrate hit or miss). The app rolls, shows callouts, applies damage, and adds a one-line outcome. Do NOT use [ROLL_REQUEST: ...] for monsters.
 
 ## DICE ROLL REQUESTS (player actions only)
 Use EXACTLY one of these formats when the PLAYER must roll. The app shows the correct dice for each:
@@ -1813,9 +2467,7 @@ Use EXACTLY one of these formats when the PLAYER must roll. The app shows the co
 Do NOT ask for a d20 for damage or healing. Wait for the player to roll before continuing.
 
 ## HIT RULE — ATTACK ROLL VS AC
-An attack HITS only if the attack roll is **greater than or equal to** the target's AC.
-- Example: roll 14 vs AC 16 = MISS (14 < 16). Never say the attack hit.
-- Example: roll 16 vs AC 16 = HIT. Always state hit/miss correctly using this rule.
+An attack HITS only if the attack roll is **greater than or equal to** the target's AC. Use this rule to decide whether to request [ROLL_REQUEST: Damage] (on hit) or narrate a miss. Do not write the roll or AC in your narrative (e.g. never "18 vs 13 AC = hit")—the app shows that in a callout; use flavor only (e.g. "Your blade finds its mark!" or "The goblin dodges.").
 
 ## COMBAT STATE — YOU CONTROL IT
 **You decide when the party is in combat.** Include one of these tags in your response so the app tracks combat correctly:
@@ -1826,23 +2478,18 @@ The tag is stripped from the displayed text; the player will not see it. Use you
 ## INITIATIVE — PLAYER ACTS FIRST
 By default the **player acts first** in combat. Enemies attack first only if (1) they surprise the player (e.g. ambush, failed perception), or (2) the player explicitly defers ("I wait", "I hold my action", "they can go first"). When combat begins without surprise, prompt the player for their action first; do not have the monster attack before the player has had a chance to act.
 
-## COMBAT SEQUENCING - CRITICAL
-Combat happens in STRICT steps. Never combine steps:
+## COMBAT SEQUENCING
+Combat happens in strict steps. Never combine steps.
 
-**Player declares attack -> Wait**
-**Player rolls attack (d20) -> You compare to AC: if roll >= AC say HIT and use [ROLL_REQUEST: Damage]; if roll < AC say MISS and no damage roll**
-The number the player sends for attack rolls and ability checks **already includes condition penalties** (e.g. poisoned −2). The app applies these automatically; use the total they report when comparing to AC or DC.
-**Player rolls damage (weapon dice) -> You narrate damage effect -> Enemy's turn begins**
+**Player declares attack ->** You respond with flavor and [ROLL_REQUEST: Attack]. Do not write the roll or AC in your response.
+**Player rolls attack ->** You compare their total to the monster's AC (from Active Encounters). If roll >= AC, respond with flavor and [ROLL_REQUEST: Damage]. If roll < AC, respond with flavor only (e.g. "The goblin dodges."). Do not write "hit", "miss", or any numbers—the app shows the result in a callout.
+**Player rolls damage ->** You narrate the effect in flavor only (no damage number, no HP). Then the enemy's turn begins.
+**Enemy's turn ->** One sentence of flavor (monster attacks), then **[MONSTER_ATTACK]**, then "Your turn — what do you do?" Do not narrate hit or miss—the app adds the callouts and a one-line outcome.
 
-**KILL RULE — damage >= remaining HP = dead:** When the player's last message is a damage roll (e.g. "I rolled 11"), compare that number to the monster's **current HP remaining** in the Active Encounters block. If the damage roll is **greater than or equal to** that remaining HP, the monster is **defeated in this response** — narrate its death, award On death XP and treasure, and do not say it is still standing or has any HP left. Example: Goblin has 7 HP (or 4/7 remaining); player rolls 11 (or 5) — 11 >= 7 (or 5 >= 4), so the goblin is dead now.
+**KILL RULE:** When the player's last message is a damage roll, compare it to the monster's current HP in Active Encounters. If damage >= remaining HP, the monster is defeated—narrate its death in flavor. Do not narrate XP or gold; the app shows and applies those in a callout.
 
-**Enemy's turn -> You resolve the monster's attack yourself.** You determine the monster's d20 attack roll and hit/miss. When the monster **hits**, write the damage as **[MONSTER_DAMAGE]** (e.g. "hits you for [MONSTER_DAMAGE] damage") — the app will replace it with a real random roll. Do NOT ask the player to roll for the monster.
-
-**Monster attack roll (d20 + bonus) must vary:** When you decide the monster's attack roll, you MUST simulate a different result each time. The die can be 1–20; do NOT repeatedly use the same number (e.g. 12 or 14). Vary the roll so combat feels random.
-
-**Show enemy rolls in the narrative:** When the monster attacks, state the roll and result clearly. Examples: "The goblin attacks: <code>14 vs AC 16 = miss</code>." or "The goblin attacks: <code>17 to hit</code>, and hits you for [MONSTER_DAMAGE] damage." (The app will replace [MONSTER_DAMAGE] with the actual rolled number.)
-
-NEVER ask the player to roll for enemies. NEVER narrate enemy actions before player's damage roll. NEVER combine multiple steps in one response.
+Never ask the player to roll for monsters. Never narrate enemy actions before the player's damage roll. Never put roll results, AC, hit/miss, or damage numbers in your narrative.
+${combatFlowBlock}
 
 ## MELEE VS RANGED COMBAT
 **Melee combat** = combatants within reach to attack with handheld weapons.
@@ -1871,31 +2518,30 @@ The player's roll message will include "Natural 20 (critical success)" or "Natur
 
 ## MONSTERS — ONLY FROM ACTIVE ENCOUNTERS / EXACT STATS
 Use ONLY the monsters listed in "Active Encounters" for the current room. Do not invent or add any other monsters. **All monster stats (HP, AC, attack bonus, damage dice) come from the loaded monster data; do not substitute different numbers.**
-**Current HP is tracked for you** in the Active Encounters block (e.g. "3/7 HP remaining" or "DEFEATED (0/7 HP)"). If the player just dealt damage and that damage is >= the monster's current HP remaining, the monster is defeated **in your response** — narrate death and awards; do not say it is still standing. When the block already says **DEFEATED**, the monster is dead — narrate its death and award On death XP/treasure; do not say it is still alive or let it act again.
+**Current HP is tracked for you** in the Active Encounters block. If the player's damage >= the monster's remaining HP, the monster is defeated—narrate its death in flavor only (no XP/gold numbers; the app shows those in a callout). When the block says **DEFEATED**, the monster is dead—do not have it act or speak again.
 **Use the EXACT AC from the block:** Each monster's AC is the number given in Active Encounters (e.g. Goblin AC 13 — never say 15 or any other number). When judging whether the player's attack hits, compare their roll to this AC only. Do not substitute a different AC.
 Use the EXACT attack bonus and damage from the block. If Active Encounters is empty or says NONE, there are no monsters in this room. **For any dice you "roll" as GM (monster attacks, NPC checks, etc.), vary the result each time — do not repeatedly use the same number.**
 
-## STATE TRACKING — SAY EXACTLY WHAT IS IN THE JSON
-**The app parses your narrative and applies the numbers you write.** Whatever you say is what the player sees and what gets added to their sheet. If you write "You discover 8 gold" the player receives 8 gold. So you **must** use the exact numbers from the Active Encounters block — do not invent or round. The narrative and the reward must match.
-- Use explicit state tags (preferred; deterministic). These tags are hidden from the player:
-  - Player damage: **[DAMAGE_TO_PLAYER: 4]**
-  - Player healing: **[HEAL_PLAYER: 6]**
-  - Monster damage: **[DAMAGE_TO_MONSTER: encounter_id, 5]** (use encounter id from Active Encounters, e.g. goblin_morale_2)
-  - Monster defeated: **[MONSTER_DEFEATED: encounter_id]**
-  - Monster fled: **[MONSTER_FLED: encounter_id]** (for now this is tracked as defeated in panel/state)
-- Monster attack damage: keep using **[MONSTER_DAMAGE]** in narrative (e.g. "The goblin hits you for [MONSTER_DAMAGE] damage") and pair it with **[DAMAGE_TO_PLAYER: [MONSTER_DAMAGE]]** so the app can apply the same rolled number deterministically.
-- Healing narration should include the explicit tag too (e.g. "You heal 6 HP [HEAL_PLAYER: 6]").
-- **XP:** When narrating a defeat, say exactly the number from the block. If the block says "award exactly 25 XP" and "Say \"You gain 25 XP\"", write **"You gain 25 XP"** — not 20, not 30. The player will receive whatever number you write.
-- **Gold / treasure:** When the block says "Treasure (module): 10 gp" and "Say \"You discover 10 gold\"", write **"You discover 10 gold"** (or "10 gp") — not 8, not 12. Use the exact numbers and item names from the block so the player's inventory matches your words.
+## STATE TRACKING
+- **Monster damage to player:** On the monster's turn use **[MONSTER_ATTACK]** (setup flavor only; do not narrate hit/miss—app adds callouts and outcome). Or use **[MONSTER_DAMAGE]** alone for damage only. Do not write a number; do not use [DAMAGE_TO_PLAYER] for monster hits.
+- **Player damage/healing from other sources:** Use **[DAMAGE_TO_PLAYER: N]** or **[HEAL_PLAYER: N]** when you need to set HP by a specific amount (e.g. trap, hazard). Tags are stripped from the displayed text.
+- **Monster defeated/fled:** **[MONSTER_DEFEATED: encounter_id]** or **[MONSTER_FLED: encounter_id]** if you need to mark state explicitly.
+- **XP / gold on combat defeat:** Do not write XP or gold in your narrative. The app awards them via a callout when an enemy is defeated.
 - Pack item use: When the player uses a consumable or item from their Pack, say so explicitly (e.g. "You drink a healing potion", "You use the rope to climb", "You eat some rations"). For torch: when they light one from their pack, say "You pull out a torch and light it" — this updates Pack and shows the lit torch in Equipped. When they put it away, say "You put the torch back in your pack" or "You stow the torch" — this removes it from Equipped and adds 1 back to Pack. If they retrieve the rope later, say "You retrieve the rope".
 - **Conditions:** When the player gains or loses a condition from the ruleset, include exactly one of these so the app can track it: **[CONDITION: add poisoned]** or **[CONDITION: remove poisoned]** (use the condition id: poisoned, blessed, stunned, wounded, exhausted). The character panel shows current conditions and their effects. Apply condition effects exactly as stated in the rules (e.g. poisoned = −2 to attack and checks).
+- **Player death (0 HP):** When damage in your response reduces the player to 0 HP, keep your final narration **concise and dramatic** (one or two sentences). That text is shown on the death overlay only, not in the narrative panel. Example: "The blade finds its mark. Your vision fades as the chamber dims."
 
 ## FORMATTING
-Use only these HTML tags for emphasis. The player sees your text rendered as HTML. Do not use raw asterisks (e.g. ** or *) for bold or italic — use the tags below.
-- Bold: <b>like this</b> — for emphasis, names, damage numbers (e.g. "You take <b>4</b> damage").
-- Italic: <i>like this</i> — for thoughts, subtle emphasis.
-- Dice/mechanics: <code>like this</code> — for roll results (e.g. <code>14 vs AC 13 = hit</code>).
+Use only these HTML tags for emphasis. Do not use raw asterisks. Do not put any mechanics (rolls, AC, hit/miss, damage numbers, XP, gold) in your narrative—the app shows those in callouts.
+- Bold: <b>like this</b> for emphasis or names. Italic: <i>like this</i> for thoughts.
 
+${gameState.pendingLevelUpAck ? `
+## LEVEL-UP — ACKNOWLEDGE IN YOUR RESPONSE
+The player just reached **level ${gameState.pendingLevelUpAck.level}** and gained **${gameState.pendingLevelUpAck.hpGain} max HP**. In your response you MUST:
+1. Congratulate the player on leveling up.
+2. Briefly explain what improved: they are now level ${gameState.pendingLevelUpAck.level}, and their max HP increased by ${gameState.pendingLevelUpAck.hpGain} (from the level-up roll + CON).
+Then continue with the scene as normal. (This reminder is one-time only.)
+` : ''}
 # CURRENT GAME STATE
 Room: ${room.name} (id: ${gameState.currentRoom})
 Character: ${char.name} (${char.class} Level ${char.level})
@@ -1948,8 +2594,51 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             
             // Parse optional scene directives and strip control tags from visible text.
             let scene = parseSceneDirectives(response);
-            // Replace [MONSTER_DAMAGE] with a real dice roll so monster damage is always random (GM must not pick a number).
-            if (/\[MONSTER_DAMAGE\]/i.test(scene.cleanText)) {
+            let monsterDamageAlreadyApplied = false;
+            /** Deferred so display order is: GM block → callouts → outcome line (desired combat flow). */
+            const pendingMonsterCallouts = [];
+            let pendingMonsterOutcomeLine = null;
+
+            // Monster attack: compute rolls and strip tags; defer adding callouts until after GM narration.
+            if (/\[MONSTER_ATTACK\]/i.test(scene.cleanText)) {
+                const enc = getFirstActiveEncounterInCurrentRoom();
+                const monsterName = enc ? (enc.name || (resolveMonster(enc.monster_ref) && resolveMonster(enc.monster_ref).name) || 'Monster') : 'Monster';
+                const attackInfo = getMonsterAttackInfoForCurrentRoom();
+                const bonus = attackInfo ? attackInfo.bonus : 0;
+                const weaponName = attackInfo ? attackInfo.weaponName : 'attack';
+                const rangeLabel = (attackInfo && attackInfo.range && attackInfo.range !== 'melee') ? 'ranged' : 'melee';
+                const d20 = Math.floor(Math.random() * 20) + 1;
+                const total = d20 + bonus;
+                const playerAC = getEffectiveAC();
+                const hit = total >= playerAC;
+                pendingMonsterCallouts.push(`Attack Roll 1d20: ${d20} (${bonus >= 0 ? '+' : ''}${bonus}) = ${total} (${weaponName}/${rangeLabel})`);
+                pendingMonsterCallouts.push(hit ? `HIT: ${total} vs AC ${playerAC}` : `MISS: ${total} vs AC ${playerAC}`);
+                if (hit) {
+                    let formula = getMonsterDamageFormulaForCurrentRoom();
+                    if (!formula) formula = getMonsterDamageFormulaFromAnyRoom();
+                    if (!formula) formula = '1d6';
+                    const dmgResult = rollDiceFormula(formula);
+                    pendingMonsterCallouts.push(`${monsterName}: ${dmgResult.breakdown} (to you)`);
+                    modifyHP(-dmgResult.total);
+                    monsterDamageAlreadyApplied = true;
+                    pendingMonsterOutcomeLine = 'The blow lands and wounds you. Your turn — what do you do?';
+                    debugLog('PARSE', `Monster attack hit; damage: ${dmgResult.breakdown}`);
+                } else {
+                    pendingMonsterOutcomeLine = 'The attack misses. Your turn — what do you do?';
+                }
+                scene.cleanText = scene.cleanText.replace(/\[MONSTER_ATTACK\]/gi, '').replace(/\s+\./g, '.').replace(/\.\.+/g, '.').trim();
+                if (monsterDamageAlreadyApplied) {
+                    scene.cleanText = scene.cleanText
+                        .replace(/\s*for\s+\[MONSTER_DAMAGE\]\s*damage\.?/gi, '.')
+                        .replace(/\[MONSTER_DAMAGE\]/gi, '')
+                        .replace(/\s+\./g, '.')
+                        .replace(/\.\.+/g, '.')
+                        .trim();
+                }
+            }
+
+            // Monster damage (when GM uses [MONSTER_DAMAGE] without [MONSTER_ATTACK]): compute and strip; defer callout.
+            if (!monsterDamageAlreadyApplied && /\[MONSTER_DAMAGE\]/i.test(scene.cleanText)) {
                 let formula = getMonsterDamageFormulaForCurrentRoom();
                 if (!formula) formula = getMonsterDamageFormulaFromAnyRoom();
                 if (!formula) {
@@ -1957,26 +2646,40 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                     debugLog('PARSE', 'No monster damage formula found; using fallback 1d6');
                 }
                 const result = rollDiceFormula(formula);
-                scene = { cleanText: scene.cleanText.replace(/\[MONSTER_DAMAGE\]/gi, String(result.total)) };
+                const enc = getFirstActiveEncounterInCurrentRoom();
+                const monsterName = enc ? (enc.name || (resolveMonster(enc.monster_ref) && resolveMonster(enc.monster_ref).name) || 'Monster') : 'Monster';
+                pendingMonsterCallouts.push(`${monsterName}: ${result.breakdown} (to you)`);
+                modifyHP(-result.total);
+                scene.cleanText = scene.cleanText
+                    .replace(/\s*for\s+\[MONSTER_DAMAGE\]\s*damage\.?/gi, '.')
+                    .replace(/\[MONSTER_DAMAGE\]/gi, '')
+                    .replace(/\s+\./g, '.')
+                    .replace(/\.\.+/g, '.')
+                    .trim();
                 debugLog('PARSE', `Monster damage roll: ${result.breakdown}`);
             }
             const displayResponse = scene.cleanText
                 .replace(/\[COMBAT:\s*(on|off|true|false|yes|no)\]/gi, '')
+                .replace(/\[MODE:\s*(travel|exploration)\]/gi, '')
                 .replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, '')
                 .trim();
             
-            // Parse for state changes BEFORE displaying (use text with [MONSTER_DAMAGE] already replaced)
             parseStateChanges(scene.cleanText);
+            saveGame();
             
-            // Check for roll request (captures "Damage", "Healing Potion", "2d4+2", "Strength", etc.)
             const rollRequestPattern = /\[ROLL_REQUEST:\s*([^\]]+)\]/i;
             const match = displayResponse.match(rollRequestPattern);
             
-            if (match) {
+            if (gameState.isDead) {
+                const textToShow = displayResponse.replace(rollRequestPattern, '').trim() || displayResponse.trim();
+                showDeathOverlay(textToShow);
+                disableInput(true);
+            } else if (match) {
                 const ability = match[1].trim();
                 const abilityLower = ability.toLowerCase();
                 if (abilityLower === 'damage' || abilityLower.includes('attack')) {
                     gameState.inCombat = true;
+                    gameState.mode = 'combat';
                     ensureCombatRoomHasEncounters();
                     if (abilityLower === 'damage' && !gameState.readiedWeaponName) {
                         const sources = gameData.character && gameData.character.equipment
@@ -1994,7 +2697,10 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 if (formattedResponse) addNarration(formattedResponse);
                 showDiceSection(`Roll ${ability}:`, ability);
             } else {
+                // Desired order: GM block first, then monster callouts, then outcome line.
                 if (displayResponse) addNarration(displayResponse);
+                for (const line of pendingMonsterCallouts) addMechanicsCallout(line);
+                if (pendingMonsterOutcomeLine) addNarration(pendingMonsterOutcomeLine);
                 disableInput(false);
             }
         }
@@ -2010,15 +2716,19 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 for (const enc of room.encounters) {
                     const monster = resolveMonster(enc.monster_ref);
                     if (!monster) continue;
-                    // Prefer encounter-specific names (avoid broad matching on generic monster names like "Goblin").
-                    const names = [enc.name].filter(Boolean);
-                    const escapedNames = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+                    // Match encounter name, monster name, and first word of monster (e.g. "goblin" from "Goblin Warrior") so "the goblin takes 8 damage" parses.
+                    const nameList = [enc.name, monster.name].filter(Boolean);
+                    const firstWord = (monster.name || '').split(/\s+/)[0];
+                    if (firstWord && !nameList.includes(firstWord)) nameList.push(firstWord);
+                    // When using a generic short name (first word), only match in current room so we don't apply damage to same-named monsters in other rooms.
+                    if (firstWord && nameList.includes(firstWord) && roomId !== gameState.currentRoom) continue;
+                    const escapedNames = nameList.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
                     if (!escapedNames) continue;
                     const patterns = [
-                        new RegExp(`(?:the\\s+)?(?:${escapedNames})\\s+takes\\s+(\\d+)\\s+(?:damage|HP)`, 'gi'),
+                        new RegExp(`(?:the\\s+)?(?:${escapedNames})\\s+takes\\s+(\\d+)\\s+(?:damage|HP)?`, 'gi'),
                         new RegExp(`(?:hits?|strikes?|deals?)\\s+(?:the\\s+)?(?:${escapedNames})\\s+for\\s+(\\d+)\\s*(?:damage|HP)?`, 'gi'),
                         new RegExp(`(\\d+)\\s+(?:damage|HP)\\s+(?:to|against)\\s+(?:the\\s+)?(?:${escapedNames})`, 'gi'),
-                        new RegExp(`(?:deal|deals?|dealt)\\s+(?:the\\s+)?(?:${escapedNames})\\s+(\\d+)\\s+(?:damage|HP)`, 'gi'),
+                        new RegExp(`(?:deal|deals?|dealt)\\s+(?:the\\s+)?(?:${escapedNames})\\s+(\\d+)\\s+(?:damage|HP)?`, 'gi'),
                         new RegExp(`(?:deal|deals?|dealt)\\s+(\\d+)\\s+(?:damage|HP)\\s+(?:to|against)\\s+(?:the\\s+)?(?:${escapedNames})`, 'gi')
                     ];
                     for (const re of patterns) {
@@ -2028,6 +2738,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                             const damage = parseInt(m[1], 10);
                             gameState.damageToEncounters[enc.id] = (gameState.damageToEncounters[enc.id] || 0) + damage;
                             gameState.inCombat = true;
+                            gameState.mode = 'combat';
                             roomWithUpdate = roomId;
                             debugLog('PARSE', `Monster damage: ${enc.name} +${damage} (total: ${gameState.damageToEncounters[enc.id]}/${monster.hp})`);
                         }
@@ -2059,11 +2770,13 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                     const allDefeated = room.encounters.every(enc => getEncounterHP(enc).defeated);
                     if (allDefeated) {
                         gameState.inCombat = false;
+                        gameState.mode = 'exploration';
                         gameState.lastCombatRoom = roomWithUpdate;
                         debugLog('PARSE', 'Combat ended: all enemies defeated');
                     } else {
                         // Still in active combat in this room.
                         gameState.inCombat = true;
+                        gameState.mode = 'combat';
                     }
                 }
             }
@@ -2140,6 +2853,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 if (damage >= 1 && damage <= 999) {
                     if (!gameState.combatStateFromTag) {
                         gameState.inCombat = true;
+                        gameState.mode = 'combat';
                         ensureCombatRoomHasEncounters();
                     }
                     modifyHP(-damage);
@@ -2170,6 +2884,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 }
                 gameState.damageToEncounters[found.encounter.id] = (gameState.damageToEncounters[found.encounter.id] || 0) + damage;
                 gameState.inCombat = true;
+                gameState.mode = 'combat';
                 roomWithUpdate = found.roomId;
                 debugLog('PARSE', `Tag damage TO MONSTER: ${found.encounter.name} +${damage}`);
             }
@@ -2187,6 +2902,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 const currentDamage = gameState.damageToEncounters[found.encounter.id] || 0;
                 gameState.damageToEncounters[found.encounter.id] = Math.max(currentDamage, hp.max);
                 gameState.inCombat = true;
+                gameState.mode = 'combat';
                 roomWithUpdate = found.roomId;
                 debugLog('PARSE', `Tag monster defeated: ${found.encounter.name} (set to 0/${hp.max})`);
             }
@@ -2204,6 +2920,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 const currentDamage = gameState.damageToEncounters[found.encounter.id] || 0;
                 gameState.damageToEncounters[found.encounter.id] = Math.max(currentDamage, hp.max);
                 gameState.inCombat = true;
+                gameState.mode = 'combat';
                 roomWithUpdate = found.roomId;
                 debugLog('PARSE', `Tag monster fled (tracked as defeated): ${found.encounter.name} (set to 0/${hp.max})`);
             }
@@ -2217,6 +2934,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                     const allDefeated = room.encounters.every(enc => getEncounterHP(enc).defeated);
                     if (allDefeated) {
                         gameState.inCombat = false;
+                        gameState.mode = 'exploration';
                         gameState.lastCombatRoom = roomWithUpdate;
                         debugLog('PARSE', 'Combat ended: all enemies defeated (explicit tag)');
                     }
@@ -2262,12 +2980,14 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             const offMatch = text.match(/\[COMBAT:\s*(off|false|no)\]/i);
             if (onMatch) {
                 gameState.inCombat = true;
+                gameState.mode = 'combat';
                 gameState.combatStateFromTag = true;
                 ensureCombatRoomHasEncounters();
                 updateCharacterDisplay();
                 debugLog('PARSE', 'Combat state: on (GM tag)');
             } else if (offMatch) {
                 gameState.inCombat = false;
+                gameState.mode = 'exploration';
                 gameState.lastCombatRoom = gameState.currentRoom;
                 gameState.combatStateFromTag = true;
                 updateCharacterDisplay();
@@ -2282,6 +3002,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             const t = text.toLowerCase();
             if (/\bcombat\s+(?:begins?|starts?)\b/.test(t) || /\b(?:the\s+)?(?:fight|battle)\s+(?:begins?|starts?|is\s+on)\b/.test(t) || /\b(?:you\s+are\s+)(?:in\s+)?combat\b/.test(t)) {
                 gameState.inCombat = true;
+                gameState.mode = 'combat';
                 ensureCombatRoomHasEncounters();
                 updateCharacterDisplay();
                 debugLog('PARSE', 'Combat began (GM narrative fallback)');
@@ -2299,6 +3020,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 /\b(?:i'll\s+)(?:run\s+away|retreat|flee|escape)\b/.test(t);
             if (gmNarrative || playerDeclares) {
                 gameState.inCombat = false;
+                gameState.mode = 'exploration';
                 gameState.lastCombatRoom = gameState.currentRoom;
                 updateCharacterDisplay();
                 debugLog('PARSE', 'Combat ended: retreat/flee');
@@ -2389,6 +3111,22 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             }
         }
         
+        /** Parse [MODE: travel] and [MODE: exploration] — GM switches pillar. */
+        function tryParseModeTag(text) {
+            if (!text) return;
+            const travelMatch = text.match(/\[MODE:\s*travel\]/i);
+            const explorMatch = text.match(/\[MODE:\s*exploration\]/i);
+            if (travelMatch) {
+                gameState.mode = 'travel';
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Mode: travel (GM tag)');
+            } else if (explorMatch) {
+                gameState.mode = 'exploration';
+                updateCharacterDisplay();
+                debugLog('PARSE', 'Mode: exploration (GM tag)');
+            }
+        }
+
         function parseStateChanges(text) {
             debugLog('PARSE', 'Parsing state changes from AI response');
             gameState.combatStateFromTag = false; // reset; set true if GM used [COMBAT: on/off]
@@ -2397,6 +3135,7 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             plainText = plainText.replace(/\s+/g, ' ').trim();
             
             tryParseRoomChange(plainText);
+            tryParseModeTag(plainText);
             tryParseCombatTag(plainText);   // GM tag takes precedence
             tryParseCombatBegins(plainText);
             tryParseRetreat(plainText);
@@ -2406,7 +3145,8 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             tryParseConditions(plainText);
             const explicitState = parseExplicitStateTags(plainText);
             plainText = explicitState.text.replace(/\s+/g, ' ').trim();
-            if (!explicitState.hasMonsterDamageTag) {
+            // Skip narrative monster-damage parsing when damage was already applied from a mechanics callout (player just submitted a damage roll)
+            if (!explicitState.hasMonsterDamageTag && !gameState.lastUserMessageWasDiceRoll) {
                 parseMonsterDamage(plainText); // fallback only when no explicit monster damage tags are present
             }
             updateCharacterDisplay();
@@ -2423,14 +3163,23 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
             ];
             
             if (!explicitState.hasPlayerDamageTag) {
+                const lastUser = gameState.conversationHistory.length > 0 ? gameState.conversationHistory[gameState.conversationHistory.length - 1] : null;
+                const lastContent = (lastUser && lastUser.role === 'user' && lastUser.content) ? String(lastUser.content).trim() : '';
+                const lastUserDamageRoll = lastContent ? (lastContent.match(/^(?:i\s+rolled\s+)?(\d+)$/i) || lastContent.match(/(?:rolled\s+)?(\d+)\s*(?:for\s+damage|damage)?/i)) : null;
+                const lastRollValue = lastUserDamageRoll ? parseInt(lastUserDamageRoll[1], 10) : null;
                 for (const pattern of damageToPlayerPatterns) {
                     const match = plainText.match(pattern);
                     if (match) {
                         const damage = parseInt(match[1], 10);
                         if (damage >= 1 && damage <= 999) {
+                            if (lastRollValue !== null && damage === lastRollValue) {
+                                debugLog('PARSE', `Skipping damage TO PLAYER: ${damage} (same as player's last roll — likely GM meant monster took this damage)`);
+                                break;
+                            }
                             debugLog('PARSE', `Detected damage TO PLAYER: ${damage}`);
                             if (!gameState.combatStateFromTag) {
                                 gameState.inCombat = true;
+                                gameState.mode = 'combat';
                                 ensureCombatRoomHasEncounters();
                             }
                             modifyHP(-damage);
@@ -2458,42 +3207,79 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 }
             }
             
-            // Parse XP gains (use exactly what the GM says — GM must use module numbers in narrative)
-            const xpPattern = /(?:gain|earn|receive)\s+(\d+)\s+XP/i;
-            const xpMatch = plainText.match(xpPattern);
-            if (xpMatch) {
-                const xp = parseInt(xpMatch[1]);
-                debugLog('PARSE', `Detected XP gain: ${xp}`);
-                addXP(xp);
-            }
+            // XP and gold are NOT parsed from GM narrative — they come only from mechanics callouts (e.g. on enemy defeat). Do not double-award.
             
-            // Parse gold found (use exactly what the GM says — GM must use module numbers in narrative)
-            const goldPatterns = [
-                /(?:find|discover|obtain|gain)\s+(\d+)\s*gp/i,
-                /(\d+)\s+gold/i
-            ];
-            
-            for (const pattern of goldPatterns) {
-                const match = plainText.match(pattern);
-                if (match) {
-                    const gold = parseInt(match[1]);
-                    debugLog('PARSE', `Detected gold: ${gold}`);
-                    addToInventory('Gold', gold);
-                    break;
-                }
-            }
-            
-            // Parse item acquisition
+            // Parse item acquisition (find/discover/obtain) — weapon/armor -> equipment; else -> pack
             const itemPattern = /(?:find|discover|obtain|take)\s+(?:a|an|the)\s+([^.!?,]+?)(?:\.|!|,|\s+in\s+|\s+from\s+)/i;
             const itemMatch = plainText.match(itemPattern);
             if (itemMatch && !plainText.match(/gold|damage|HP/i)) {
                 const itemName = itemMatch[1].trim();
                 if (itemName.length < 30 && !itemName.includes('you') && !itemName.includes('your')) {
-                    debugLog('PARSE', `Detected item: ${itemName}`);
-                    addToInventory(itemName, 1);
+                    const catalog = getEquipmentCatalog();
+                    const key = itemName.toLowerCase().replace(/\s+/g, ' ').trim().replace(/^(?:a|an|the)\s+/, '');
+                    let spec = catalog.get(key);
+                    if (!spec) {
+                        for (const [k, v] of catalog) {
+                            if (key.includes(k) || k.includes(key)) { spec = v; break; }
+                        }
+                    }
+                    if (spec && (spec.damage || (spec.type || '').toLowerCase() === 'armor')) {
+                        debugLog('PARSE', `Detected equipment: ${itemName}`);
+                        addEquipmentItem(spec);
+                    } else {
+                        debugLog('PARSE', `Detected item: ${itemName}`);
+                        addToInventory(itemName, 1);
+                    }
+                }
+            }
+
+            // Parse purchases (buy X for Y gp / pay Y gp for X) — deduct gold, add item to equipment or pack
+            const buyPatterns = [
+                /(?:you\s+)?(?:buy|purchase)\s+(?:a|an|the)?\s*([^.!?,]+?)\s+for\s+(\d+)\s*(?:gp|gold)/i,
+                /(?:you\s+)?pay\s+(\d+)\s*(?:gp|gold)\s+for\s+(?:a|an|the)?\s*([^.!?,]+?)(?:\.|,|$)/i
+            ];
+            for (const pat of buyPatterns) {
+                const m = plainText.match(pat);
+                if (m) {
+                    const amount = parseInt(pat.source.includes('pay') ? m[1] : m[2], 10);
+                    const itemPhrase = (pat.source.includes('pay') ? m[2] : m[1]).trim();
+                    if (amount > 0 && itemPhrase.length < 40 && deductGold(amount)) {
+                        const catalog = getEquipmentCatalog();
+                        const key = itemPhrase.toLowerCase().replace(/\s+/g, ' ').trim().replace(/^(?:a|an|the)\s+/, '');
+                        let spec = catalog.get(key);
+                        if (!spec) {
+                            for (const [k, v] of catalog) {
+                                if (key.includes(k) || k.includes(key)) { spec = v; break; }
+                            }
+                        }
+                        if (spec && (spec.damage || (spec.type || '').toLowerCase() === 'armor')) {
+                            debugLog('PARSE', `Detected purchase (equipment): ${itemPhrase} for ${amount} gp`);
+                            addEquipmentItem(spec);
+                        } else {
+                            debugLog('PARSE', `Detected purchase: ${itemPhrase} for ${amount} gp`);
+                            addToInventory(itemPhrase, 1);
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // Parse dropping/leaving items (you drop/leave/discard X)
+            const dropPattern = /(?:you|your character)\s+(?:drop|leave|discard)\s+(?:the\s+|a\s+|an\s+|your\s+)?([^.!?,]+?)(?:\.|,|\s+on\s+|\s+behind|\s+there|$)/i;
+            const dropMatch = plainText.match(dropPattern);
+            if (dropMatch) {
+                const phrase = dropMatch[1].trim().toLowerCase().replace(/\s+/g, ' ');
+                const inv = gameState.character.inventory || [];
+                const exact = inv.find(i => i.name && i.name.toLowerCase() === phrase);
+                const fuzzy = inv.find(i => i.name && (phrase.includes(i.name.toLowerCase()) || i.name.toLowerCase().includes(phrase)));
+                const item = exact || fuzzy;
+                if (item && item.name !== 'Gold') {
+                    removeFromInventory(item.name, 1);
+                    debugLog('PARSE', `Detected drop: ${item.name}`);
                 }
             }
             
+            gameState.lastUserMessageWasDiceRoll = false; // reset after processing so next turn is fresh
             tryParsePackItemUse(plainText, false); // GM response (skip if already parsed from player)
         }
 
@@ -2651,12 +3437,8 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
         // DEBUG PANEL TOGGLE
         // ============================================
         
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-                const panel = document.getElementById('debugPanel');
-                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-            }
-        });
+        // Debug panel toggle disabled for Phase 2 (panel removed from layout)
+        // document.addEventListener('keydown', (e) => { if (e.ctrlKey && e.shiftKey && e.key === 'D') { ... } });
 
         // ============================================
         // START GAME
@@ -2669,7 +3451,17 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                 console.error('[INIT] Template loading failed, cannot start game');
                 return;
             }
-            console.log('[INIT] Templates loaded, initializing game');
+            console.log('[INIT] Templates loaded, fetching server config');
+            try {
+                const configRes = await fetch('/api/config');
+                if (configRes.ok) {
+                    const config = await configRes.json();
+                    if (config.model) CONFIG.MODEL = config.model;
+                }
+            } catch (e) {
+                console.warn('[INIT] Could not fetch /api/config, using default MODEL');
+            }
+            console.log('[INIT] Initializing game');
             debugLog('INIT', 'Page loaded, initializing game');
             initializeGame();
         });

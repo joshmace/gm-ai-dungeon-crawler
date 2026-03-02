@@ -1,0 +1,10 @@
+{
+  "id": "village_three_knots",
+  "name": "The Haunting of Three Knots",
+  "version": "1.0",
+  "setting": "./setting_shattered_realms.json",
+  "rules": "./rules.json",
+  "bestiary": "./monster_manual.json",
+  "adventure_module": "./module_village_three_knots.json",
+  "character": "./character_village_three_knots.json"
+}

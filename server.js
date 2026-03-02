@@ -10,6 +10,7 @@ require('dotenv').config();
 // CONFIGURATION
 const PORT = process.env.PORT || 8000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const AI_MODEL = process.env.AI_MODEL || 'claude-sonnet-4-20250514';
 // MIME types for static files
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -67,6 +68,13 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // GET /api/config — system-level config (e.g. AI model) for client display
+    if (req.method === 'GET' && req.url === '/api/config') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ model: AI_MODEL }));
+        return;
+    }
+
     // API proxy: POST /api/messages
     if (req.method === 'POST' && req.url === '/api/messages') {
         if (!ANTHROPIC_API_KEY) {
@@ -85,7 +93,7 @@ const server = http.createServer((req, res) => {
                 const requestData = JSON.parse(body);
 
                 const anthropicData = JSON.stringify({
-                    model: requestData.model || 'claude-sonnet-4-20250514',
+                    model: AI_MODEL || requestData.model || 'claude-sonnet-4-20250514',
                     max_tokens: requestData.max_tokens || 2000,
                     system: requestData.system,
                     messages: requestData.messages

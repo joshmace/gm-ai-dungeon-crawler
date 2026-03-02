@@ -1,7 +1,83 @@
 # AI Dungeon Crawler - Development Backlog
 
-**Last Updated:** February 1, 2026  
-**Status:** Active tracking - prioritization TBD
+**Last Updated:** February 21, 2026  
+**Status:** Active tracking — Pre–long-adventure priorities defined
+
+---
+
+## Pre–Long-Adventure: Priority & Plan
+
+These 16 features are prioritized so you can run and test longer adventures. Order is by dependency and impact.
+
+### Priority Tiers
+
+| # | Feature | Tier | Rationale |
+|---|--------|------|-----------|
+| 14 | Game state saving | **Tier 1** | Long sessions need save/load or progress is lost. |
+| 15 | Player death | **Tier 1** | Proper end state, restart/continue options. |
+| 1 | Leveling 1–10 (max 10) | **Tier 1** | Core progression; already have XP, need level-up flow. |
+| 12 | Individual weapon and armor stats | **Tier 2** | Foundation for equipping and comparing gear. |
+| 2 | Finding/buying new weapons and equipping | **Tier 2** | Depends on 12. |
+| 3 | Finding/buying new armor and equipping | **Tier 2** | Depends on 12. |
+| 4 | Visiting a shop and making purchases | **Tier 2** | Economy + 2/3. |
+| 5 | Managing pack inventory explicitly | **Tier 2** | Add/drop/use from pack; ties to 2/3/4. |
+| 11 | Remove debug panel (for now) | **Tier 2** | Quick cleanup; re-add later when enhanced. |
+| 6 | Non-combat encounters, NPCs, skill checks | **Tier 3** | Richer play; builds on existing roll/DC flow. |
+| 7 | Spell casting and spell management | **Tier 3** | Spell slots, scaling with level. |
+| 13 | Character builder / character management | **Tier 3** | Create/edit/load characters. |
+| 16 | Custom character portraits | **Tier 3** | UI polish; can follow 13. |
+| 10 | Map support (module map in character panel) | **Tier 4** | Found/purchased map; display + navigation. |
+| 9 | Pre-made image references (rooms, monsters, NPCs) | **Tier 4** | Module/monster manual images at appropriate times. |
+| 8 | Multiple characters (full party, single user) | **Tier 4** | Larger scope; turn/initiative, shared state. |
+
+### Implementation Plan (Phases)
+
+**Phase 1 – Foundation (must-have for long play)**  
+1. **Game state saving** — localStorage (or IndexedDB) save/load; save on key events + manual; load on start.  
+2. **Player death** — Death screen, “Restart adventure” / “New character” / “Load save”; no input until choice.  
+3. **Leveling 1–10** — Level-up when XP ≥ threshold; apply HP/ability bumps per rules; max level 10; UI update.
+
+**Phase 2 – Equipment & economy**  
+4. **Individual weapon and armor stats** — Ensure module/character data has per-item stats; UI shows and uses them.  
+5. **Finding/buying weapons and equipping** — Parse “find/buy [weapon]”; add to inventory; equip/readied flow.  
+6. **Finding/buying armor and equipping** — Same for armor; AC and “armor equipped” state.  
+7. **Shop visits and purchases** — Shop room/state; parse “buy X for Y gp”; deduct gold, add item; optional shop UI.  
+8. **Pack inventory management** — Explicit add/drop/use from pack; parsing + UI (e.g. use/drop from pack list).  
+9. **Remove debug panel** — Hide or remove from layout; keep code for later.
+
+**Phase 3 – Encounters & characters**  
+10. **Non-combat NPCs and skill checks** — NPCs in modules; skill-check outcomes; state flags for “talked to X”.  
+11. **Spell casting and spell management** — Spell list, slots, slot recovery; level scaling; roll requests for spells.  
+12. **Character builder / management** — Create character (abilities, class, name, starting gear); save/load character.  
+13. **Custom character portraits** — Upload or pick portrait; store with character; show in panel.
+
+**Phase 4 – Content & party**  
+14. **Map support** — Module-defined map image; “found/purchased” flag; show in character panel; optional room highlight.  
+15. **Pre-made images** — References in module/monster manual; show room/monster/NPC image at appropriate time in narrative.  
+16. **Multiple characters (party)** — Party list, active character, turn/initiative; shared inventory or per-character; single user.
+
+### Status (Pre–Long-Adventure)
+
+| # | Feature | Status |
+|---|--------|--------|
+| 1 | Leveling 1–10 | Done |
+| 2 | Weapons: find/buy & equip | Done |
+| 3 | Armor: find/buy & equip | Done |
+| 4 | Shop and purchases | Done |
+| 5 | Pack inventory management | Done (drop/leave parsing; use already existed) |
+| 6 | NPCs and skill-check encounters | Not started |
+| 7 | Spell casting and spell management | Not started |
+| 8 | Multiple characters (party) | Not started |
+| 9 | Pre-made image references | Not started |
+| 10 | Map support | Not started |
+| 11 | Remove debug panel | Done |
+| 12 | Individual weapon/armor stats | Done |
+| 13 | Character builder/management | Not started |
+| 14 | Game state saving | Done |
+| 15 | Player death | Done |
+| 16 | Custom character portraits | Not started |
+
+*Update the Status column as work progresses (e.g. “In progress”, “Done”).*
 
 ---
 
@@ -17,7 +93,7 @@
 - [ ] Validate AI is following all rules (automated checks)
 
 #### Persistence & Storage
-- [ ] Implement localStorage for basic save/load functionality
+- [x] Implement localStorage for basic save/load functionality
 - [ ] Consider IndexedDB for more robust storage
 - [ ] Add browser refresh warning ("unsaved progress will be lost")
 - [ ] Cloud save system (future)
@@ -31,10 +107,10 @@
 - [ ] Retry logic with exponential backoff
 
 #### Death & Game Over
-- [ ] Proper death handling flow (currently just disables input)
+- [x] Proper death handling flow (currently just disables input)
 - [ ] Character sheet save on death
 - [ ] Option to create new character after death
-- [ ] Option to restart adventure
+- [x] Option to restart adventure
 - [ ] Death statistics/memorial
 
 #### Character Creation
@@ -99,7 +175,7 @@
 #### Multiplayer/Party Prep
 - [ ] Multiple character management
 - [ ] Turn order for party members
-- [ - Party inventory (shared/personal distinction)
+- [ ] Party inventory (shared/personal distinction)
 - [ ] Character switching interface
 - [ ] Real-time multiplayer (ambitious)
 
@@ -159,11 +235,10 @@
 
 ## Notes
 
-- Items marked with [ ] are not started
-- Items marked with [x] are completed
-- Priority levels will be assigned later (P0-Critical, P1-High, P2-Medium, P3-Nice to have)
-- Some items may be split into multiple tasks during implementation
-- Dependencies between items will be mapped during prioritization
+- Items marked with [ ] are not started; [x] = completed.
+- **Pre–Long-Adventure** (top section) is the source of truth for the 16 features and their implementation order; update the Status table as work completes.
+- Older backlog items below remain for later prioritization; some overlap with Pre–Long-Adventure (e.g. death, save/load, character creation).
+- Dependencies between items are reflected in the Phase order in the implementation plan.
 
 ---
 
