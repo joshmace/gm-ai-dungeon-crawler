@@ -6,6 +6,7 @@
     <title>AI Dungeon Crawler - v2 Testing Build</title>
     <link rel="stylesheet" href="./styles/main.css">
     <script src="https://kit.fontawesome.com/f4b50dbafe.js" crossorigin="anonymous"></script>
+    <script src="./scripts/rules-engine.js"></script>
 </head>
 <body>
     <!-- Template placeholders - populated by template loader -->
@@ -26,6 +27,10 @@
             'encounter-panel': './templates/encounter-panel.html'
         };
 
+        const SYSTEM_PROMPT_URL = './ai-gm-system-prompt.md';
+        /** GM system prompt template (loaded at startup). Dynamic values filled in by buildSystemPrompt() via {{PLACEHOLDER}} substitution. */
+        let SYSTEM_PROMPT_TEMPLATE = '';
+
         async function loadTemplate(name) {
             const response = await fetch(TEMPLATES[name]);
             if (!response.ok) throw new Error(`Failed to load template: ${name}`);
@@ -34,18 +39,24 @@
 
         async function loadAllTemplates() {
             try {
-                const [loadingOverlay, characterPanel, narrativePanel, encounterPanel] = await Promise.all([
+                const [loadingOverlay, characterPanel, narrativePanel, encounterPanel, systemPrompt] = await Promise.all([
                     loadTemplate('loading-overlay'),
                     loadTemplate('character-panel'),
                     loadTemplate('narrative-panel'),
-                    loadTemplate('encounter-panel')
+                    loadTemplate('encounter-panel'),
+                    fetch(SYSTEM_PROMPT_URL).then(r => {
+                        if (!r.ok) throw new Error('Failed to load GM system prompt');
+                        return r.text();
+                    })
                 ]);
 
                 document.getElementById('template-loading-overlay').outerHTML = loadingOverlay;
                 // Debug panel removed for Phase 2; re-enable later when enhanced (was: debug-panel template)
-                
+
                 const appContainer = document.getElementById('app-container');
                 appContainer.innerHTML = characterPanel + narrativePanel + encounterPanel;
+
+                SYSTEM_PROMPT_TEMPLATE = systemPrompt;
 
                 return true;
             } catch (error) {
@@ -75,8 +86,10 @@
                 character: './character_aldric.json'
             },
             API_ENDPOINT: '/api/messages',
+            /** Stream GM responses via SSE; set false to fall back to single-shot JSON. */
+            STREAM: true,
             /** GM model; overridden by server from /api/config (system-level AI_MODEL). */
-            MODEL: 'claude-sonnet-4-20250514',
+            MODEL: 'claude-sonnet-4-5',
             /** Max tokens per GM reply. Lower = less output cost. Easily configurable via Debug Panel → API / Usage. */
             MAX_TOKENS: 1200,
             /** Conversation turns sent with each request. Lower = less input cost. Easily configurable via Debug Panel → API / Usage. */
@@ -289,12 +302,8 @@
             isDead: false,
             /** True when the last user message was a dice roll submit; skip parsing monster damage from GM narrative to avoid double-count. */
             lastUserMessageWasDiceRoll: false,
-            /** When in combat: 'attack' | 'damage' | 'ability' if the last user message was a roll submit; null if last was free text. Used to enforce mandatory combat step. */
+            /** Last roll type: 'resolved' (attack auto-resolved by rules engine) | 'ability' | null (free-form). Drives the current-step hint in the combat prompt. */
             lastUserRollType: null,
-            /** After an attack roll submit: total, monster AC, and whether it hit. Used to inject explicit HIT/MISS into prompt so GM cannot narrate wrong outcome. Not persisted. */
-            lastAttackRollTotal: null,
-            lastAttackRollAC: null,
-            lastAttackWasHit: null,
         };
 
         // ============================================
@@ -1594,6 +1603,72 @@
             }
         }
 
+        /** Control tags that must not render during streaming (stripped from live display; still parsed from full text on completion). */
+        const CONTROL_TAG_RE = /\[[A-Z][A-Z_]*(?:\s*:\s*[^\]]*)?\]/g;
+
+        /** Ensure the progressive narration div exists and return its inner content element. Replaces the "GM is thinking" indicator on first delta. */
+        function ensureStreamingNarration() {
+            let entry = document.getElementById('streamingNarration');
+            if (entry) return entry.querySelector('.gm-narration');
+            removeLoadingIndicator();
+            const scroll = document.getElementById('narrativeScroll');
+            entry = document.createElement('div');
+            entry.className = 'narrative-entry';
+            entry.id = 'streamingNarration';
+            entry.innerHTML = '<div class="gm-narration"></div>';
+            scroll.appendChild(entry);
+            return entry.querySelector('.gm-narration');
+        }
+
+        /** Update the streaming narration div with cleaned, progressively-grown text. */
+        function updateStreamingNarration(fullText) {
+            const target = ensureStreamingNarration();
+            const cleaned = fullText.replace(CONTROL_TAG_RE, '').replace(/\s{2,}/g, ' ').trim();
+            target.innerHTML = normalizeNarrativeFormatting(cleaned);
+            scrollToBottom();
+        }
+
+        /** Remove the streaming narration div. The final, fully-parsed narration is added by processAIResponse. */
+        function removeStreamingNarration() {
+            const entry = document.getElementById('streamingNarration');
+            if (entry) entry.remove();
+        }
+
+        /** Read Anthropic Messages SSE and return the full assistant text. Updates the streaming narration as deltas arrive. */
+        async function readAnthropicStream(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let fullText = '';
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                // SSE events are separated by blank lines. Process any complete events in the buffer.
+                let nl;
+                while ((nl = buffer.indexOf('\n\n')) !== -1) {
+                    const rawEvent = buffer.slice(0, nl);
+                    buffer = buffer.slice(nl + 2);
+                    for (const line of rawEvent.split('\n')) {
+                        if (!line.startsWith('data:')) continue;
+                        const payload = line.slice(5).trim();
+                        if (!payload) continue;
+                        let evt;
+                        try { evt = JSON.parse(payload); } catch (e) { continue; }
+                        if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
+                            fullText += evt.delta.text;
+                            updateStreamingNarration(fullText);
+                        } else if (evt.type === 'message_stop') {
+                            // end of stream; outer loop will exit on reader.done
+                        } else if (evt.type === 'error') {
+                            throw new Error(evt.error && evt.error.message ? evt.error.message : 'Stream error');
+                        }
+                    }
+                }
+            }
+            return fullText;
+        }
+
         /** Build plain-text copy of narrative panel for playtest feedback. Copies to clipboard; returns the text. */
         function copyNarrativeToClipboard() {
             const scroll = document.getElementById('narrativeScroll');
@@ -1799,7 +1874,7 @@
                     ? `${diceExpr} (${rollsStr})${modStr2} = ${total}`
                     : `${diceExpr} (${rollsStr}) = ${total}`;
             }
-            return { total, breakdown };
+            return { total, breakdown, diceTotal };
         }
 
         /** True if this d20 roll context is for an attack roll (affects crit success → double damage; crit failure → auto-miss). */
@@ -1973,7 +2048,9 @@
             if (ctx.type === 'weapon') {
                 const isCrit = gameState.lastD20Natural === 20 && gameState.lastRollWasAttack;
                 const result = rollWeaponDamage(isCrit);
-                processDiceRoll(result.total, ctx, { damageBreakdown: result.breakdown, isCriticalHit: isCrit });
+                // Pass the raw dice sum (not `total`). processDiceRoll's weapon branch applies the modifier and crit doubling itself;
+                // passing `total` would double-count the modifier.
+                processDiceRoll(result.diceTotal, ctx, { damageBreakdown: result.breakdown, isCriticalHit: isCrit });
             } else if (ctx.type === 'custom') {
                 const rolls = [];
                 let sum = 0;
@@ -2019,6 +2096,8 @@
             const pendingCtx = gameState.pendingRollContext;
             const rollType = (pendingCtx && pendingCtx.rollType) || inferRollContextType((pendingCtx && pendingCtx.abilityName) || '');
             if (!ctx) return;
+            /** When the rules engine auto-resolves damage on an attack hit, we send a combined user message and suppress the normal "I rolled X" wording. */
+            let autoResolvedMessage = null;
             
             if (ctx.type === 'weapon') {
                 const isCrit = options.isCriticalHit || (gameState.lastD20Natural === 20 && gameState.lastRollWasAttack);
@@ -2078,11 +2157,32 @@
                 const modVal = modForCallout && modForCallout.modifier != null ? modForCallout.modifier : 0;
                 const callout = `Attack Roll 1d20: ${roll} (${signed(modVal)}) = ${totalToSend} (${weaponLabel})\n${hit ? 'HIT' : 'MISS'}: ${totalToSend} vs AC ${ac}`;
                 addMechanicsCallout(callout);
-                // Store so next GM prompt gets explicit HIT/MISS and cannot narrate wrong outcome
                 const forcedMiss = (roll === 1);
-                gameState.lastAttackRollTotal = totalToSend;
-                gameState.lastAttackRollAC = ac;
-                gameState.lastAttackWasHit = !forcedMiss && hit;
+                const isHit = !forcedMiss && hit;
+
+                // Rules engine: on a hit, prompt the player to roll damage (same UI as before), but stash the
+                // attack context so the damage submission composes a single combined user message — no separate
+                // GM round-trip between attack and damage. On a miss, send the miss to the GM immediately.
+                if (isHit && enc && weaponObj) {
+                    const isCrit = roll === 20;
+                    const mon = resolveMonster(enc.monster_ref);
+                    const encName = enc.name || (mon && mon.name) || 'Enemy';
+                    gameState.pendingAttackResolution = {
+                        encounterId: enc.id,
+                        encounterName: encName,
+                        attackTotal: totalToSend,
+                        attackAC: ac,
+                        isCrit
+                    };
+                    // d20 tracking is what triggers the crit path in the damage branch; keep it set.
+                    gameState.lastD20Natural = roll;
+                    gameState.lastRollWasAttack = true;
+                    // Show the damage prompt directly; the player's damage click will then produce the combined GM message.
+                    showDiceSection('Roll Damage', 'Damage');
+                    return;
+                } else if (!isHit) {
+                    autoResolvedMessage = `I attacked. Attack ${totalToSend} vs AC ${ac} — MISS. Narrate the miss; do not request a damage roll.`;
+                }
             } else if (rollType === 'damage' && (ctx.type === 'weapon' || ctx.type === 'custom')) {
                 const w = ctx.type === 'weapon' ? getEquippedWeaponDamage() : null;
                 const weaponObj = ctx.type === 'weapon' ? getReadiedWeaponObject() : null;
@@ -2140,6 +2240,24 @@
                     addMechanicsCallout(xpTreasureLine);
                 }
                 saveGame();
+
+                // Rules engine: if this damage roll was chained from an auto-resolved attack hit,
+                // compose a combined user message so the GM narrates the full HIT+damage outcome in one turn.
+                if (ctx.type === 'weapon' && gameState.pendingAttackResolution) {
+                    const atk = gameState.pendingAttackResolution;
+                    const enc = getFirstActiveEncounterInCurrentRoom()
+                        || (gameData.module && gameData.module.rooms && gameData.module.rooms[gameState.currentRoom]
+                            && (gameData.module.rooms[gameState.currentRoom].encounters || []).find(e => e.id === atk.encounterId));
+                    const hpInfo = enc ? getEncounterHP(enc) : null;
+                    const status = hpInfo && hpInfo.defeated
+                        ? `${atk.encounterName} is defeated`
+                        : hpInfo
+                            ? `${atk.encounterName} is still standing (${hpInfo.current}/${hpInfo.max} HP)`
+                            : `${atk.encounterName}`;
+                    const critNote = atk.isCrit ? ' (critical hit)' : '';
+                    autoResolvedMessage = `I attacked ${atk.encounterName}. Attack ${atk.attackTotal} vs AC ${atk.attackAC} — HIT${critNote} for ${totalToSend} damage. ${status}. The app has resolved the attack and applied damage; narrate the outcome and, if any enemy remains, proceed to the monster's turn.`;
+                    gameState.pendingAttackResolution = null;
+                }
             } else if (rollType === 'ability' && ctx.type !== 'weapon') {
                 const abilityInfo = ctx.ability ? getAbilityModifierForRoll(ctx.ability) : null;
                 const abLabel = (abilityInfo && abilityInfo.label) ? abilityInfo.label.replace(/\s*\(.*\)/, '').toUpperCase().slice(0, 3) : 'CHK';
@@ -2153,14 +2271,20 @@
             if (!addedCallout) addSystemMessage(message);
             hideDiceSection();
             
-            const rollMessage = `I rolled a ${totalToSend != null ? totalToSend : roll}.${rollMessageSuffix}`;
+            const rollMessage = autoResolvedMessage || `I rolled a ${totalToSend != null ? totalToSend : roll}.${rollMessageSuffix}`;
             if (rollType === 'damage' && ctx.type === 'weapon') gameState.lastUserMessageWasDiceRoll = true; // skip parsing monster damage from GM narrative (we applied it from callout)
-            if (rollType === 'attack' || rollType === 'damage' || rollType === 'ability') gameState.lastUserRollType = rollType; // so next GM prompt can enforce combat step
+            if (autoResolvedMessage) {
+                // Attack auto-resolved (hit or miss): prompt uses 'resolved' branch — narrate, then monster turn.
+                gameState.lastUserRollType = 'resolved';
+                gameState.lastUserMessageWasDiceRoll = true;
+            } else if (rollType === 'attack' || rollType === 'damage' || rollType === 'ability') {
+                gameState.lastUserRollType = rollType; // so next GM prompt can enforce combat step
+            }
             gameState.conversationHistory.push({
                 role: "user",
                 content: rollMessage
             });
-            
+
             callAIGM();
         }
 
@@ -2230,9 +2354,6 @@
             }
             
             gameState.lastUserRollType = null; // player is taking a new action (not responding to a roll)
-            gameState.lastAttackRollTotal = null;
-            gameState.lastAttackRollAC = null;
-            gameState.lastAttackWasHit = null;
             gameState.conversationHistory.push({
                 role: "user",
                 content: action
@@ -2285,12 +2406,13 @@
                         model: CONFIG.MODEL,
                         max_tokens: CONFIG.MAX_TOKENS,
                         system: systemPrompt,
-                        messages: messages
+                        messages: messages,
+                        stream: !!CONFIG.STREAM
                     })
                 });
 
-                const responseText = await response.text();
                 if (!response.ok) {
+                    const responseText = await response.text();
                     let detail = responseText;
                     try {
                         const err = JSON.parse(responseText);
@@ -2299,21 +2421,29 @@
                     throw new Error(`API error: ${response.status} - ${detail}`);
                 }
 
-                const data = JSON.parse(responseText);
+                let aiResponse;
+                const contentType = response.headers.get('content-type') || '';
+                if (CONFIG.STREAM && contentType.includes('text/event-stream')) {
+                    aiResponse = await readAnthropicStream(response);
+                } else {
+                    const data = await response.json();
+                    aiResponse = data.content[0].text;
+                }
                 removeLoadingIndicator();
-                
-                const aiResponse = data.content[0].text;
+                removeStreamingNarration();
+
                 debugLog('AI', 'Received AI response', { length: aiResponse.length });
-                
+
                 gameState.conversationHistory.push({
                     role: "assistant",
                     content: aiResponse
                 });
-                
+
                 processAIResponse(aiResponse);
                 
             } catch (error) {
                 removeLoadingIndicator();
+                removeStreamingNarration();
                 console.error('AI GM Error:', error);
                 
                 let errorMsg = 'Unknown error';
@@ -2368,34 +2498,17 @@
             const lastRoll = gameState.lastUserRollType;
             let combatFlowBlock = '';
             if (hasActiveEncounter) {
-                const steps = `1. **Player action** — Player declares what they do (e.g. "I attack the goblin"). You respond with flavor only and [ROLL_REQUEST: Attack]. Nothing else. Wait for the roll.
-2. **After attack roll** — Player just submitted their attack roll. You respond with flavor only. If roll >= monster AC: include [ROLL_REQUEST: Damage]. If roll < AC: flavor only (narrate the miss). Nothing else. Wait for the roll or for player's next action.
-3. **After damage roll** — Player just submitted their damage roll. You respond with flavor only (the blow's effect). If the monster is defeated (damage >= its remaining HP), narrate its death in flavor; do not narrate XP or gold. Then: if any enemy is still alive, their turn begins (go to step 4). If all are defeated, include [COMBAT: off] and end.
-4. **Monster turn** — You respond with flavor only: one sentence for the monster attacking, then **[MONSTER_ATTACK]** (nothing else). Example: "The goblin snarls and swings its scimitar at you. [MONSTER_ATTACK]" Do NOT narrate hit or miss; the app will show the callouts and add the outcome line (including "Your turn — what do you do?"). Do not write the monster's roll or damage number.`;
-                let currentStep = '';
-                if (lastRoll === 'attack') {
-                    const atkTotal = gameState.lastAttackRollTotal;
-                    const atkAC = gameState.lastAttackRollAC;
-                    const atkHit = gameState.lastAttackWasHit;
-                    if (atkTotal != null && atkAC != null && atkHit !== null) {
-                        currentStep = `**ATTACK RESULT (you must obey this):** The player's attack roll total is **${atkTotal}**. Monster AC is **${atkAC}**. This is a **${atkHit ? 'HIT' : 'MISS'}**. You MUST ${atkHit ? 'respond with flavor describing a hit and include [ROLL_REQUEST: Damage]. Do NOT narrate a miss.' : 'respond with flavor describing a MISS only. Do NOT include [ROLL_REQUEST: Damage]. Do NOT say the attack hit, found its mark, or wounded the monster.'} Do not do step 3 or 4. Do not write the roll or AC in your narrative.`;
-                    } else {
-                        currentStep = '**CURRENT STEP:** The player just submitted their **attack roll**. You MUST do **step 2 only**: Respond with flavor only. If their roll >= the monster\'s AC (see Active Encounters), include [ROLL_REQUEST: Damage]. If roll < AC, narrate the miss in flavor only. Do not do step 3 or 4. Do not write the roll or AC in your narrative.';
-                    }
-                } else if (lastRoll === 'damage') {
-                    currentStep = '**CURRENT STEP:** The player just submitted their **damage roll**. You MUST do **step 3 only**: Respond with flavor only (the effect of the blow). If the monster is defeated, narrate its death; do not narrate XP or gold. Then either start the monster\'s turn (step 4) in the same response, or if all enemies are defeated include [COMBAT: off]. Do not request another attack roll yet.';
+                let currentStep;
+                if (lastRoll === 'resolved') {
+                    currentStep = 'The player\'s attack was **fully resolved by the app**. The player message states the outcome (HIT + damage, or MISS). **Do NOT request any dice roll.** Narrate the outcome in flavor only, obeying the HIT/MISS stated. If the monster is defeated, narrate its death. If any enemy remains, begin the monster\'s turn in the same response with one sentence of flavor followed by **[MONSTER_ATTACK]**. If all enemies are defeated, include [COMBAT: off].';
                 } else if (lastRoll === 'ability') {
-                    currentStep = '**CURRENT STEP:** The player just submitted an **ability/skill roll**. Respond to that check in flavor and outcome. If combat continues, return to step 1 (player action) or step 4 (monster turn) as appropriate.';
+                    currentStep = 'The player just submitted an **ability/skill roll**. Respond to the check in flavor, based on the total vs the relevant DC. Then continue the scene — if an enemy still acts, begin the monster\'s turn with flavor + **[MONSTER_ATTACK]**.';
                 } else {
-                    currentStep = '**CURRENT STEP:** The player just sent a **free-form action** (they did not submit a roll). You MUST do **step 1 only**: If they are attacking, respond with flavor only and [ROLL_REQUEST: Attack]. If they did something else (e.g. dodge, search), respond to that. Do not do the monster\'s turn yet unless their message clearly ends their turn (e.g. "I wait").';
+                    currentStep = 'The player sent a **free-form action** (no roll). If they are attacking, respond with flavor and **[ROLL_REQUEST: Attack]** — nothing else. If they did something else (dodge, search, speak, etc.), respond to that. Do not take the monster\'s turn unless the player\'s action clearly ends their turn (e.g. "I wait").';
                 }
                 combatFlowBlock = `
 
-## COMBAT FLOW — MANDATORY DURING THIS ENCOUNTER
-**While an encounter is active, you MUST follow these steps in order. Do not skip, combine, or reorder steps.**
-
-${steps}
-
+## COMBAT FLOW — CURRENT STEP
 ${currentStep}
 `;
             }
@@ -2416,175 +2529,78 @@ You have high freedom to improvise within the module and setting. Call for abili
 The player is traveling a long distance. Ask or infer their plan or destination. Narrate the journey in summary, not moment-by-moment. Respect any travel rules from the setting, rules, or module. When they arrive at the destination, include [MODE: exploration] in your response so the app returns to exploration.
 `;
             }
-            return `You are the Game Master for this dungeon crawl: ${gameData.module.module.title}.
-**Current mode:** ${mode.charAt(0).toUpperCase() + mode.slice(1)}.
-${settingBlock}
-${modeBlock}
+            // Build values for {{PLACEHOLDER}} substitution into the loaded template.
+            const weaponSources = gameData.character && gameData.character.equipment
+                ? [...(gameData.character.equipment.wielded || []), ...(gameData.character.equipment.carried || [])]
+                : [];
+            const weaponsStr = weaponSources.filter(w => w.damage).map(w => {
+                const info = getWeaponTypeInfo(w);
+                const typeStr = info.type === 'ranged' && info.range ? `ranged ${info.range}` : 'melee';
+                return `${w.name} (${w.damage} ${w.damage_type}, ${typeStr})`;
+            }).join('; ') || 'none';
 
-# SOURCE OF TRUTH — STRICT ADHERENCE
-All concrete specifications (numbers, stats, DCs, mechanics) MUST come from the data blocks below. Do NOT invent or substitute values. **XP and gold on enemy defeat** are applied by the app via a mechanics callout (from the encounter's on_death); do NOT write XP or gold amounts in your narrative—describe the moment in flavor only (e.g. "A pouch of coins appears."). For other rewards (e.g. finding gold in a room), you may describe the find; the app may parse numbers from your text in those cases. Creativity in pacing and flavor is fine; do not repeat mechanics that the app already shows in callouts.
+            const conditionsStr = char.conditions && char.conditions.length
+                ? char.conditions.map(c => {
+                    const info = getConditionInfo(c.id || c.name || c);
+                    return `${info.name} (${info.effect_summary})`;
+                }).join('; ')
+                : 'none';
 
-# CRITICAL RULES
+            const abilityChecks = gameData.rules && gameData.rules.core_mechanics && gameData.rules.core_mechanics.ability_checks;
+            const autoSuccess = abilityChecks ? abilityChecks.auto_success : 'tasks within normal capability';
+            const autoFail = abilityChecks ? abilityChecks.auto_failure : 'impossible or lacking resources';
+            const dcScale = abilityChecks && abilityChecks.dc_scale;
+            const dcsStr = (dcScale && typeof dcScale === 'object')
+                ? Object.entries(dcScale).map(([k, v]) => `${k} ${v}`).join(', ')
+                : 'Easy 10, Medium 15, Hard 20';
 
-## RULESET (honor these mechanics)
-${rulesetBlock || 'Use standard OSR-style mechanics. Attack: 1d20+mod+prof vs AC. Damage: weapon die + mod. DCs: Easy 10, Medium 15, Hard 20.'}
-
-## DUNGEON LAYOUT — USE ONLY THE MODULE DATA
-You MUST use ONLY the layout and content in the module data block below. Do NOT invent rooms, exits, room descriptions, or features.
-- When describing a room, use the exact "Description" and "Features" text from the module.
-- When the player moves, only allow movement to the "Exits" listed for the current room.
-- Do not add new rooms, new exits, or new features. Each play-through must match the module.
-${layoutBlock}
-
-## RESPONSE LENGTH
-- Keep responses between 50-100 words typically
-- Longer (150 words max) only for major reveals or room descriptions
-- Shorter (20-40 words) for simple acknowledgments or quick narration
-- NEVER write 200+ word responses
-
-## WHAT NOT TO NARRATE (COMBAT NARRATIVE FORMAT)
-**Standard: Anything that appears in (or could appear in) a mechanics callout must NOT appear in your narrative.** The app shows dice rolls, results, and numbers in callouts; your job is flavor only.
-
-**Do NOT narrate any of the following:**
-- **Player attack:** No roll total, no AC, no "hit" or "miss" with numbers. Never write "18 vs 13 AC = hit", "your roll beats its AC", "to hit", "= hit", "= miss", or any roll/AC comparison. The app shows this in a callout. Narrate only the fiction: e.g. "Your longsword finds its mark!" or "The goblin dodges."
-- **Player damage / monster HP:** No damage numbers, no "X damage", no "the goblin has 3 HP left". The app shows damage and HP in callouts.
-- **Monster attack / monster damage:** No monster roll, no "the goblin rolls 17", no "hits you for 6 damage". On the monster's turn, include **[MONSTER_ATTACK]** and do NOT narrate hit or miss (e.g. "The goblin swings at you. [MONSTER_ATTACK] Your turn — what do you do?"). The app shows the callouts and adds a one-line outcome (hit or miss). You may still use **[MONSTER_DAMAGE]** alone for damage-only.
-- **XP or treasure on defeat:** No "you gain 25 XP", no "you discover 10 gold". The app shows and applies rewards in a callout. Optional flavor without numbers is fine (e.g. "A pouch drops to the ground.").
-
-**Do narrate:** Flavor only—what the player sees, hears, and feels. Describe the blow, the dodge, the death, the room; never the numbers. When a creature reaches 0 HP, narrate its death (it falls, crumples, is slain) and do not have it act again.
-
-## WHO ROLLS
-- **Player** rolls only for their own actions: attack (d20), damage (weapon dice), ability/skill checks. Use [ROLL_REQUEST: Attack], [ROLL_REQUEST: Damage], [ROLL_REQUEST: Strength], etc. The app shows the result in a callout.
-- **Monster attacks:** Include **[MONSTER_ATTACK]** (setup flavor only; do not narrate hit or miss). The app rolls, shows callouts, applies damage, and adds a one-line outcome. Do NOT use [ROLL_REQUEST: ...] for monsters.
-
-## DICE ROLL REQUESTS (player actions only)
-Use EXACTLY one of these formats when the PLAYER must roll. The app shows the correct dice for each:
-- **Attack rolls (d20 + ability + proficiency):** [ROLL_REQUEST: Attack] (or [ROLL_REQUEST: Melee Attack] / [ROLL_REQUEST: Ranged Attack])
-- **Ability/skill checks (d20 + relevant modifier):** [ROLL_REQUEST: Strength], [ROLL_REQUEST: Perception], etc.
-- **Weapon damage:** [ROLL_REQUEST: Damage] — player rolls their readied weapon (e.g. 1d8 for longsword, 1d6 for shortbow).
-- **Healing potion:** [ROLL_REQUEST: Healing Potion] or [ROLL_REQUEST: Healing] — player rolls 2d4+2.
-- **Custom dice:** [ROLL_REQUEST: 2d4+2], [ROLL_REQUEST: 1d6], etc. — use when the roll has a specific formula.
-Do NOT ask for a d20 for damage or healing. Wait for the player to roll before continuing.
-
-## HIT RULE — ATTACK ROLL VS AC
-An attack HITS only if the attack roll is **greater than or equal to** the target's AC. Use this rule to decide whether to request [ROLL_REQUEST: Damage] (on hit) or narrate a miss. Do not write the roll or AC in your narrative (e.g. never "18 vs 13 AC = hit")—the app shows that in a callout; use flavor only (e.g. "Your blade finds its mark!" or "The goblin dodges.").
-
-## COMBAT STATE — YOU CONTROL IT
-**You decide when the party is in combat.** Include one of these tags in your response so the app tracks combat correctly:
-- **When combat begins** (first attack, initiative, etc.): include **[COMBAT: on]** in your response. Example: "The goblin draws its blade! [COMBAT: on] Roll initiative!"
-- **When combat ends** (all enemies defeated, player dies, retreat, etc.): include **[COMBAT: off]** in your response. Example: "The last goblin falls. [COMBAT: off] The room is quiet."
-The tag is stripped from the displayed text; the player will not see it. Use your judgment — a tense standoff might not be combat until blades are drawn; a chase might end combat when the player escapes.
-
-## INITIATIVE — PLAYER ACTS FIRST
-By default the **player acts first** in combat. Enemies attack first only if (1) they surprise the player (e.g. ambush, failed perception), or (2) the player explicitly defers ("I wait", "I hold my action", "they can go first"). When combat begins without surprise, prompt the player for their action first; do not have the monster attack before the player has had a chance to act.
-
-## COMBAT SEQUENCING
-Combat happens in strict steps. Never combine steps.
-
-**Player declares attack ->** You respond with flavor and [ROLL_REQUEST: Attack]. Do not write the roll or AC in your response.
-**Player rolls attack ->** You compare their total to the monster's AC (from Active Encounters). If roll >= AC, respond with flavor and [ROLL_REQUEST: Damage]. If roll < AC, respond with flavor only (e.g. "The goblin dodges."). Do not write "hit", "miss", or any numbers—the app shows the result in a callout.
-**Player rolls damage ->** You narrate the effect in flavor only (no damage number, no HP). Then the enemy's turn begins.
-**Enemy's turn ->** One sentence of flavor (monster attacks), then **[MONSTER_ATTACK]**, then "Your turn — what do you do?" Do not narrate hit or miss—the app adds the callouts and a one-line outcome.
-
-**KILL RULE:** When the player's last message is a damage roll, compare it to the monster's current HP in Active Encounters. If damage >= remaining HP, the monster is defeated—narrate its death in flavor. Do not narrate XP or gold; the app shows and applies those in a callout.
-
-Never ask the player to roll for monsters. Never narrate enemy actions before the player's damage roll. Never put roll results, AC, hit/miss, or damage numbers in your narrative.
-${combatFlowBlock}
-
-## MELEE VS RANGED COMBAT
-**Melee combat** = combatants within reach to attack with handheld weapons.
-**Ranged combat** = targets outside melee reach; ranged weapons can be used.
-
-**Rules:**
-- **Cannot use ranged weapons in melee range.** If the player (or monster) is in melee range of an enemy, they must use a melee weapon. Ranged weapons (bows, crossbows, etc.) cannot be used when an enemy is adjacent.
-- **Cannot use melee weapons outside melee range.** If the target is too far for melee (e.g. across the room, on a ledge), only ranged weapons work.
-- **You judge distances.** When the player declares an attack, determine whether they are in melee or ranged distance. If they try to use the wrong weapon type for the situation, narrate that they cannot (e.g. "The goblin is right in front of you — you'd need to use your longsword, not the bow") or that they must close/retreat first.
-- Monster attacks list melee vs ranged; choose the appropriate attack based on distance.
-
-## CRITICAL SUCCESS AND CRITICAL FAILURE (d20 only)
-Critical success and critical failure apply **only to d20 rolls** (attack rolls, ability checks, skill checks). They do not apply to damage dice, healing, or other rolls.
-
-**Critical success (natural 20):**
-- Occurs only when the player rolls a **natural** 20 on the d20 (the die shows 20 before modifiers).
-- Narrate a dramatic, enhanced success appropriate to the situation.
-- **On an attack roll:** The hit is a critical hit. The player will roll damage with dice **doubled** then add their modifier (e.g. 1d8+3 → roll 1d8, double the dice result, add +3). After they report the result, narrate the impact accordingly. Do not double the damage yourself; the app applies the rule.
-
-**Critical failure (natural 1):**
-- Occurs only when the player rolls a **natural** 1 on the d20.
-- Narrate an appropriate failure or mishap (fumble, slip, worst outcome).
-- **On an attack roll:** The attack **always misses**. Do **not** request a damage roll ([ROLL_REQUEST: Damage]) when the player reports a natural 1 on an attack.
-
-The player's roll message will include "Natural 20 (critical success)" or "Natural 1 (critical failure)" when applicable so you can respond correctly.
-
-## MONSTERS — ONLY FROM ACTIVE ENCOUNTERS / EXACT STATS
-Use ONLY the monsters listed in "Active Encounters" for the current room. Do not invent or add any other monsters. **All monster stats (HP, AC, attack bonus, damage dice) come from the loaded monster data; do not substitute different numbers.**
-**Current HP is tracked for you** in the Active Encounters block. If the player's damage >= the monster's remaining HP, the monster is defeated—narrate its death in flavor only (no XP/gold numbers; the app shows those in a callout). When the block says **DEFEATED**, the monster is dead—do not have it act or speak again.
-**Use the EXACT AC from the block:** Each monster's AC is the number given in Active Encounters (e.g. Goblin AC 13 — never say 15 or any other number). When judging whether the player's attack hits, compare their roll to this AC only. Do not substitute a different AC.
-Use the EXACT attack bonus and damage from the block. If Active Encounters is empty or says NONE, there are no monsters in this room. **For any dice you "roll" as GM (monster attacks, NPC checks, etc.), vary the result each time — do not repeatedly use the same number.**
-
-## STATE TRACKING
-- **Monster damage to player:** On the monster's turn use **[MONSTER_ATTACK]** (setup flavor only; do not narrate hit/miss—app adds callouts and outcome). Or use **[MONSTER_DAMAGE]** alone for damage only. Do not write a number; do not use [DAMAGE_TO_PLAYER] for monster hits.
-- **Player damage/healing from other sources:** Use **[DAMAGE_TO_PLAYER: N]** or **[HEAL_PLAYER: N]** when you need to set HP by a specific amount (e.g. trap, hazard). Tags are stripped from the displayed text.
-- **Monster defeated/fled:** **[MONSTER_DEFEATED: encounter_id]** or **[MONSTER_FLED: encounter_id]** if you need to mark state explicitly.
-- **XP / gold on combat defeat:** Do not write XP or gold in your narrative. The app awards them via a callout when an enemy is defeated.
-- Pack item use: When the player uses a consumable or item from their Pack, say so explicitly (e.g. "You drink a healing potion", "You use the rope to climb", "You eat some rations"). For torch: when they light one from their pack, say "You pull out a torch and light it" — this updates Pack and shows the lit torch in Equipped. When they put it away, say "You put the torch back in your pack" or "You stow the torch" — this removes it from Equipped and adds 1 back to Pack. If they retrieve the rope later, say "You retrieve the rope".
-- **Conditions:** When the player gains or loses a condition from the ruleset, include exactly one of these so the app can track it: **[CONDITION: add poisoned]** or **[CONDITION: remove poisoned]** (use the condition id: poisoned, blessed, stunned, wounded, exhausted). The character panel shows current conditions and their effects. Apply condition effects exactly as stated in the rules (e.g. poisoned = −2 to attack and checks).
-- **Player death (0 HP):** When damage in your response reduces the player to 0 HP, keep your final narration **concise and dramatic** (one or two sentences). That text is shown on the death overlay only, not in the narrative panel. Example: "The blade finds its mark. Your vision fades as the chamber dims."
-
-## FORMATTING
-Use only these HTML tags for emphasis. Do not use raw asterisks. Do not put any mechanics (rolls, AC, hit/miss, damage numbers, XP, gold) in your narrative—the app shows those in callouts.
-- Bold: <b>like this</b> for emphasis or names. Italic: <i>like this</i> for thoughts.
-
-${gameState.pendingLevelUpAck ? `
+            const levelUpBlock = gameState.pendingLevelUpAck ? `
 ## LEVEL-UP — ACKNOWLEDGE IN YOUR RESPONSE
 The player just reached **level ${gameState.pendingLevelUpAck.level}** and gained **${gameState.pendingLevelUpAck.hpGain} max HP**. In your response you MUST:
 1. Congratulate the player on leveling up.
 2. Briefly explain what improved: they are now level ${gameState.pendingLevelUpAck.level}, and their max HP increased by ${gameState.pendingLevelUpAck.hpGain} (from the level-up roll + CON).
 Then continue with the scene as normal. (This reminder is one-time only.)
-` : ''}
-# CURRENT GAME STATE
-Room: ${room.name} (id: ${gameState.currentRoom})
-Character: ${char.name} (${char.class} Level ${char.level})
-HP: ${char.hp}/${char.maxHp} | AC: ${getEffectiveAC()} (attack roll must be >= ${getEffectiveAC()} to hit the player${!gameState.armorEquipped ? '; armor is not worn' : ''})
-STR +${char.abilities.str.modifier} | DEX +${char.abilities.dex.modifier} | CON +${char.abilities.con.modifier} | INT +${char.abilities.int.modifier} | WIS +${char.abilities.wis.modifier} | CHA +${char.abilities.cha.modifier}
-Weapons (all available): ${(function(){
-            const sources = gameData.character && gameData.character.equipment
-                ? [...(gameData.character.equipment.wielded || []), ...(gameData.character.equipment.carried || [])]
-                : [];
-            const weapons = sources.filter(w => w.damage);
-            return weapons.map(w => {
-                const info = getWeaponTypeInfo(w);
-                const typeStr = info.type === 'ranged' && info.range ? `ranged ${info.range}` : 'melee';
-                return `${w.name} (${w.damage} ${w.damage_type}, ${typeStr})`;
-            }).join('; ') || 'none'
-        })()}
-Readied weapon: ${gameState.readiedWeaponName || 'none'} — when requesting damage, the player rolls this weapon's dice (melee: STR, ranged: DEX). If they try to use the wrong weapon type for the distance, correct them.
+` : '';
 
-Skills: ${Object.entries(char.skills).map(([k,v]) => `${k} +${v}`).join(', ')}
-Conditions: ${char.conditions && char.conditions.length ? char.conditions.map(c => {
-            const info = getConditionInfo(c.id || c.name || c);
-            return `${info.name} (${info.effect_summary})`;
-        }).join('; ') : 'none'}
+            const ac = getEffectiveAC();
+            const values = {
+                MODULE_TITLE: gameData.module.module.title,
+                MODE_TITLE: mode.charAt(0).toUpperCase() + mode.slice(1),
+                SETTING_BLOCK: settingBlock,
+                MODE_BLOCK: modeBlock,
+                RULESET_BLOCK: rulesetBlock || 'Use standard OSR-style mechanics. Attack: 1d20+mod+prof vs AC. Damage: weapon die + mod. DCs: Easy 10, Medium 15, Hard 20.',
+                LAYOUT_BLOCK: layoutBlock,
+                COMBAT_FLOW_BLOCK: combatFlowBlock,
+                LEVEL_UP_BLOCK: levelUpBlock,
+                ROOM_NAME: room.name,
+                ROOM_ID: gameState.currentRoom,
+                ROOM_DESCRIPTION: room.description,
+                CHAR_NAME: char.name,
+                CHAR_CLASS: char.class,
+                CHAR_LEVEL: char.level,
+                HP: char.hp,
+                MAX_HP: char.maxHp,
+                AC: ac,
+                AC_NOTE: !gameState.armorEquipped ? '; armor is not worn' : '',
+                ABILITY_MODS: `STR +${char.abilities.str.modifier} | DEX +${char.abilities.dex.modifier} | CON +${char.abilities.con.modifier} | INT +${char.abilities.int.modifier} | WIS +${char.abilities.wis.modifier} | CHA +${char.abilities.cha.modifier}`,
+                WEAPONS: weaponsStr,
+                READIED_WEAPON: gameState.readiedWeaponName || 'none',
+                SKILLS: Object.entries(char.skills).map(([k, v]) => `${k} +${v}`).join(', '),
+                CONDITIONS: conditionsStr,
+                ENCOUNTER_INFO: encounterInfo,
+                AUTO_SUCCESS: autoSuccess,
+                AUTO_FAIL: autoFail,
+                DCS: dcsStr
+            };
 
-# CURRENT ROOM: ${room.name}
-${room.description}
-${encounterInfo}
-
-# ADJUDICATION
-**Auto-success:** Simple actions (per ruleset: ${gameData.rules && gameData.rules.core_mechanics && gameData.rules.core_mechanics.ability_checks ? gameData.rules.core_mechanics.ability_checks.auto_success : 'tasks within normal capability'})
-**Auto-fail:** Impossible actions (per ruleset: ${gameData.rules && gameData.rules.core_mechanics && gameData.rules.core_mechanics.ability_checks ? gameData.rules.core_mechanics.ability_checks.auto_failure : 'impossible or lacking resources'})
-**Requires roll:** Risky actions, searching, difficult tasks (only when outcome is uncertain and failure has consequences)
-
-DCs (from ruleset — use these numbers): ${(function(){
-                const dc = gameData.rules && gameData.rules.core_mechanics && gameData.rules.core_mechanics.ability_checks && gameData.rules.core_mechanics.ability_checks.dc_scale;
-                if (dc && typeof dc === 'object') return Object.entries(dc).map(([k, v]) => `${k} ${v}`).join(', ');
-                return 'Easy 10, Medium 15, Hard 20';
-            })()}
-
-# TONE
-Atmospheric but concise. Show don't tell. Build tension through description.
-
-Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Damage] for weapon damage. Wait for results before continuing.`;
+            if (!SYSTEM_PROMPT_TEMPLATE) {
+                throw new Error('System prompt template not loaded');
+            }
+            let out = SYSTEM_PROMPT_TEMPLATE;
+            for (const [key, val] of Object.entries(values)) {
+                out = out.split(`{{${key}}}`).join(val == null ? '' : String(val));
+            }
+            return out;
         }
 
         function processAIResponse(response) {
@@ -2743,24 +2759,11 @@ Respond as GM. Use [ROLL_REQUEST: Ability] for d20 rolls and [ROLL_REQUEST: Dama
                             debugLog('PARSE', `Monster damage: ${enc.name} +${damage} (total: ${gameState.damageToEncounters[enc.id]}/${monster.hp})`);
                         }
                     }
-                    const deathPattern = new RegExp(`(?:${escapedNames})\\s+(?:falls?|is\\s+dead|dies?|is\\s+defeated|is\\s+slain)|(?:kill|slay|defeat)s?\\s+(?:the\\s+)?(?:${escapedNames})`, 'gi');
-                    if (deathPattern.test(text)) {
-                        const current = gameState.damageToEncounters[enc.id] || 0;
-                        if (current < monster.hp) {
-                            gameState.damageToEncounters[enc.id] = monster.hp;
-                            roomWithUpdate = roomId;
-                            debugLog('PARSE', `Monster defeated (narrative): ${enc.name}`);
-                        }
-                    }
-                    const fleePattern = new RegExp(`(?:${escapedNames})\\s+(?:flees?|fled|runs?\\s+away|retreats?|escapes?|withdraws?)|(?:flees?|fled|runs?\\s+away|retreats?|escapes?|withdraws?)\\s+(?:the\\s+)?(?:${escapedNames})`, 'gi');
-                    if (fleePattern.test(text)) {
-                        const current = gameState.damageToEncounters[enc.id] || 0;
-                        if (current < monster.hp) {
-                            gameState.damageToEncounters[enc.id] = monster.hp;
-                            roomWithUpdate = roomId;
-                            debugLog('PARSE', `Monster fled (tracked as defeated): ${enc.name}`);
-                        }
-                    }
+                    // NOTE: Narrative death/flee detection removed — the GM frequently uses dramatic death
+                    // language on non-lethal hits (e.g. "collapses" for a blow that leaves 13 HP).
+                    // Monster defeat is now driven ONLY by HP math (damage >= monster.hp) or an
+                    // explicit [MONSTER_DEFEATED: id] / [MONSTER_FLED: id] tag from the GM.
+                    // See parseExplicitStateTags for tag handling.
                 }
             }
             if (roomWithUpdate) {

@@ -10,7 +10,7 @@ require('dotenv').config();
 // CONFIGURATION
 const PORT = process.env.PORT || 8000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const AI_MODEL = process.env.AI_MODEL || 'claude-sonnet-4-20250514';
+const AI_MODEL = process.env.AI_MODEL || 'claude-sonnet-4-5';
 // MIME types for static files
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -23,37 +23,6 @@ const MIME_TYPES = {
     '.svg': 'image/svg+xml',
     '.ico': 'image/x-icon'
 };
-
-function httpsJsonRequest({ hostname, path, method = 'GET', headers = {}, body = null }) {
-    return new Promise((resolve, reject) => {
-        const req = https.request({
-            hostname,
-            port: 443,
-            path,
-            method,
-            headers
-        }, (res) => {
-            let responseData = '';
-            res.on('data', chunk => { responseData += chunk; });
-            res.on('end', () => {
-                let json = null;
-                try {
-                    json = responseData ? JSON.parse(responseData) : null;
-                } catch (e) {
-                    return reject(new Error(`Invalid JSON response (${res.statusCode}): ${responseData}`));
-                }
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    resolve({ statusCode: res.statusCode, data: json });
-                } else {
-                    reject(new Error(`API error ${res.statusCode}: ${JSON.stringify(json)}`));
-                }
-            });
-        });
-        req.on('error', reject);
-        if (body) req.write(body);
-        req.end();
-    });
-}
 
 const server = http.createServer((req, res) => {
     // Enable CORS
@@ -91,13 +60,16 @@ const server = http.createServer((req, res) => {
         req.on('end', () => {
             try {
                 const requestData = JSON.parse(body);
+                const wantStream = !!requestData.stream;
 
-                const anthropicData = JSON.stringify({
-                    model: AI_MODEL || requestData.model || 'claude-sonnet-4-20250514',
+                const anthropicPayload = {
+                    model: AI_MODEL || requestData.model || 'claude-sonnet-4-5',
                     max_tokens: requestData.max_tokens || 2000,
                     system: requestData.system,
                     messages: requestData.messages
-                });
+                };
+                if (wantStream) anthropicPayload.stream = true;
+                const anthropicData = JSON.stringify(anthropicPayload);
 
                 const options = {
                     hostname: 'api.anthropic.com',
@@ -113,12 +85,25 @@ const server = http.createServer((req, res) => {
                 };
 
                 const anthropicReq = https.request(options, (anthropicRes) => {
+                    if (wantStream && anthropicRes.statusCode < 400) {
+                        // Pipe SSE through to client unchanged.
+                        res.writeHead(anthropicRes.statusCode, {
+                            'Content-Type': 'text/event-stream',
+                            'Cache-Control': 'no-cache, no-transform',
+                            'Connection': 'keep-alive',
+                            'X-Accel-Buffering': 'no'
+                        });
+                        anthropicRes.pipe(res);
+                        anthropicRes.on('error', (err) => {
+                            console.error('Stream error from Anthropic:', err);
+                            try { res.end(); } catch (e) {}
+                        });
+                        return;
+                    }
+
+                    // Non-streaming (or upstream error): buffer and forward as JSON.
                     let responseData = '';
-
-                    anthropicRes.on('data', chunk => {
-                        responseData += chunk;
-                    });
-
+                    anthropicRes.on('data', chunk => { responseData += chunk; });
                     anthropicRes.on('end', () => {
                         if (anthropicRes.statusCode >= 400) {
                             const reqSize = Buffer.byteLength(anthropicData, 'utf8');
