@@ -282,14 +282,19 @@ Cleanup pass over the existing `rules.json` flavor-heavy fields. Three live topi
 ```jsonc
 {
   "encumbrance": {
-    "method": "none",              // "slots" | "weight" | "none"
-    "slot_capacity": "str",        // only if method is "slots"; ability id OR fixed number
-    "weight_formula": "15_times_str"  // only if method is "weight"
+    "method": "none",                                           // "slots" | "weight" | "none"
+    "slot_capacity": "str",                                     // only if method is "slots"; ability id OR fixed number
+    "weight_formula": { "multiplier": 15, "ability": "str" }    // only if method is "weight"; capacity = multiplier × ability score
   }
 }
 ```
 
 Declared in all packs; `"none"` is an acceptable value. Inventory UI for slot/weight tracking gets built when we build the first pack that uses it (Shadowdark/Knave-style).
+
+**Weight formula shape (structured):**
+- `multiplier`: positive integer coefficient.
+- `ability`: ability id from `character_model.abilities`.
+- Structured form chosen over a string enum (`"15_times_str"`, ...) because the space of useful formulas is small-but-open. Packs targeting gritty play might use `{ "multiplier": 10, "ability": "str" }`; a CON-based carry fantasy can use `{ "multiplier": 15, "ability": "con" }`. Adding formulas no longer requires a schema change.
 
 **GM guidance prose — move to a sidecar markdown file.**
 
@@ -1125,6 +1130,7 @@ Variants are handled via duplication or `module_bestiary` (a one-off Greater Gob
 - Active condition ids
 - Gold
 - Charged-item state
+- Feature-resource pools (spell slots, per-rest class feature uses)
 - Proficient saves and skills (id lists only)
 - Class features (prose descriptions)
 
@@ -1183,6 +1189,21 @@ Variants are handled via duplication or `module_bestiary` (a one-off Greater Gob
       "wand_of_fireball": { "current_charges": 2 }
     },
 
+    "feature_resources": {                            // spell slots, per-rest class feature uses, etc.
+      "spell_slots_1": {
+        "name": "1st-level spell slots",
+        "current": 4,
+        "max": 4,
+        "recharge": "long_rest"                       // "long_rest" | "short_rest" | "daily" | "none"
+      },
+      "second_wind": {
+        "name": "Second Wind",
+        "current": 1,
+        "max": 1,
+        "recharge": "short_rest"
+      }
+    },
+
     "conditions": ["wounded"],                        // active condition ids from rules pack
 
     "gold": 47,
@@ -1208,6 +1229,34 @@ Variants are handled via duplication or `module_bestiary` (a one-off Greater Gob
 - GM adjudicates class features narratively; no structured feature tree.
 - Level-ups add features to the array (GM or designer authored).
 - Full structured class systems (spells, subclass trees, per-level feature lists) deferred to v2 — worthy of its own walkthrough once we have play data.
+
+## Feature resources (spell slots, per-rest uses)
+
+Character-side resource pools for class features that expend and recharge — spell slots, `Second Wind`-style once-per-rest abilities, channel-divinity pools, ki points, anything a 5e-shaped pack needs to track beyond items.
+
+**Stored shape:**
+```jsonc
+"feature_resources": {
+  "<pool_id>": {
+    "name": "Display label",
+    "current": 4,
+    "max": 4,
+    "recharge": "long_rest"        // "long_rest" | "short_rest" | "daily" | "none"
+  }
+}
+```
+
+**Runtime behavior:**
+- App surfaces each pool in the character panel with a `current / max` counter.
+- Player may decrement directly via UI; GM may signal use with an inline tag `[RESOURCE_USE: <pool_id>]` when adjudicating a spell or feature mid-narration. App decrements on the tag.
+- `recharge` values restore `current` → `max` when the corresponding rest event fires. `"none"` is for pools that only refill via specific in-fiction conditions (GM narrates the refill).
+
+**Authoring notes:**
+- Pools are character-owned (not rules-pack-owned). A Wizard player of one pack looks different from a Wizard of another — that's fine for v1.
+- Prose in `class_features[]` should reference the pool by id so the GM knows which to decrement ("Casting *magic missile* spends one `spell_slots_1`.").
+- Pool ids are free-form strings scoped to the character; no validation against a rules-pack feature registry in v1.
+
+**Deferred to v2:** rules-pack-declared feature templates, per-class progression tables that auto-populate pools on level up, structured spell catalogs.
 
 ## Flavor moves to an optional markdown sidecar
 
@@ -1251,3 +1300,4 @@ All six archetypes fully specified for v1:
 4. **App-side refactor** (`playable-dungeon-crawler-v2.html` and `server.js`) — consume the new schemas; the full list of downstream impacts was captured earlier in this doc.
 5. **Pack migration** — the two existing packs (`game_pack.json` test hub and `game_pack_village_three_knots.json`) need to be rewritten against the new schemas.
 6. **Starter pack templates** — at least two: an OSR-classless example (B/X-like) and a 5e-like example. These become the on-ramp for new pack authors.
+7. **Enumerate the fixed condition-icon library** (~20 generic icons). Until the list is authoritative, packs should stick to the known-safe set (`skull`, `fire`, `drop`, `eye`, `chains`) and fall back to `skull` for anything unrecognized. Candidate additions surfaced by the 5e-shape starter pack: `heart`, `lightning`, `moon`, `falling`, `snowflake`, `sun`, `shield`, `sword`, `hand`, `swirl`. Final list to be decided and published in `JSON_SCHEMAS.md`.

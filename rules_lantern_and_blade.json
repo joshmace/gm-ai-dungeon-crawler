@@ -271,7 +271,7 @@
 
     "encumbrance": {
       "method": "weight",
-      "weight_formula": "15_times_str"
+      "weight_formula": { "multiplier": 15, "ability": "str" }
     }
   }
 }
