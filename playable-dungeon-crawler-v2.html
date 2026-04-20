@@ -2854,12 +2854,9 @@ Then continue with the scene as normal. (This reminder is one-time only.)
                 out.hasPlayerDamageTag = true;
                 const damage = parseInt(m[1], 10);
                 if (damage >= 1 && damage <= 999) {
-                    if (!gameState.combatStateFromTag) {
-                        gameState.inCombat = true;
-                        gameState.mode = 'combat';
-                        ensureCombatRoomHasEncounters();
-                    }
+                    // Hazard/trap damage — do NOT force combat mode; [COMBAT: on] handles that separately
                     modifyHP(-damage);
+                    addMechanicsCallout(`Hazard: ${damage} damage\nHP: ${gameState.character.hp}/${gameState.character.maxHp}`);
                     debugLog('PARSE', `Tag damage TO PLAYER: ${damage}`);
                 }
             }
@@ -2870,6 +2867,7 @@ Then continue with the scene as normal. (This reminder is one-time only.)
                 const healing = parseInt(m[1], 10);
                 if (healing >= 1 && healing <= 999) {
                     modifyHP(healing);
+                    addMechanicsCallout(`Healed: +${healing} HP\nHP: ${gameState.character.hp}/${gameState.character.maxHp}`);
                     debugLog('PARSE', `Tag healing TO PLAYER: ${healing}`);
                 }
             }
@@ -3180,12 +3178,9 @@ Then continue with the scene as normal. (This reminder is one-time only.)
                                 break;
                             }
                             debugLog('PARSE', `Detected damage TO PLAYER: ${damage}`);
-                            if (!gameState.combatStateFromTag) {
-                                gameState.inCombat = true;
-                                gameState.mode = 'combat';
-                                ensureCombatRoomHasEncounters();
-                            }
+                            // Do NOT force combat mode here — [COMBAT: on] is the authoritative signal
                             modifyHP(-damage);
+                            addMechanicsCallout(`Damage: ${damage} HP\nHP: ${gameState.character.hp}/${gameState.character.maxHp}`);
                         }
                         break;
                     }
