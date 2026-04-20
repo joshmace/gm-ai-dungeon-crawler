@@ -40,16 +40,37 @@ No `tags` field for v1 (can add later for pack-picker filtering).
     "abilities": [
       { "id": "str", "name": "Strength", "abbr": "STR", "range": [3, 18] },
       { "id": "dex", "name": "Dexterity", "abbr": "DEX", "range": [3, 18] }
-      // … etc
+      // … etc. For 5e-shaped packs use [1, 20] (player achievable cap including ASI).
     ],
     "modifier_formula": "table_5e",    // "table_5e" | "table_bx" | "score_is_mod"
     "saves": {
       "type": "per_ability"            // "per_ability" | "categorical"
     },
-    "uses_classes": true,
     "skills": [                        // optional — omit for skill-less systems (B/X, Cairn, Knave)
       { "id": "stealth", "name": "Stealth", "ability": "dex" }
-    ]
+    ],
+    "uses_classes": true,
+    "classes": {                       // required when uses_classes: true; minimal metadata only
+      "fighter": {
+        "id": "fighter",
+        "name": "Fighter",
+        "hit_die": "1d10",             // feeds hp_gain_per_level when method is roll_class_hd_plus_con
+        "description": "Martial specialist trained in a broad range of weapons and armor."
+      },
+      "wizard": {
+        "id": "wizard",
+        "name": "Wizard",
+        "hit_die": "1d6",
+        "description": "Scholar of arcane magic who prepares spells from a grimoire."
+      }
+    },
+    "slot_limits": {                   // max equipped items per slot type; validated against character equipment[]
+      "main_hand": 1, "off_hand": 1,
+      "body": 1, "shield": 1,
+      "head": 1, "hands": 1, "feet": 1,
+      "neck": 1, "ring": 2,
+      "cloak": 1, "belt": 1
+    }
   }
 }
 ```
@@ -58,6 +79,15 @@ No `tags` field for v1 (can add later for pack-picker filtering).
 - Optional field. When absent, character panel hides Skills section; GM falls back to raw ability checks.
 - Empty array `"skills": []` encouraged for deliberately skill-less packs (signals intent).
 - Class-specific skill-like abilities (e.g., B/X thief X-in-6) live in class features, not here.
+
+**Classes notes (v1):**
+- Required when `uses_classes: true`. Minimal metadata only — id, name, hit_die, prose description.
+- Class features (spells, per-level abilities, subclass trees) are carried on the character as prose in `class_features[]` per the Character walkthrough.
+- Full structured class systems deferred to v2.
+
+**Slot limits notes:**
+- Declares max count per slot type. App's equip logic enforces these limits against the character's `equipment[]` array.
+- **Two-handed weapons** are handled at the item level (`slot: "two_handed"`), not here — equipping a two-handed item occupies both `main_hand` and `off_hand`. No additional schema needed.
 
 ### Q3 — Resolution mechanic (checks)
 
@@ -69,7 +99,7 @@ No `tags` field for v1 (can add later for pack-picker filtering).
       "dice": "1d20",
       "crit_success": "nat_20",         // NARRATIVE CUE ONLY — no mechanical effect
       "crit_failure": "nat_1",          // NARRATIVE CUE ONLY — pack can set to "none" for gritty play
-      "advantage_disadvantage": false   // REQUIRED declaration
+      "advantage_disadvantage": false   // REQUIRED declaration — see notes below
     },
     "auxiliary": {
       "x_in_6": false,        // surprise/secret doors/thief skills
@@ -79,6 +109,15 @@ No `tags` field for v1 (can add later for pack-picker filtering).
   }
 }
 ```
+
+**What `advantage_disadvantage: true` wires up:**
+- Prompt template includes explicit adv/disadv rules ("when a check benefits or suffers, roll 2d20 keep highest/lowest").
+- GM may use extended roll-request syntax: `[ROLL_REQUEST: Ability, advantage]` or `[ROLL_REQUEST: Ability, disadvantage]`.
+- App's dice UI handles the extended syntax — rolls 2d20, keeps the appropriate die, shows both in the callout.
+
+**What `advantage_disadvantage: false` wires up:**
+- Prompt explicitly tells the GM the system has no adv/disadv; use flat DC adjustments instead.
+- Roll requests only accept base `[ROLL_REQUEST: Ability]` form.
 
 ### Q4 — Resource & damage model
 
@@ -171,16 +210,25 @@ Prose-based effects. The app tracks which conditions are active; the GM applies 
       "milestones"
     ],
     "level_table": [
-      { "level": 1, "xp_required": 0 },
-      { "level": 2, "xp_required": 100 },
-      { "level": 3, "xp_required": 300 }
-      // …
+      // proficiency_bonus is OPTIONAL — include when the system uses scaling PB (5e, Shadowdark).
+      // Omit entirely for systems that don't use PB (B/X, Knave, Cairn, etc.).
+      { "level": 1, "xp_required": 0,    "proficiency_bonus": 2 },
+      { "level": 2, "xp_required": 300,  "proficiency_bonus": 2 },
+      { "level": 3, "xp_required": 900,  "proficiency_bonus": 2 },
+      { "level": 4, "xp_required": 2700, "proficiency_bonus": 2 },
+      { "level": 5, "xp_required": 6500, "proficiency_bonus": 3 }
+      // …etc
     ],
     "max_level": 10,
     "hp_gain_per_level": "roll_class_hd_plus_con"   // "roll_class_hd_plus_con" | "average_class_hd_plus_con" | "flat"
   }
 }
 ```
+
+**Proficiency bonus (optional):**
+- When present on `level_table` rows, the character panel displays it and the app folds it into attack / save / skill totals for the character's proficient picks (from `character.saves.proficient[]` and `character.skills.proficient[]`).
+- Omit the field entirely for systems that don't use PB. App hides it from the character panel and doesn't add it to totals.
+- Universal mechanical hook — not per-class — so it lives on the level row, not inside class metadata.
 
 Characters always start at level 1.
 
