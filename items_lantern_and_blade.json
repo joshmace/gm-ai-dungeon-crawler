@@ -168,7 +168,7 @@
         "tags": ["magical", "warding"],
         "magic": {
           "ac_bonus": 1,
-          "special_effects": "The wearer also gains a +1 bonus to all saving throws. The bonus stacks with other magical protections."
+          "save_bonus": { "all": 1 }
         }
       },
 
@@ -181,7 +181,8 @@
         "weight_slots": 1,
         "tags": ["magical", "subtle"],
         "magic": {
-          "special_effects": "The wearer gains advantage on Stealth checks to move quietly. The cloak does not help against detection by sight, smell, or magical sense — only sound."
+          "skill_bonus": { "stealth": 2 },
+          "special_effects": "The bonus applies only against detection by sound — the cloak does nothing against sight or magical senses."
         }
       },
 

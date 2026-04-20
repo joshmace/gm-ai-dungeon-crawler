@@ -746,6 +746,8 @@ Weapons include staves/wands (weapon type, appropriate slot). Armor includes all
     "damage_bonus": 0,
     "ac_bonus": 0,
     "ability_bonus": { "str": 0, "dex": 0 },    // per rules-pack ability id
+    "save_bonus": { "all": 1 },                 // per save id; reserved "all" shortcut stacks with specific keys
+    "skill_bonus": { "stealth": 2 },            // per rules-pack skill id; flat numbers only
     "bonus_damage": { "amount": "1d4", "type": "fire" },   // extra dice on weapon hit
     "damage_resistance": [],                    // damage type ids taken at half
     "damage_immunity": [],                      // damage type ids ignored
@@ -763,9 +765,19 @@ Weapons include staves/wands (weapon type, appropriate slot). Armor includes all
 
 **Structured fields for common mechanical effects; prose for everything else.**
 
-**Enforced by app:** attack_bonus, damage_bonus, ac_bonus, ability_bonus, bonus_damage, damage_resistance, damage_immunity, charge count.
+**Enforced by app:** attack_bonus, damage_bonus, ac_bonus, ability_bonus, save_bonus, skill_bonus, bonus_damage, damage_resistance, damage_immunity, charge count.
 
 **Handled by GM (narrative):** charge_effect prose, special_effects prose.
+
+**`save_bonus` shape:**
+- Keyed by save id (matches ability ids when `saves.type: "per_ability"`; matches category ids when `saves.type: "categorical"`).
+- Reserved key `"all"` applies the bonus to every save. Specific keys stack on top (`{ "all": 1, "wis": 2 }` = +1 to all, +3 to wis).
+- Flat numbers only. Advantage/disadvantage on saves is a categorically different mechanical effect; author it in `special_effects` prose.
+
+**`skill_bonus` shape:**
+- Keyed by skill id from `character_model.skills`.
+- Flat numbers only. No `"all"` shortcut (universal skill bonuses are rare enough that the use case doesn't justify the convention).
+- Advantage/disadvantage on skills → `special_effects` prose.
 
 This contains the "magic item can of worms" — we handle the 80% case structurally and let the GM adjudicate the weird bits.
 
@@ -785,6 +797,8 @@ The `armor` block is optional — a ring that only provides a stat bonus has no 
 - Multi-currency (cp/sp/gp/pp) — v1 is just `gold`
 - Scroll as its own type (v1: consumable with magic block)
 - Full magic-item effect scripting (v1 has structured common fields + prose)
+- **Shops / appraisal / item valuation.** v1 items do not carry a `cost_gold` field. Treasure is module-owned (gold + item refs). If and when shops are authored, a `cost_gold` (or per-currency) field gets added to the item schema.
+- **Advantage/disadvantage as a structured magic-block effect.** v1 captures adv/disadv in `special_effects` prose. If common enough to justify structuring, v2 adds a `grants_advantage` / `grants_disadvantage` block.
 
 ## MQ8 — Module state & flow
 
@@ -1301,3 +1315,4 @@ All six archetypes fully specified for v1:
 5. **Pack migration** — the two existing packs (`game_pack.json` test hub and `game_pack_village_three_knots.json`) need to be rewritten against the new schemas.
 6. **Starter pack templates** — at least two: an OSR-classless example (B/X-like) and a 5e-like example. These become the on-ramp for new pack authors.
 7. **Enumerate the fixed condition-icon library** (~20 generic icons). Until the list is authoritative, packs should stick to the known-safe set (`skull`, `fire`, `drop`, `eye`, `chains`) and fall back to `skull` for anything unrecognized. Candidate additions surfaced by the 5e-shape starter pack: `heart`, `lightning`, `moon`, `falling`, `snowflake`, `sun`, `shield`, `sword`, `hand`, `swirl`. Final list to be decided and published in `JSON_SCHEMAS.md`.
+8. **Enumerate `consumable.on_use` keywords.** Schema shows `"heal_player"` as an app-parsed keyword but does not enumerate the full set. Candidate keywords surfaced: `heal_player`, `cure_condition`, `buff_ability`, `buff_save`, `gm_adjudicate` (the catch-all for prose-defined effects). Final list to be decided and published in `JSON_SCHEMAS.md`; any non-keyword value should default to `gm_adjudicate` with the item's `amount` field treated as prose.
