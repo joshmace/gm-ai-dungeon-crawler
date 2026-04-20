@@ -1051,9 +1051,10 @@ Minimum-viable monster shape; everything mechanically tuneable is pre-computed (
           {
             "name": "Scimitar",
             "bonus": 2,                    // pre-computed total to-hit; not derived
-            "damage": "1d6+2",             // pre-computed
+            "damage": "1d6+2",             // optional — omit for non-damaging attacks (web, grapple, shove)
             "damage_type": "slashing",     // optional; ignored if rules pack has no damage_types
-            "range": "melee"               // "melee" | "ranged"
+            "range": "melee",              // "melee" | "ranged"
+            "on_hit": "..."                // optional prose rider — save-or-suffer, condition application, resource drain, etc. GM adjudicates.
           }
         ],
 
@@ -1083,6 +1084,13 @@ Minimum-viable monster shape; everything mechanically tuneable is pre-computed (
 ## Required fields (minimum viable monster)
 
 `id`, `name`, `hp`, `ac`, `attacks`, `xp_value`. Everything else optional.
+
+## Attack shape notes
+
+- `damage` and `damage_type` are optional. Omit both for non-damaging attacks (web, grapple, shove, disarm).
+- `on_hit` is optional prose describing any rider — save-or-suffer effects, conditions applied on hit, max-HP drains, position changes, etc. GM adjudicates; no structured rider schema in v1.
+- Design line: consistent with magic items (structured common fields + prose escape hatch). Riders are too varied to structure exhaustively, and the v1 app doesn't mechanically process them — the GM does, and prose is what the GM needs.
+- Deferred to v2: structured `rider` block (save ability + DC + on_failure damage/conditions) for when the rules engine starts adjudicating monster turns programmatically.
 
 ## Deletions from current `monster_manual.json`
 

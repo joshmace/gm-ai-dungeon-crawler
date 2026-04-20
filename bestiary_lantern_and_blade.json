@@ -232,7 +232,20 @@
         "hp": 26,
         "ac": 14,
         "attacks": [
-          { "name": "Bite", "bonus": 5, "damage": "1d8+3", "damage_type": "piercing", "range": "melee" }
+          {
+            "name": "Bite",
+            "bonus": 5,
+            "damage": "1d8+3",
+            "damage_type": "piercing",
+            "range": "melee",
+            "on_hit": "Target makes a Constitution save (DC 11) or takes an additional 2d8 poison damage (half on a successful save) and is poisoned until the end of their next turn."
+          },
+          {
+            "name": "Web",
+            "bonus": 4,
+            "range": "ranged",
+            "on_hit": "Target is restrained by sticky webbing. Target may escape with a successful Strength (Athletics) check (DC 12) on their turn; the webbing burns away quickly to fire."
+          }
         ],
         "special_abilities": [
           {
@@ -246,18 +259,6 @@
             "name": "Spider Climb",
             "description": "Climbs any surface, including ceilings, as easily as a human walks on a floor.",
             "type": "passive"
-          },
-          {
-            "id": "venomous_bite",
-            "name": "Venomous Bite",
-            "description": "On a successful bite, the target must make a Constitution save (DC 11) or take an additional 2d8 poison damage (half on a successful save) and become poisoned until the end of their next turn.",
-            "type": "triggered"
-          },
-          {
-            "id": "web_shot",
-            "name": "Web",
-            "description": "Ranged attack, short range. On a hit, target is restrained by sticky webbing. Target may escape with a successful Strength (Athletics) check (DC 12) on their turn; the webbing burns away quickly to fire.",
-            "type": "active"
           }
         ],
         "xp_value": 200,
@@ -273,7 +274,14 @@
         "hp": 22,
         "ac": 14,
         "attacks": [
-          { "name": "Bite", "bonus": 5, "damage": "2d6+3", "damage_type": "piercing", "range": "melee" }
+          {
+            "name": "Bite",
+            "bonus": 5,
+            "damage": "2d6+3",
+            "damage_type": "piercing",
+            "range": "melee",
+            "on_hit": "Target makes a Strength save (DC 13) or is knocked prone."
+          }
         ],
         "special_abilities": [
           {
@@ -287,12 +295,6 @@
             "name": "Pack Tactics",
             "description": "The wolf has advantage on attack rolls against any target that has at least one of its allies within reach and not incapacitated.",
             "type": "passive"
-          },
-          {
-            "id": "trip",
-            "name": "Trip",
-            "description": "On a successful bite against a Large or smaller target, the target must make a Strength save (DC 13) or be knocked prone.",
-            "type": "triggered"
           }
         ],
         "xp_value": 200,
@@ -345,8 +347,21 @@
         "hp": 45,
         "ac": 14,
         "attacks": [
-          { "name": "Ancient Longsword", "bonus": 4, "damage": "1d8+2", "damage_type": "slashing", "range": "melee" },
-          { "name": "Life Drain",        "bonus": 4, "damage": "1d6+2", "damage_type": "necrotic", "range": "melee" }
+          {
+            "name": "Ancient Longsword",
+            "bonus": 4,
+            "damage": "1d8+2",
+            "damage_type": "slashing",
+            "range": "melee"
+          },
+          {
+            "name": "Life Drain",
+            "bonus": 4,
+            "damage": "1d6+2",
+            "damage_type": "necrotic",
+            "range": "melee",
+            "on_hit": "Target makes a Constitution save (DC 13) or has their hit point maximum reduced by the damage dealt. The reduction lasts until the target finishes a long rest; if this reduces a target's maximum to 0, the target dies."
+          }
         ],
         "special_abilities": [
           {
@@ -354,12 +369,6 @@
             "name": "Darkvision",
             "description": "Sees in total darkness as if it were dim light.",
             "type": "passive"
-          },
-          {
-            "id": "life_drain_rider",
-            "name": "Life Drain Rider",
-            "description": "On a successful Life Drain attack, the target must make a Constitution save (DC 13) or have their hit point maximum reduced by the damage dealt. The reduction lasts until the target finishes a long rest; if this reduces a target's maximum to 0, the target dies.",
-            "type": "triggered"
           },
           {
             "id": "sunlight_sensitivity",
