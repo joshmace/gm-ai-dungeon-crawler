@@ -133,22 +133,139 @@
     "barracks": {
       "id": "barracks",
       "name": "The Barracks",
-      "description": "",
-      "tags": [],
-      "connections": {},
-      "features": [],
-      "encounters": [],
+      "description": "A long, low-ceilinged hall lined with six double-stacked wooden bunks and a single scarred trestle table down the middle. On the table: a tin cup, a deck of grey-backed playing cards fanned out mid-game, and — still in the small wooden bowl beside it — a pile of copper pennies representing somebody's lost hand. Nobody has finished this game yet. The air here is colder than the gate room. Not one of the bunks has its blankets pulled back.",
+      "tags": ["encounter", "lore", "undead"],
+      "connections": {
+        "back to the gate room": "gate_room"
+      },
+      "environment": {
+        "name": "Wrong Cold",
+        "description": "The temperature drops visibly as the player enters — breath shows immediately, the cards on the table stir as if in a draft that is not there.",
+        "effects": [
+          "Living creatures in the room have disadvantage on saves against fear-inducing effects while the Private's spirit is active."
+        ]
+      },
+      "features": [
+        {
+          "id": "abandoned_card_game",
+          "type": "lore",
+          "name": "The Unfinished Hand",
+          "description": "The cards on the trestle table are laid out mid-hand. Three players; all three hands visible, which is not how the game is played. The pile of pennies sits in the middle, untouched. The topmost card has been dealt face-down on top of the pile, as if the dealer had been interrupted exactly then.",
+          "on_examine": "The cards are Warden quartermaster's issue — grey backs with a small lantern printed in the corner. Nothing about the game is unusual except that all three hands are visible and nobody has collected the penny-pile.",
+          "gm_notes": "If the restless spirit encounter fires, the GM should narrate the spirit sitting down to deal the missing fourth card before attacking, or similar pathos."
+        },
+        {
+          "id": "kit_racks",
+          "type": "searchable",
+          "name": "The Kit Racks",
+          "description": "Along the back wall, six narrow kit racks — one per bunk — each hung with what its occupant left behind. Most of the racks have been stripped by sixty years of rust and rodents. Two are mostly intact, their contents sealed in oilcloth wrappings.",
+          "check": { "skill": "investigation", "ability": "int", "dc_tier": "easy" },
+          "on_success": "You find an oilcloth-wrapped bundle containing a serviceable torch, fifty feet of good hempen rope, and a small glass vial of grey-green antitoxin.",
+          "on_failure": "The surviving bundles turn out to hold only mothballed cloth and a few rusted buckles.",
+          "reward": [
+            { "type": "item", "item_id": "torch", "quantity": 2 },
+            { "type": "item", "item_id": "rope_50ft", "quantity": 1 },
+            { "type": "item", "item_id": "antitoxin", "quantity": 1 }
+          ],
+          "persists": true,
+          "prerequisites": {
+            "encounter_defeated": ["barracks_haunting"]
+          },
+          "prereq_hint": "The racks are behind the bunks at the far end of the room — it would be rash to turn your back on whatever is in here to go rummaging."
+        }
+      ],
+      "encounters": [
+        {
+          "id": "barracks_haunting",
+          "name": "The Unfinished Hand",
+          "groups": [
+            { "monster_ref": "restless_spirit", "quantity": 1 },
+            { "monster_ref": "skeleton_warrior", "quantity": 2 }
+          ],
+          "trigger": { "type": "on_enter", "condition": null },
+          "placement": "The restless spirit rises from the trestle-table side, reaching for the undealt card. The two skeleton warriors sit up simultaneously in adjacent bunks, the bunks creaking under the motion.",
+          "behavior": "The skeletons fight mindlessly and pursue the nearest living thing. The spirit attacks only targets who handled the cards, the pennies, or the table; it leaves alone anyone who simply crosses the room to the kit racks.",
+          "gm_notes": "Bludgeoning damage fells the skeletons quickly (they have vulnerability). The spirit is the real problem: resistant to non-magical weapons, so a level-3 party without the Lanternblade or the wand should expect attrition. A clever player may realize the spirit calms if the dealt card is turned over and the hand finished — prose-adjudicate this as a full resolution if the player reasons it out.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": "2d6" }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
       "hazards": []
     },
 
     "officers_study": {
       "id": "officers_study",
       "name": "The Officer's Study",
-      "description": "",
-      "tags": [],
-      "connections": {},
-      "features": [],
-      "encounters": [],
+      "description": "A small square room lined on three walls with narrow shelves of Warden ledgers and bound codices, most of them intact but bloated with damp. The fourth wall is a single tall window of iron-bound glass, leaking grey afternoon light. In the middle of the room: a writing-desk of dark wood, its drawer pulled partly open, and the evidence of a very recent, very frustrated search — drawer tipped, paper scattered, a cold ash-ring on the floor where a small camp-lantern has burned out. On the desk itself, a heavy iron-bound lockbox, its hasp sealed by a softly-glowing lantern-sigil about the size of a thumbprint.",
+      "tags": ["encounter", "puzzle", "searchable", "lore"],
+      "connections": {
+        "back to the gate room": "gate_room"
+      },
+      "features": [
+        {
+          "id": "wardens_journal",
+          "type": "searchable",
+          "name": "The Warden-Lieutenant's Journal",
+          "description": "Beneath the mess the goblins made, still partially hidden under the drawer's false bottom, is a small leather-bound book. The ink is faded; the hand is Lt. Orick Havel's, the same as the signature on the muster-roll.",
+          "check": { "skill": "investigation", "ability": "int", "dc_tier": "medium" },
+          "on_success": "You find the false bottom on the second pass of the drawer. The journal is written in the plain column-hand of a Warden officer and covers the last two weeks of the Falling Winter. The final entry, undated:\n\n\"The thing from the Blackfall broke through the ward at Thornford's Common and we pursued. Caught it at the crypt beneath this post. My company is dead. I am bleeding out as I write. I cannot reach the crypt door — the seal requires the closing phrase, and my voice is going. If a Warden finds this, the phrase is engraved on the inside of my cloak-pin. Speak it at the Wardstone Lantern and the crypt will open. Finish what I began. Light the lantern. Speak the phrase: WE KEEP THE LIGHT, AND THE LIGHT KEEPS US. Burn me. Do not leave me unfinished. — Orick\"",
+          "on_failure": "Paper, paper, paper — and no journal. Maybe next pass.",
+          "reward": [],
+          "persists": true,
+          "prerequisites": {
+            "encounter_defeated": ["goblin_scavengers"]
+          },
+          "prereq_hint": "There are goblins in here. Searching the desk properly means dealing with them first."
+        },
+        {
+          "id": "wardens_lockbox",
+          "type": "puzzle",
+          "name": "The Warden's Lockbox",
+          "description": "A heavy iron-bound lockbox on the desk. No hinges, no visible seam. A single small lantern-sigil glows softly on the lid, warm to the touch, its light too steady to be a fire.",
+          "solution": {
+            "description": "The lockbox is sealed with a proper Warden lantern-sigil. It will open to any Warden who speaks the Watch's motto aloud, and to anyone who can convincingly invoke the Light. Accept any utterance of 'We keep the light so the light keeps us' or a clear declaration of Warden allegiance. The sigil responds to intent as much as to words — a bearer of the Lanternblade or of the Rubbing of the Lantern Tree will find the box opens for them with minimal prompting.",
+            "check": { "skill": "arcana", "ability": "int", "dc_tier": "hard" }
+          },
+          "on_success": {
+            "narration": "The lantern-sigil brightens, steadies, and flows out across the lid in four thin lines of light that meet at the corners. The lid rises on its own. Inside: a folded square of oilcloth wrapped around a single rolled parchment, and a small silver cloak-pin shaped like a lantern in laurels.",
+            "effects": []
+          },
+          "on_failure": {
+            "narration": "The sigil dims disapprovingly and does not respond further. The box remains sealed."
+          },
+          "reward": [
+            { "type": "item", "item_id": "scroll_of_mending", "quantity": 1 }
+          ],
+          "gm_notes": "Pure-narrative bypass is the intended path; a player quoting the motto auto-succeeds. The arcana check is a fallback for players who don't make the connection. The cloak-pin itself is flavor — no mechanical effect in v1, but note it for players who carry it (villagers on return may recognize them as Warden-adjacent)."
+        }
+      ],
+      "encounters": [
+        {
+          "id": "goblin_scavengers",
+          "name": "Goblin Scavengers",
+          "groups": [
+            { "monster_ref": "goblin_scout", "quantity": 2 },
+            { "monster_ref": "goblin_brute", "quantity": 1 }
+          ],
+          "trigger": { "type": "on_enter", "condition": null },
+          "placement": "Two scouts duck behind the overturned drawer and the window as the player enters; the brute, who had been crowbarring the lockbox without success, turns with the crowbar still in hand and bellows for his fellows.",
+          "behavior": "The brute commits immediately with Savage Rush on the first round; scouts open with shortbows from cover and use Nimble Escape to disengage if the player closes. If the brute falls, remaining scouts break morale narratively — run for the gate room and the door. They do not return.",
+          "gm_notes": "First proper combat. The goblins are here because they followed the reopened seal's glow from the forest; they are out of their depth. If one flees to the gate room and makes it outside, treat the watch-house's lanterns as extinguishing briefly as it crosses the yard — small narrative beat, the Wardens of the Light are still doing their job in their own way.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": "3d6" },
+              { "type": "item", "item_id": "silver_dagger", "quantity": 1 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
       "hazards": []
     },
 
