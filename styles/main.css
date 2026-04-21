@@ -990,6 +990,62 @@ input[type="number"].dice-input {
   }
 }
 
+/* Error card — replaces the overlay body when pack load fails. */
+#loadingErrorCard {
+  max-width: 720px;
+  width: 90%;
+  max-height: 80vh;
+  background: #1a1410;
+  border: 1px solid #5a4a3a;
+  border-radius: 6px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--ltColor);
+}
+
+#loadingErrorCard h2 {
+  color: #d4af37;
+  font-size: 1.5em;
+  margin: 0;
+}
+
+#loadingErrorDetails {
+  flex: 1;
+  overflow: auto;
+  background: #0d0a07;
+  border: 1px solid #3a2f22;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #e8dcc3;
+  margin: 0;
+}
+
+.loading-error-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.loading-error-actions button {
+  padding: 8px 16px;
+  background: #3a2f22;
+  color: #e8dcc3;
+  border: 1px solid #5a4a3a;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95em;
+}
+
+.loading-error-actions button:hover {
+  background: #5a4a3a;
+  color: #ffffff;
+}
+
 /* ============================================
    Death Overlay & Start Choice
    ============================================ */
