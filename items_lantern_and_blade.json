@@ -257,8 +257,21 @@
         "weight_slots": 1,
         "tags": ["common", "alchemy"],
         "consumable": {
+          "on_use": "cure_condition",
+          "amount": "poisoned"
+        }
+      },
+
+      "holy_water": {
+        "id": "holy_water",
+        "name": "Vial of Hallowed Water",
+        "type": "consumable",
+        "description": "A small glass vial of still, clear water, stoppered with a fitted wooden plug. Held against a lantern, it casts a faint pale light on whatever stands behind it. Warden work, blessed at a chapter-house chapel and sealed for use against the unquiet dead.",
+        "weight_slots": 1,
+        "tags": ["magical", "holy", "warden"],
+        "consumable": {
           "on_use": "gm_adjudicate",
-          "amount": "Removes the poisoned condition, or grants advantage on the next save against a poison effect if consumed before exposure."
+          "amount": "Thrown as a ranged attack at an undead or unhallowed creature: 1d8 radiant damage on a hit. Poured on an unconscious or bound undead: 1d8 radiant damage, no roll. Has no effect on the living; on a hallowed vessel it leaves a faint cool glow for a few minutes. The GM adjudicates edge cases — the water is blessed, not smart."
         }
       },
 
