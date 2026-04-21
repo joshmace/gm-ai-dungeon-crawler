@@ -272,10 +272,52 @@
     "lantern_room": {
       "id": "lantern_room",
       "name": "The Lantern Room",
-      "description": "",
-      "tags": [],
-      "connections": {},
-      "features": [],
+      "description": "A circular stone chamber no larger than a farmer's parlor, domed and windowless. At the center of the flagged floor, mounted on a low limestone plinth, a single **Wardstone Lantern** — a fist-sized sphere of clouded glass bound in tarnished silver, set atop a short rod. The lantern is dark. The plinth is carved around its rim with a repeating chain of laurels. Directly opposite the gate-room door, a low round-topped stair descends into darkness; the stair's mouth is sealed by a heavy black iron door with no handle, no hinges the player can see, and a single spent lantern-sigil on its face. The door is cold. The air in the room is not.",
+      "tags": ["puzzle", "lore", "ritual"],
+      "connections": {
+        "back to the gate room": "gate_room",
+        "the sealed crypt door": {
+          "to": "wardens_crypt",
+          "state": "locked",
+          "reveal_hint": "The crypt door has no visible mechanism. Its lantern-sigil is spent and the Wardstone Lantern at the room's center is unlit — the two are surely linked."
+        }
+      },
+      "environment": {
+        "name": "Held Air",
+        "description": "The air in the lantern room is warmer than the gate room by perhaps four degrees — not pleasant, exactly, but pointedly different. Dust hangs motionless in the light from the stairwell above.",
+        "effects": [
+          "The warmth fails the moment the wardstone lantern is lit; the room goes as cold as the gate room. GM should narrate this at the moment of lighting."
+        ]
+      },
+      "features": [
+        {
+          "id": "wardstone_lantern",
+          "type": "interactive",
+          "name": "The Wardstone Lantern",
+          "description": "A fist-sized sphere of clouded glass bound in tarnished silver, set atop a plinth carved with the Watch's laurel-chain. Its glass is cold. Its silver is colder.",
+          "on_examine": "The sphere contains a single tiny motionless flame, preserved and unlit. The silver casing bears the engraved words TO BE LIT BY THE CLOSING PHRASE — IN PEACE OR IN EXTREMIS. The laurel chain around the plinth is continuous, unbroken — Warden lantern-work at its purest. This is a door-ward, not a light-ward.",
+          "states": ["unlit", "lit"],
+          "initial_state": "unlit",
+          "actions": {
+            "unlit": {
+              "label": "Speak the closing phrase at the wardstone and light it",
+              "result": "You speak the phrase — WE KEEP THE LIGHT, AND THE LIGHT KEEPS US — and for a long moment nothing happens. Then, with a small patient sound like a match catching, the preserved flame inside the sphere takes and steadies. The room's held warmth falls away in a rush. Across the chamber the spent sigil on the crypt door flares, re-draws itself in four clean lines of pale light, and the door grinds inward half a handspan on mechanisms that have not moved in sixty years.",
+              "effects": [
+                { "type": "unlock_connection", "target": "the sealed crypt door" }
+              ]
+            },
+            "lit": {
+              "label": "The lantern burns steadily",
+              "result": "The lantern continues to burn. The crypt door stands ajar.",
+              "effects": []
+            }
+          },
+          "prerequisites": {
+            "feature_state": { "wardens_journal": "succeeded" }
+          },
+          "prereq_hint": "The lantern has an air of waiting for something specific. Whoever set it knew a phrase that has not been spoken here in sixty years. Better to look for a record of it before trying."
+        }
+      ],
       "encounters": [],
       "hazards": []
     },
@@ -283,12 +325,74 @@
     "wardens_crypt": {
       "id": "wardens_crypt",
       "name": "The Warden's Crypt",
-      "description": "",
-      "tags": [],
-      "connections": {},
-      "features": [],
-      "encounters": [],
-      "hazards": []
+      "description": "The stair comes out into a small vaulted chamber cut directly into the limestone under the watch-house. Cold. Lit by a thin greenish glow whose source the player cannot immediately locate. Against the far wall: a single stone sarcophagus on a raised platform, its lid askew. Carved into the platform's face, the Watch's laurel crest and the name ORICK HAVEL · LT · CROW'S HOLLOW · FELL IN THE FALLING WINTER. Standing between the platform and the stair, patient as a man waiting for a meeting, is the Lieutenant himself — or what is left of him. Tall. Grey. In the ruined half of a Warden's grey-blue coat. His eyes are the color of frozen water and he is looking directly at you. He has been looking at you for the entire time you have been descending the stair.",
+      "tags": ["boss", "encounter", "lore", "undead", "climax"],
+      "connections": {
+        "back up to the lantern room": "lantern_room"
+      },
+      "environment": {
+        "name": "Necrotic Cold",
+        "description": "The air here draws warmth out of living things. The greenish light seems to come from nowhere — no torch, no lantern, no visible source — and falls most strongly on the sarcophagus.",
+        "effects": [
+          "Living creatures in the crypt take a small continuous chill; see the Crypt Chill hazard for mechanics.",
+          "Lanternblade's runes burn visibly brighter here. A player holding the blade will cast dim light regardless of any effort to cover it."
+        ]
+      },
+      "features": [
+        {
+          "id": "havel_sarcophagus",
+          "type": "lore",
+          "name": "Lt. Orick Havel's Sarcophagus",
+          "description": "A plain stone sarcophagus on a raised limestone platform, the lid pushed halfway off. Carved into the platform in the Watch's neat column-hand: ORICK HAVEL · LT · CROW'S HOLLOW · FELL IN THE FALLING WINTER. Beneath the name, in smaller script, the Watch's closing formula: MAY HE KEEP THE LIGHT AS HE KEPT US.",
+          "on_examine": "Inside the sarcophagus, what remains: a ruined grey-blue Warden's coat, a dried-up wreath of laurels, and — pressed against the inside of the stone lid where the Lieutenant clawed at it — the long thin mark of fingernails worn down to nothing. He was put in here alive. Someone sealed him before he was dead, and ran. The journal says his company was lost at the Blackfall; the sarcophagus says his company failed him one more time after that.",
+          "gm_notes": "The tragic beat of the module. The Lieutenant was sealed while still alive by panicking subordinates. This is what the closing phrase was supposed to have done — finish him properly. His rising as a wight is the result of the incomplete ritual. A player who grasps this before the fight may offer to speak the phrase over the sarcophagus after burning the body — allow a narrative alternative to pure combat, with the same completion effect."
+        }
+      ],
+      "encounters": [
+        {
+          "id": "warden_lieutenants_last_stand",
+          "name": "Lt. Orick Havel, of the Watch",
+          "groups": [
+            { "monster_ref": "warden_lieutenant_havel", "quantity": 1 }
+          ],
+          "trigger": { "type": "on_enter", "condition": null },
+          "placement": "Havel stands between the stair and the sarcophagus. He does not advance immediately — he waits until the player sets foot on the crypt floor. When he speaks, his voice still carries the authority of an officer. 'You wear the Light,' he may say to a player holding Warden gear. 'Then finish what my own would not.'",
+          "behavior": "Havel opens with the sword. He reserves Life Drain for a clearly-wounded target. If reduced below half HP, he retreats toward the sarcophagus and begins reciting the closing formula under his breath — narrate this; players who recognize the ritual may intervene by speaking the phrase with him, which counts as defeating the encounter without killing him narratively. If killed through normal combat, his body collapses and the greenish light fails as if a candle had been pinched out.",
+          "gm_notes": "This is the module's climax. The fight is deliberately tuned for a level-3 character with the Lanternblade: tough but winnable. Without the Lanternblade (or equivalent magic damage), the fight is unfair — the GM should telegraph the Lanternblade's significance throughout the module. Narrative-resolution (speaking the closing phrase with Havel) is a first-class alternative to pure combat and triggers the same rewards and completion.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": "4d6" },
+              { "type": "item", "item_id": "amulet_of_the_salamander", "quantity": 1 },
+              { "type": "item", "item_id": "rubbing_of_the_lantern_tree", "quantity": 1 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": [
+        {
+          "id": "crypt_chill",
+          "name": "Crypt Chill",
+          "description": "The greenish light in the crypt is not light. It is the absence of warmth, made visible by whatever keeps Havel standing. Living creatures in the chamber feel it draw heat out of their chest.",
+          "gm_notes": "Pure-avoidance hazard: no detection block. Triggers on entry, once per visit. Mechanically small but narratively important — it's a signal that the crypt itself is the problem, not only its occupant.",
+          "trigger": {
+            "type": "on_enter",
+            "target": null
+          },
+          "avoidance": {
+            "check": { "skill": null, "ability": "con", "dc_tier": "medium" },
+            "on_success": "You set your breath against the cold and cross the threshold; the chill passes over you like a shadow.",
+            "on_failure": {
+              "narration": "The cold reaches in behind your breastbone and takes a small slow handful. It does not feel like damage, exactly. It feels like forgetting something.",
+              "damage": { "amount": "1d4", "type": "necrotic" },
+              "conditions": []
+            }
+          },
+          "persists": false,
+          "resolved_by_detection": false
+        }
+      ]
     }
   },
 
