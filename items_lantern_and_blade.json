@@ -113,6 +113,28 @@
         }
       },
 
+      "wardens_oathblade": {
+        "id": "wardens_oathblade",
+        "name": "Warden's Oathblade",
+        "type": "weapon",
+        "slot": "main_hand",
+        "description": "A plain longsword of clean silvered steel, its crossguard stamped with a single laurel. Older than it looks. The Wardens forged these by the dozen for their recruits, and an initiate kept the blade they were given on the day they took the oath. Weight-wise, a training sword; in function, not. The silvering alone is worth more than most recruits carried in coin.",
+        "weight_slots": 3,
+        "tags": ["magical", "warden", "silvered", "quest-reward"],
+        "weapon": {
+          "damage": "1d8",
+          "damage_type": "slashing",
+          "melee": true,
+          "ranged": false
+        },
+        "magic": {
+          "attack_bonus": 1,
+          "damage_bonus": 0,
+          "bonus_damage": { "amount": "1d4", "type": "radiant" },
+          "special_effects": "The blade's silvering counts as silvered for any rider that cares. Against undead and unhallowed creatures, the oath worked into the steel flares briefly on a hit — an additional 1d4 radiant damage. A recruit-blade; not as old or as deep as the Lanternblade, but the same order of work, and enough to teach a hand what the Lanternblade is asking of it."
+        }
+      },
+
       "leather_armor": {
         "id": "leather_armor",
         "name": "Boiled Leather",

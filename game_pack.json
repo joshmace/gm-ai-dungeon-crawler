@@ -1,9 +1,14 @@
 {
-  "id": "shattered_realms_rules_test",
-  "name": "Shattered Realms / Rules Test",
+  "id":      "gauntlet_test_hub_v1",
+  "name":    "The Gauntlet — Rules Test Hub",
   "version": "1.0",
-  "setting": "./setting_shattered_realms.json",
-  "rules": "./rules.json",
-  "bestiary": "./monster_manual.json",
-  "adventure_module": "./test_module_rules.json"
+  "author":  "Lantern & Blade Project",
+  "description": "A Warden's training hall under the Hollowmarch: nine small chambers in a central foyer, each purpose-built to exercise one mechanical surface of the Lantern & Blade rules engine. Intended for rapid regression testing during rules-engine development, not as a narrative playthrough. Reuses the Lantern & Blade rules, setting, bestiary, and items library; adds a bespoke module and a Fighter pregen (Aldric).",
+
+  "rules":             "./rules_lantern_and_blade.json",
+  "setting":           "./setting_hollowmarch.json",
+  "bestiary":          "./bestiary_lantern_and_blade.json",
+  "items":             "./items_lantern_and_blade.json",
+  "adventure_module":  "./module_gauntlet.json",
+  "character":         "./character_aldric.json"
 }
