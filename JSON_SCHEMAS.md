@@ -221,3 +221,365 @@ Plain markdown. No structural parsing — the prompt builder loads the whole fil
 `setting_hollowmarch.json` + `hollowmarch_lore.md`.
 
 ---
+
+## Rules Pack
+
+The mechanical spine of the pack. Declares what character data looks like, how rolls resolve, how combat runs, and what progression feels like. The character sheet fills in values; the rules pack declares the shape.
+
+All mechanical data is structured. Tone, running philosophy, and signature-mechanic prose live in the guidance sidecar.
+
+### Top-level shape
+
+```jsonc
+{
+  "rules": {
+    "id":                "lantern_and_blade_v1",  // required — machine id
+    "name":              "Lantern & Blade",       // required
+    "version":           "1.0",                   // optional
+    "author":            "…",                     // optional
+    "description":       "…",                     // optional
+    "design_philosophy": "…",                     // optional — one-line tagline; feeds the GM prompt's tone block
+    "guidance":          "lantern_and_blade_guidance.md",  // optional — path to GM guidance sidecar
+
+    "character_model": { /* see below */ },   // required
+    "resolution":      { /* see below */ },   // required
+    "resources":       { /* see below */ },   // required
+    "combat":          { /* see below */ },   // required
+    "conditions":      [ /* see below */ ],   // optional (empty array allowed)
+    "progression":     { /* see below */ },   // required
+    "difficulty":      { /* see below */ },   // required
+    "encumbrance":     { /* see below */ }    // required ("none" is a valid method)
+  }
+}
+```
+
+---
+
+### `character_model`
+
+Declares the shape of character data. The character pack fills in values against this shape.
+
+```jsonc
+{
+  "abilities": [                                        // required — authoritative ability list for the pack
+    { "id": "str", "name": "Strength",     "abbr": "STR", "range": [1, 20] },
+    { "id": "dex", "name": "Dexterity",    "abbr": "DEX", "range": [1, 20] },
+    { "id": "con", "name": "Constitution", "abbr": "CON", "range": [1, 20] }
+    // …etc.
+  ],
+
+  "modifier_formula": "table_5e",   // required — "table_5e" | "table_bx" | "score_is_mod"
+
+  "saves": {
+    "type": "per_ability"           // required — "per_ability" | "categorical"
+  },
+
+  "skills": [                       // optional — omit for skill-less systems (B/X, Cairn)
+    { "id": "stealth",   "name": "Stealth",   "ability": "dex" },
+    { "id": "athletics", "name": "Athletics", "ability": "str" }
+  ],
+
+  "uses_classes": true,             // required — boolean
+  "classes": {                      // conditional — required when uses_classes: true
+    "fighter": {
+      "id":          "fighter",     // required
+      "name":        "Fighter",     // required
+      "hit_die":     "1d10",        // required — dice string; feeds hp_gain_per_level
+      "description": "…"            // optional
+    }
+  },
+
+  "slot_limits": {                  // optional — max equipped items per slot type; omit to disable enforcement
+    "main_hand": 1, "off_hand": 1, "ranged": 1,
+    "body": 1, "shield": 1,
+    "head": 1, "hands": 1, "feet": 1,
+    "neck": 1, "ring": 2,
+    "cloak": 1, "belt": 1
+  }
+}
+```
+
+**Ability `range`:** closed interval `[min, max]`. Use `[3, 18]` for rolled 3d6 packs, `[1, 20]` for 5e-shaped packs, etc.
+
+**`modifier_formula` presets:**
+
+| Value | Meaning |
+|---|---|
+| `"table_5e"` | 5e-style: `(score − 10) ÷ 2`, rounded down. |
+| `"table_bx"` | B/X-style: fixed lookup table (score 3 → −3, 4–5 → −2, … 18 → +3). |
+| `"score_is_mod"` | Cairn/Knave-style: ability score IS the modifier. |
+
+**`saves.type`:**
+
+| Value | Meaning |
+|---|---|
+| `"per_ability"` | One save per ability (5e-style). Character's `saves.proficient[]` holds ability ids. |
+| `"categorical"` | Categorical saves (e.g., B/X's Death Ray, Wands, Paralysis, Breath, Spells). Declared via a `categories[]` array on `saves`; character's `saves.proficient[]` holds category ids. |
+
+**Skills:**
+
+- Optional. When absent, the character panel hides its Skills section and the GM falls back to raw ability checks.
+- Empty array `"skills": []` is encouraged for deliberately skill-less packs (signals intent).
+- Each entry: `id` (required), `name` (required), `ability` (required — ability id this skill keys off).
+
+**Classes:**
+
+- `uses_classes: true` makes `classes` required. Omit classes entirely for classless packs (`uses_classes: false`).
+- v1 class metadata is deliberately minimal — id, name, hit_die, short description.
+- Class features (spells, per-level abilities, subclass trees) live on the character in `class_features[]` as prose. Full structured class systems deferred to v2.
+
+**Slot limits:**
+
+- Max count per slot type. The app's equip logic enforces these against the character's `equipment[]`.
+- Two-handed weapons are handled at the item level (`slot: "two_handed"`) — equipping a two-handed item occupies both `main_hand` and `off_hand`. No additional schema needed here.
+
+---
+
+### `resolution`
+
+Declares how checks are rolled and what auxiliary rolls the pack uses.
+
+```jsonc
+{
+  "checks": {
+    "method":                  "roll_high_vs_dc",  // required — "roll_high_vs_dc" | "roll_under_score"
+    "dice":                    "1d20",             // required — dice string
+    "crit_success":            "nat_20",           // required — narrative cue; "nat_20" | "nat_1" etc., or "none"
+    "crit_failure":            "nat_1",            // required — narrative cue; or "none" for gritty play
+    "advantage_disadvantage":  true                // required — boolean
+  },
+  "auxiliary": {
+    "x_in_6":        false,                        // required — surprise / secret doors / thief skills
+    "reaction_roll": false,                        // required — 2d6 NPC reaction
+    "morale_roll":   false                         // required — 2d6 monster morale
+  }
+}
+```
+
+**`checks.method`:**
+
+| Value | Meaning |
+|---|---|
+| `"roll_high_vs_dc"` | Roll dice + modifier, meet or beat DC. |
+| `"roll_under_score"` | Roll dice, roll equal to or under the target ability score. |
+
+**Crit fields are narrative only.** No mechanical effect in the check resolution pipeline. Combat crits are declared separately in `combat.critical_hit` (Q5).
+
+**`advantage_disadvantage: true`** — the prompt includes adv/disadv rules; the GM may issue `[ROLL_REQUEST: Ability, advantage]` or `, disadvantage]`; the dice UI rolls 2d20 and keeps the appropriate die.
+
+**`advantage_disadvantage: false`** — the prompt tells the GM the system has no adv/disadv; use flat DC adjustments instead. Only `[ROLL_REQUEST: Ability]` is accepted.
+
+---
+
+### `resources`
+
+Hit points, healing, and damage types.
+
+```jsonc
+{
+  "hit_points": {
+    "max_formula": "class_hd_plus_con",  // required — "class_hd_plus_con" | "flat" | …
+    "at_zero":     "unconscious",        // required — "dead" | "unconscious"
+    "overflow":    null                  // required — null OR { "to_ability": "str" } for Cairn-style ability damage
+  },
+  "healing": {
+    "natural_rest": "full_overnight"     // required — "full_overnight" | "partial_overnight" | "minimal" | "none"
+  },
+  "damage_types": [                      // optional — omit entirely for typeless packs
+    { "id": "slashing", "name": "Slashing", "narrative_cue": "blades carving and tearing" },
+    { "id": "fire",     "name": "Fire",     "narrative_cue": "burning, searing" },
+    { "id": "cold",     "name": "Cold" }   // narrative_cue optional
+  ]
+}
+```
+
+**`hit_points.at_zero`:**
+
+| Value | Meaning |
+|---|---|
+| `"dead"` | Zero HP = character dies. Death overlay + end-of-game UI. |
+| `"unconscious"` | Zero HP = incapacitated but alive. Healing or narrative rescue restores. |
+
+Death saves are not supported in v1.
+
+**`hit_points.overflow`:** set to `{ "to_ability": "<id>" }` for Cairn-style systems where damage past 0 HP cascades into an ability score. Null for every other system.
+
+**Damage types:** Entries with a `narrative_cue` feed the GM per-pack flavor direction and keep monster attacks + hazards consistent. Especially useful for homebrew types (`void`, `psychic`). When `damage_types` is omitted, damage is typeless everywhere (no resistances, no immunities).
+
+---
+
+### `combat`
+
+Attack resolution, damage formula, crits, initiative.
+
+```jsonc
+{
+  "attack": {
+    "resolution": "roll_high_vs_ac"        // required — "roll_high_vs_ac" | "auto_hit_no_roll"
+  },
+  "damage": {
+    "formula":        "weapon_die_plus_ability_mod",  // required — "weapon_die_plus_ability_mod" | "weapon_die_only"
+    "melee_ability":  "str",                          // required if formula uses ability mod; ability id
+    "ranged_ability": "dex"                           // required if formula uses ability mod; ability id
+  },
+  "critical_hit": {
+    "trigger": "nat_20",                   // required — "nat_20" | "none"
+    "effect":  "double_dice"               // required — "double_dice" | "max_damage" | "extra_die"
+  },
+  "initiative": {
+    "type": "player_first"                 // required — "player_first" | "side_based"
+  }
+}
+```
+
+**`attack.resolution: "auto_hit_no_roll"`** is the Cairn/Knave/Into-the-Odd lineage — no attack roll, damage is rolled directly. Partial fit for Draw Steel-likes.
+
+**AC convention:** ascending only in v1. Descending AC (AD&D THAC0) is v2.
+
+**Initiative `"side_based"`** fires a coin-flip at combat start to decide which side acts first. `"individual"` (per-creature initiative with full turn-order UI) is v2.
+
+---
+
+### `conditions`
+
+An array of condition definitions. The app tracks active condition ids on the character; the GM applies the effect prose narratively.
+
+```jsonc
+[
+  {
+    "id":          "poisoned",              // required
+    "name":        "Poisoned",              // required
+    "icon":        "drop",                  // required — id from the fixed icon library (see "Open questions" at end of doc)
+    "description": "A toxin is working through you.",  // required — player-facing
+    "effect":      "Disadvantage on attack rolls and ability checks.",  // required — prose applied by the GM
+    "removal":     "Until the duration ends, antitoxin is administered, or the poison is neutralized." // required — prose
+  }
+]
+```
+
+An empty array is a valid pack-level declaration (signals "this pack uses no conditions"). Omitting the field entirely is also acceptable.
+
+---
+
+### `progression`
+
+Character advancement — XP, levels, and how HP grows per level.
+
+```jsonc
+{
+  "type": "xp_and_level",                // required — "xp_and_level" | "milestone" | "none"
+  "xp_sources": [                        // required when type is "xp_and_level"; ignored otherwise
+    "monsters_defeated",
+    "treasure_recovered",                // classic Gygaxian gold-as-XP (opt-in)
+    "milestones"
+  ],
+  "level_table": [                       // required when type is "xp_and_level"
+    { "level": 1,  "xp_required": 0,    "proficiency_bonus": 2 },  // proficiency_bonus is OPTIONAL per row
+    { "level": 2,  "xp_required": 300,  "proficiency_bonus": 2 },
+    { "level": 5,  "xp_required": 6500, "proficiency_bonus": 3 }
+  ],
+  "max_level":          10,              // required — highest level authorable in the pack
+  "hp_gain_per_level":  "roll_class_hd_plus_con"  // required — "roll_class_hd_plus_con" | "average_class_hd_plus_con" | "flat"
+}
+```
+
+**Proficiency bonus:** optional per row. Include on rows where the system uses a scaling PB (5e, Shadowdark). Omit entirely for systems that don't (B/X, Knave, Cairn) — the app hides it from the character panel and does not fold it into totals.
+
+**`hp_gain_per_level`:**
+
+| Value | Meaning |
+|---|---|
+| `"roll_class_hd_plus_con"` | Roll the class's hit die + CON modifier on level up. |
+| `"average_class_hd_plus_con"` | Take fixed average of the hit die + CON modifier. Lantern & Blade's default. |
+| `"flat"` | Fixed gain regardless of class. Declare amount in a `hp_flat_gain` sibling field. |
+
+Characters always start at level 1.
+
+---
+
+### `difficulty`
+
+The DC / modifier ladder. Shape depends on `resolution.checks.method`.
+
+**For `roll_high_vs_dc`:**
+
+```jsonc
+{
+  "scale": [
+    { "id": "easy",   "name": "Easy",   "dc": 10 },
+    { "id": "medium", "name": "Medium", "dc": 15 },
+    { "id": "hard",   "name": "Hard",   "dc": 20 }
+  ],
+  "auto_success": "Trivial tasks with no consequence.",        // required — prose
+  "auto_failure": "Genuinely impossible tasks."                // required — prose
+}
+```
+
+**For `roll_under_score`:**
+
+```jsonc
+{
+  "scale": [
+    { "id": "easy",      "name": "Easy",      "modifier":  2 },
+    { "id": "normal",    "name": "Normal",    "modifier":  0 },
+    { "id": "hard",      "name": "Hard",      "modifier": -2 }
+  ],
+  "auto_success": "…",
+  "auto_failure": "…"
+}
+```
+
+**Scale notes:**
+
+- Free-form tier count. Three tiers is the OSR standard; Lantern & Blade uses six. Authors choose what fits.
+- Tier `id`s are what modules reference via `dc_tier` — portable modules stick to `easy` / `medium` / `hard`.
+- `auto_success` / `auto_failure` stay as prose (GM judgment, not algorithmic).
+
+---
+
+### `encumbrance`
+
+Carry-capacity declaration. Required in every pack; `"none"` is a valid method.
+
+```jsonc
+// Method 1 — slots
+{
+  "method":         "slots",               // required — "slots" | "weight" | "none"
+  "slot_capacity":  "str"                  // required for "slots" — ability id OR fixed integer
+}
+
+// Method 2 — weight
+{
+  "method":          "weight",
+  "weight_formula":  { "multiplier": 15, "ability": "str" }  // required for "weight"
+}
+
+// Method 3 — none
+{
+  "method": "none"
+}
+```
+
+**`weight_formula` shape:**
+
+- `multiplier`: positive integer coefficient.
+- `ability`: ability id from `character_model.abilities`.
+- Capacity at runtime = `multiplier × character.ability_scores[ability]`.
+
+Inventory UI for slot or weight tracking is built out as packs adopt the methods.
+
+---
+
+### Guidance sidecar (`<name>_guidance.md`)
+
+Optional markdown. Loaded into `{{GUIDANCE_BLOCK}}` in the system prompt. Good homes for:
+
+- Tone and pacing philosophy beyond the one-line `design_philosophy`.
+- System-specific running notes (torch urgency, travel pace, etc.).
+- Signature mechanics the schema doesn't natively express — the GM does its best to honor them narratively. If a mechanic becomes popular enough, v2 may add a formal primitive.
+
+### Reference example
+
+`rules_lantern_and_blade.json` + `lantern_and_blade_guidance.md`.
+
+---
