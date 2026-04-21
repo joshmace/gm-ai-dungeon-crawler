@@ -236,6 +236,281 @@
           "resolved_by_detection": true
         }
       ]
+    },
+
+    "chamber_hidden_word": {
+      "id":          "chamber_hidden_word",
+      "name":        "The Chamber of the Hidden Word",
+      "description": "A hexagonal chamber, smaller than the others, the ceiling lower. Set into each of five of the six walls is a plain iron door-plate — closed, unmarked — and carved above each door-plate, in Warden column-script, a single word. DUTY · TRUST · SILENCE · HONOR · TRUTH. The sixth wall holds only the return door and, carved into it in smaller letters, a single line: OF THESE FIVE, ONE IS KEPT IN THE DARK.",
+      "tags":        ["puzzle", "lore", "test-puzzle"],
+      "connections": {
+        "back_to_hub": {
+          "label": "back to the hall of initiation",
+          "to":    "hall_of_initiation",
+          "state": "open"
+        }
+      },
+      "features": [
+        {
+          "id":          "hidden_word_riddle",
+          "type":        "puzzle",
+          "name":        "The Hidden Word",
+          "description": "Five words above five plates. Each door-plate is hinged to depress the width of a hand when pressed. The inscription on the return-door wall is the riddle: which of the five virtues is 'kept in the dark.'",
+          "solution": {
+            "description": "SILENCE. A Warden 'kept in the dark' is a Warden sworn to silence about the order's secrets. Accept variants — 'silence', 'the silent one', 'quiet', 'the keeping of secrets' — as a pure-narrative solve. If the player is stuck, the INT check is a check-gated fallback and the GM may narrate the door-plates warming faintly under the correct one.",
+            "check":       { "skill": "arcana", "ability": "int", "dc_tier": "medium" }
+          },
+          "on_success": {
+            "narration": "You press the SILENCE plate. The plate sinks a full handspan under your palm, and somewhere behind the walls of the hall a counterweight drops with a single clean stone-on-stone knock. In the Chamber of the Oathblade, across the foyer, a small cabinet-lock will have opened; you know this the way you know a draft has shifted in a house.",
+            "effects":   [
+              { "type": "activate_feature", "target": "oathblade_rack", "state": "unlocked" }
+            ],
+            "reward":    [
+              { "type": "xp", "amount": 50 }
+            ]
+          },
+          "on_failure": {
+            "narration": "The plate sinks a handspan and rises again, unchanged. Somewhere behind the walls, nothing drops. The chamber is ready for a second attempt."
+          }
+        }
+      ],
+      "encounters": [],
+      "hazards":    []
+    },
+
+    "chamber_oathblade": {
+      "id":          "chamber_oathblade",
+      "name":        "The Chamber of the Oathblade",
+      "description": "A small armory-cell, barely larger than a pantry. A single iron-banded rack stands against the far wall, sized for one longsword. Above the rack, a carved laurel and a small bronze plate reading FIRST BLADE OF THE INITIATE. A practice dummy, inert this time — plain cloth and straw — stands in the corner, ready to take a swing from whoever has drawn from the rack.",
+      "tags":        ["searchable", "lore", "encounter", "test-item-pickup", "test-weapon-use"],
+      "connections": {
+        "back_to_hub": {
+          "label": "back to the hall of initiation",
+          "to":    "hall_of_initiation",
+          "state": "open"
+        }
+      },
+      "features": [
+        {
+          "id":          "oathblade_rack",
+          "type":        "searchable",
+          "name":        "The Initiate's Rack",
+          "description": "A heavy oak-and-iron sword-rack against the far wall, sized for a single longsword. The cabinet beneath the rack is closed with a plain iron latch, lantern-sealed. Until the Chamber of the Hidden Word is walked, the latch will not lift.",
+          "check":       { "skill": "investigation", "ability": "int", "dc_tier": "easy" },
+          "on_success":  "The latch lifts without resistance, the cabinet opens, and you find what the initiates were given: a plain silvered longsword of clean Warden make, wrapped in oilcloth, one laurel stamped on the crossguard. This is an Oathblade. It is meant to be carried.",
+          "on_failure":  "The latch is shut and the cabinet resists. On a second pass it opens easily — the latch was never the obstacle.",
+          "reward": [
+            { "type": "item", "item_id": "wardens_oathblade", "quantity": 1 }
+          ],
+          "persists":    true,
+          "prerequisites": {
+            "feature_state": { "hidden_word_riddle": "solved" }
+          },
+          "prereq_hint": "The cabinet beneath the rack is lantern-sealed. Walking the Chamber of the Hidden Word first will unseal it."
+        }
+      ],
+      "encounters": [
+        {
+          "id":    "oathblade_dummy",
+          "name":  "The Practice Dummy",
+          "groups": [
+            { "monster_ref": "practice_skeleton", "quantity": 1 }
+          ],
+          "trigger": {
+            "type":      "on_condition",
+            "condition": "The player draws the Oathblade from the rack for the first time. The dummy in the corner stirs — the Wardens wired one into every armory-cell so the recruit could feel the new blade land before they walked out."
+          },
+          "placement": "The practice dummy in the corner unfolds upright, lifts a training staff, and steps into the middle of the floor. It is weaker than the dummies in First Arms; it is a target, not an opponent.",
+          "behavior":  "Mindless. Swings the staff. Does not pursue; does not flee.",
+          "gm_notes":  "Tests the equip-and-use flow: player picks up the Oathblade, equips it to main_hand (likely displacing whatever they were carrying), then attacks the dummy. If the engine does not apply the Oathblade's attack_bonus +1 and bonus_damage 1d4 radiant to the swing, the weapon-swap pipeline is broken. Single encounter; should resolve in one or two rounds. Treats as from_bestiary for XP.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": []
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "chamber_apothecary": {
+      "id":          "chamber_apothecary",
+      "name":        "The Chamber of the Apothecary",
+      "description": "A long narrow chamber lined on both walls with wooden shelving. The shelves hold a great many glass vials, small clay jars, and folded oilcloth bundles; most of them are empty or cracked, but three bundles near eye height on the right-hand wall are plainly intact, oilcloth still tied, each with a small tag in a neat Warden hand.",
+      "tags":        ["searchable", "lore", "test-consumables"],
+      "connections": {
+        "back_to_hub": {
+          "label": "back to the hall of initiation",
+          "to":    "hall_of_initiation",
+          "state": "open"
+        }
+      },
+      "features": [
+        {
+          "id":          "apothecary_shelf_healing",
+          "type":        "searchable",
+          "name":        "The Shelf — Healing Draughts",
+          "description": "The left-most of the three intact bundles. The tag reads, in Warden column-hand: FOR THE WOUNDED.",
+          "check":       null,
+          "on_success":  "The bundle is heavier than it looks. Inside: two red-brown vials in a leather cradle, stoppered in wax. The wax is fresh.",
+          "on_failure":  null,
+          "reward": [
+            { "type": "item", "item_id": "healing_potion", "quantity": 2 }
+          ],
+          "persists":    true,
+          "gm_notes":    "Tests the `heal_player` on_use path. The player should pick these up, then, ideally, drink one when wounded (e.g. after Careful Foot or the Black Gate Warden) to verify the HP-restoration pipeline fires and clamps correctly at max HP."
+        },
+        {
+          "id":          "apothecary_shelf_antitoxin",
+          "type":        "searchable",
+          "name":        "The Shelf — Antitoxins",
+          "description": "The middle bundle. The tag reads: FOR THE POISONED.",
+          "check":       null,
+          "on_success":  "A pair of narrow clay vials, both stoppered with wax and wrapped in felt. The felt is cold; the clay is colder.",
+          "on_failure":  null,
+          "reward": [
+            { "type": "item", "item_id": "antitoxin", "quantity": 2 }
+          ],
+          "persists":    true,
+          "gm_notes":    "Tests the `cure_condition` on_use path. The intended dev test: walk Breath-Held first to acquire the poisoned condition, then come here, then use antitoxin to verify the condition is correctly removed."
+        },
+        {
+          "id":          "apothecary_shelf_holy_water",
+          "type":        "searchable",
+          "name":        "The Shelf — Hallowed Water",
+          "description": "The right-most bundle. The tag reads: FOR THE UNQUIET.",
+          "check":       null,
+          "on_success":  "A single small glass vial, stoppered with a fitted wooden plug. The water inside is still and clear and, when held against the lantern, casts a faint pale light onto the wall behind it.",
+          "on_failure":  null,
+          "reward": [
+            { "type": "item", "item_id": "holy_water", "quantity": 1 }
+          ],
+          "persists":    true,
+          "gm_notes":    "Tests the `gm_adjudicate` on_use path — holy_water's on_use is pure prose. The engine should surface a 'use item?' confirmation, and on confirm the GM narrates the effect from the consumable prose. No mechanical resolution required. If the engine tries to resolve a heal or a condition-cure here, the dispatch on_use keyword is broken."
+        }
+      ],
+      "encounters": [],
+      "hazards":    []
+    },
+
+    "chamber_breath_held": {
+      "id":          "chamber_breath_held",
+      "name":        "The Chamber of the Breath-Held",
+      "description": "A small square cell, ceiling low. A thin pale mist pools on the flagstones, knee-deep, still as standing water. The mist has a faint acrid smell — not painful, but noticeable, and the eyes water on the second breath. The far door is clearly visible through the fog; it is four strides off.",
+      "tags":        ["hazard", "test-save", "test-condition"],
+      "connections": {
+        "back_to_hub": {
+          "label": "back to the hall of initiation",
+          "to":    "hall_of_initiation",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [],
+      "hazards": [
+        {
+          "id":          "breath_held_mist",
+          "name":        "The Acrid Mist",
+          "description": "A pale mist pools on the floor, chemically treated — the Wardens used it as a breath-discipline trial. A held breath or a damp cloth at the mouth is the old initiate's answer; a lungful without preparation costs the recruit a day's unsteady stomach and, sometimes, the chamber.",
+          "gm_notes":    "Pure-avoidance hazard — no detection block. Tests the save pipeline: trigger on entry, CON save, on failure damage AND condition applied. The intended dev test: walk in deliberately without preparation, fail the CON save, watch the engine apply 1d4 damage and set the 'poisoned' condition. Then walk to Apothecary, use antitoxin, verify the condition clears. If the engine applies damage but not the condition (or vice versa), the hazard dispatch is broken. If the engine offers a detection roll here, the detection-vs-avoidance branch logic is broken.",
+          "trigger": {
+            "type":   "on_enter",
+            "target": null
+          },
+          "avoidance": {
+            "check":      { "skill": null, "ability": "con", "dc_tier": "medium" },
+            "on_success": "You take a careful breath at the threshold, hold it, and cross the cell in three long strides. The eyes water, the mouth tastes of old copper, but the chest stays still.",
+            "on_failure": {
+              "narration":  "You take one unguarded breath at the threshold and the next three strides get harder than they should. By the time your hand touches the far door your stomach is tight, your vision is running at the edges, and the cell has taught its lesson.",
+              "damage":     { "amount": "1d4", "type": "poison" },
+              "conditions": ["poisoned"]
+            }
+          },
+          "persists":             false,
+          "resolved_by_detection": false
+        }
+      ]
     }
-  }
+  },
+
+  "module_bestiary": {
+    "id":          "gauntlet_module_bestiary",
+    "name":        "The Gauntlet — Module Foes",
+    "description": "Two bespoke stat blocks for the Gauntlet test hub. practice_skeleton is a deliberately weak training construct used in First Arms, The Line, and the Oathblade chamber; black_gate_warden is a boss-tier officer for the Black Gate chamber. Both are unhallowed Warden lantern-constructs, not true undead — they move on old lantern-work wired into the chamber, not on their own will.",
+    "monsters": {
+      "practice_skeleton": {
+        "id":          "practice_skeleton",
+        "name":        "Animated Training Dummy",
+        "description": "A cloth-and-straw training dummy wired into the chamber's lantern-work. When a recruit crosses the threshold, the dummy lifts its practice weapon and takes a step down off its peg. It is not a true undead — no bone, no memory, no hunger — only old Warden craft doing the work of a sparring partner.",
+        "type":        "construct",
+        "hp":          7,
+        "ac":          11,
+        "attacks": [
+          {
+            "name":        "Training Shortsword",
+            "bonus":       2,
+            "damage":      "1d4",
+            "damage_type": "slashing",
+            "range":       "melee"
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "mindless",
+            "name":        "Mindless",
+            "description": "Cannot be charmed, frightened, or reasoned with. Does not make saves against effects that target the mind.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 25,
+        "behavior": "Mindless. Attacks until broken. Does not flee.",
+        "tactics":  "Straight melee with the training weapon. No tricks. A recruit's first-combat baseline."
+      },
+
+      "black_gate_warden": {
+        "id":          "black_gate_warden",
+        "name":        "The Black Gate Warden",
+        "description": "A lantern-construct in the coat and helm of an old Warden officer, animated by the chamber's oldest and heaviest piece of work. It does not speak; it does not pursue beyond the chamber. Within the chamber, it is the gate.",
+        "type":        "construct",
+        "hp":          30,
+        "ac":          14,
+        "attacks": [
+          {
+            "name":        "Bearded Axe",
+            "bonus":       5,
+            "damage":      "1d10+3",
+            "damage_type": "slashing",
+            "range":       "melee"
+          },
+          {
+            "name":        "Measured Cleave",
+            "bonus":       5,
+            "damage":      "2d6+3",
+            "damage_type": "slashing",
+            "range":       "melee",
+            "on_hit":      "Used when the target is below half HP. A clean two-handed downward cut — heavier than the standard swing, slower to wind up, unmistakable on the narration."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "mindless",
+            "name":        "Mindless",
+            "description": "Cannot be charmed, frightened, or reasoned with. Does not make saves against effects that target the mind.",
+            "type":        "passive"
+          },
+          {
+            "id":          "bound_to_chamber",
+            "name":        "Bound to Chamber",
+            "description": "Will not pursue beyond the threshold of the Black Gate chamber. If the player retreats to the hub, the construct returns to its guard-post.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 250,
+        "behavior": "Old Warden tactics, still sharp. Opens in low guard; advances at a measured walking pace; uses Measured Cleave when the player is below half HP. Does not flee; does not parley.",
+        "tactics":  "Boss-tier regression target. Tests heavier HP and a clean crit threat (1d10+3 on the normal swing, 2d6+3 on the cleave). If the Oathblade is equipped, the +1 radiant and the silvered rider should both engage against the 'unhallowed' tag on this construct."
+      }
+    }
+  },
+
+  "completion_condition": null
 }
