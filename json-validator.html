@@ -268,9 +268,549 @@
             if (files.items            && files.items.ok)            checkItemsArchetype(files.items, errors);
             if (files.adventure_module && files.adventure_module.ok) checkModuleArchetype(files.adventure_module, errors, warnings);
 
-            // Chunks 3–4 will append reference-integrity + warning checks here.
+            // Reference-integrity pass (cross-file).
+            checkReferenceIntegrity(files, manifest, manifestPath, errors);
+
+            // Chunk 4 will append warnings here.
 
             return { manifest, manifestPath, files, errors, warnings, info };
+        }
+
+        // --- Reference-integrity pass ---------------------------------------
+
+        // Walks every cross-file reference in the pack and pushes an error for
+        // any unresolved id. Indexes are built once and reused across checks.
+        function checkReferenceIntegrity(files, manifest, manifestPath, errors) {
+            const rulesF     = files.rules            && files.rules.ok            ? files.rules            : null;
+            const bestiaryF  = files.bestiary         && files.bestiary.ok         ? files.bestiary         : null;
+            const itemsF     = files.items            && files.items.ok            ? files.items            : null;
+            const moduleF    = files.adventure_module && files.adventure_module.ok ? files.adventure_module : null;
+            const characterF = files.character        && files.character.ok        ? files.character        : null;
+
+            const rules     = rulesF     ? rulesF.data.rules             : null;
+            const bestiary  = bestiaryF  ? bestiaryF.data.bestiary       : null;
+            const items     = itemsF     ? itemsF.data.items_library     : null;
+            const module_   = moduleF    ? moduleF.data                  : null;
+            const character = characterF ? characterF.data.character     : null;
+
+            // --- Build indexes ---
+            const conditionIds = rules && Array.isArray(rules.conditions)
+                ? new Set(rules.conditions.map(c => c.id).filter(Boolean))
+                : new Set();
+
+            // null when the pack declares no damage types (typeless system).
+            const damageTypeIds = rules && rules.resources && Array.isArray(rules.resources.damage_types)
+                ? new Set(rules.resources.damage_types.map(d => d.id).filter(Boolean))
+                : null;
+
+            const abilityIds = rules && rules.character_model && Array.isArray(rules.character_model.abilities)
+                ? new Set(rules.character_model.abilities.map(a => a.id).filter(Boolean))
+                : new Set();
+
+            const skillIds = rules && rules.character_model && Array.isArray(rules.character_model.skills)
+                ? new Set(rules.character_model.skills.map(s => s.id).filter(Boolean))
+                : new Set();
+
+            // "all" is a reserved shortcut in save_bonus — counts as valid.
+            const saveIds = (() => {
+                if (!rules || !rules.character_model || !rules.character_model.saves) return abilityIds;
+                const type = rules.character_model.saves.type;
+                if (type === 'per_ability') return abilityIds;
+                if (type === 'categorical' && Array.isArray(rules.character_model.saves.categories)) {
+                    return new Set(rules.character_model.saves.categories.map(c => c.id).filter(Boolean));
+                }
+                return abilityIds;
+            })();
+
+            const dcTierIds = rules && rules.difficulty && Array.isArray(rules.difficulty.scale)
+                ? new Set(rules.difficulty.scale.map(s => s.id).filter(Boolean))
+                : new Set();
+
+            const classIds = rules && rules.character_model && rules.character_model.classes
+                ? new Set(Object.keys(rules.character_model.classes))
+                : new Set();
+
+            const roomIds = module_ && module_.rooms ? new Set(Object.keys(module_.rooms)) : new Set();
+
+            // Connection ids indexed by owning room (since effects scope to their room).
+            const connectionsByRoom = {};
+            if (module_ && module_.rooms) {
+                for (const [rid, room] of Object.entries(module_.rooms)) {
+                    connectionsByRoom[rid] = new Set(room.connections ? Object.keys(room.connections) : []);
+                }
+            }
+
+            // Feature + encounter ids (global across the module).
+            const featureIds = new Set();
+            const encounterIds = new Set();
+            const featureTypeById = {}; // id → type; used later for prereq validation
+            if (module_ && module_.rooms) {
+                for (const room of Object.values(module_.rooms)) {
+                    if (Array.isArray(room.features)) {
+                        for (const f of room.features) {
+                            if (f && f.id) { featureIds.add(f.id); featureTypeById[f.id] = f.type; }
+                        }
+                    }
+                    if (Array.isArray(room.encounters)) {
+                        for (const e of room.encounters) if (e && e.id) encounterIds.add(e.id);
+                    }
+                }
+            }
+
+            // Monster ids: union of module_bestiary (first) + shared bestiary.
+            const monsterIds = new Set();
+            if (module_ && module_.module_bestiary && module_.module_bestiary.monsters) {
+                for (const id of Object.keys(module_.module_bestiary.monsters)) monsterIds.add(id);
+            }
+            if (bestiary && bestiary.monsters) {
+                for (const id of Object.keys(bestiary.monsters)) monsterIds.add(id);
+            }
+
+            // Item ids: union of module_items (first) + shared items_library.
+            const itemIdsIndex = new Set();
+            if (module_ && module_.module_items && module_.module_items.items) {
+                for (const id of Object.keys(module_.module_items.items)) itemIdsIndex.add(id);
+            }
+            if (items && items.items) {
+                for (const id of Object.keys(items.items)) itemIdsIndex.add(id);
+            }
+
+            // Item-type index — needed for slot validation on character.equipment.
+            const itemTypeById = {};
+            if (module_ && module_.module_items && module_.module_items.items) {
+                for (const [id, it] of Object.entries(module_.module_items.items)) itemTypeById[id] = it.type;
+            }
+            if (items && items.items) {
+                for (const [id, it] of Object.entries(items.items)) {
+                    if (itemTypeById[id] === undefined) itemTypeById[id] = it.type;
+                }
+            }
+
+            const SLOT_ENUM = {
+                weapon: new Set(['main_hand', 'off_hand', 'two_handed', 'ranged']),
+                armor:  new Set(['body', 'shield', 'head', 'hands', 'feet', 'neck', 'ring', 'cloak', 'belt'])
+            };
+
+            // --- Character refs ---
+            if (character) {
+                const file = characterF.path;
+
+                // game_pack_id must match manifest.id.
+                if (manifest && manifest.id && character.game_pack_id && character.game_pack_id !== manifest.id) {
+                    errors.push({ file, loc: 'character.game_pack_id',
+                        msg: `value "${character.game_pack_id}" does not match manifest id "${manifest.id}"` });
+                }
+
+                // Class id must resolve (when the rules pack uses classes).
+                if (rules && rules.character_model && rules.character_model.uses_classes
+                    && character.basic_info && character.basic_info.class
+                    && classIds.size > 0 && !classIds.has(character.basic_info.class)) {
+                    errors.push({ file, loc: 'character.basic_info.class',
+                        msg: `class "${character.basic_info.class}" not declared in rules.character_model.classes` });
+                }
+
+                // Ability-score keys must resolve.
+                if (character.ability_scores && abilityIds.size > 0) {
+                    for (const key of Object.keys(character.ability_scores)) {
+                        if (!abilityIds.has(key)) {
+                            errors.push({ file, loc: `character.ability_scores.${key}`,
+                                msg: `ability id "${key}" not declared in rules.character_model.abilities` });
+                        }
+                    }
+                }
+
+                // Saves.proficient ids must resolve.
+                if (character.saves && Array.isArray(character.saves.proficient) && saveIds.size > 0) {
+                    character.saves.proficient.forEach((sid, i) => {
+                        if (!saveIds.has(sid)) {
+                            errors.push({ file, loc: `character.saves.proficient[${i}]`,
+                                msg: `save id "${sid}" not declared in rules.character_model` });
+                        }
+                    });
+                }
+
+                // Skills.proficient ids must resolve.
+                if (character.skills && Array.isArray(character.skills.proficient) && skillIds.size > 0) {
+                    character.skills.proficient.forEach((sid, i) => {
+                        if (!skillIds.has(sid)) {
+                            errors.push({ file, loc: `character.skills.proficient[${i}]`,
+                                msg: `skill id "${sid}" not declared in rules.character_model.skills` });
+                        }
+                    });
+                }
+
+                // Equipment: item_ids resolve, slots are valid for their types.
+                if (Array.isArray(character.equipment)) {
+                    character.equipment.forEach((eq, i) => {
+                        const loc = `character.equipment[${i}]`;
+                        if (eq.item_id && !itemIdsIndex.has(eq.item_id)) {
+                            errors.push({ file, loc: `${loc}.item_id`,
+                                msg: `item_id "${eq.item_id}" not found in items_library or module_items` });
+                        } else if (eq.item_id && eq.slot) {
+                            const type = itemTypeById[eq.item_id];
+                            if (type && SLOT_ENUM[type] && !SLOT_ENUM[type].has(eq.slot)) {
+                                errors.push({ file, loc: `${loc}.slot`,
+                                    msg: `slot "${eq.slot}" is not valid for item "${eq.item_id}" (type "${type}")` });
+                            } else if (type && !SLOT_ENUM[type] && eq.slot) {
+                                errors.push({ file, loc: `${loc}.slot`,
+                                    msg: `item "${eq.item_id}" (type "${type}") should not be equipped to a slot` });
+                            }
+                        }
+                    });
+                }
+
+                // Pack: item_ids resolve.
+                if (Array.isArray(character.pack)) {
+                    character.pack.forEach((p, i) => {
+                        if (p.item_id && !itemIdsIndex.has(p.item_id)) {
+                            errors.push({ file, loc: `character.pack[${i}].item_id`,
+                                msg: `item_id "${p.item_id}" not found in items_library or module_items` });
+                        }
+                    });
+                }
+
+                // Charged items keys resolve.
+                if (character.charged_items && typeof character.charged_items === 'object') {
+                    for (const id of Object.keys(character.charged_items)) {
+                        if (!itemIdsIndex.has(id)) {
+                            errors.push({ file, loc: `character.charged_items.${id}`,
+                                msg: `item_id "${id}" not found in items_library or module_items` });
+                        }
+                    }
+                }
+
+                // Active condition ids resolve.
+                if (Array.isArray(character.conditions) && conditionIds.size > 0) {
+                    character.conditions.forEach((cid, i) => {
+                        if (!conditionIds.has(cid)) {
+                            errors.push({ file, loc: `character.conditions[${i}]`,
+                                msg: `condition id "${cid}" not declared in rules.conditions` });
+                        }
+                    });
+                }
+            }
+
+            // --- Module refs ---
+            if (module_) {
+                const file = moduleF.path;
+
+                // starting_room resolves.
+                if (module_.module && module_.module.starting_room
+                    && !roomIds.has(module_.module.starting_room)) {
+                    errors.push({ file, loc: 'module.starting_room',
+                        msg: `room id "${module_.module.starting_room}" is not declared in rooms{}` });
+                }
+
+                // completion_condition.target resolves per type.
+                const cc = module_.completion_condition;
+                if (cc && cc.target) {
+                    if (cc.type === 'defeat_encounter' && !encounterIds.has(cc.target)) {
+                        errors.push({ file, loc: 'completion_condition.target',
+                            msg: `encounter id "${cc.target}" is not declared in any room's encounters[]` });
+                    }
+                    if (cc.type === 'reach_room' && !roomIds.has(cc.target)) {
+                        errors.push({ file, loc: 'completion_condition.target',
+                            msg: `room id "${cc.target}" is not declared in rooms{}` });
+                    }
+                }
+
+                // Per-room walks.
+                for (const [roomKey, room] of Object.entries(module_.rooms || {})) {
+                    const roomConnIds = connectionsByRoom[roomKey] || new Set();
+
+                    // Connection `to` targets resolve.
+                    if (room.connections && typeof room.connections === 'object') {
+                        for (const [connKey, conn] of Object.entries(room.connections)) {
+                            const target = typeof conn === 'string' ? conn : conn && conn.to;
+                            if (target && !roomIds.has(target)) {
+                                errors.push({ file, loc: `rooms.${roomKey}.connections.${connKey}`,
+                                    msg: `target room id "${target}" is not declared in rooms{}` });
+                            }
+                        }
+                    }
+
+                    // Features: dc_tier, prereqs, effects, rewards.
+                    if (Array.isArray(room.features)) {
+                        room.features.forEach((feat, i) => {
+                            const loc = `rooms.${roomKey}.features[${i}]${feat && feat.id ? ` (${feat.id})` : ''}`;
+                            checkDcTiersIn(feat, file, loc, dcTierIds, errors);
+                            checkFeaturePrereqs(feat, file, loc, featureIds, featureTypeById, encounterIds, errors);
+                            // Effects and rewards live across sub-types; walk generically.
+                            collectEffects(feat).forEach(({ node, path }) =>
+                                checkEffect(node, file, `${loc}.${path}`, roomConnIds, featureIds, errors));
+                            collectRewards(feat).forEach(({ node, path }) =>
+                                checkReward(node, file, `${loc}.${path}`, itemIdsIndex, errors));
+                        });
+                    }
+
+                    // Encounters: monster_refs, rewards, on_defeat_effects, trigger.
+                    if (Array.isArray(room.encounters)) {
+                        room.encounters.forEach((enc, i) => {
+                            const loc = `rooms.${roomKey}.encounters[${i}]${enc && enc.id ? ` (${enc.id})` : ''}`;
+                            if (Array.isArray(enc.groups)) {
+                                enc.groups.forEach((g, gi) => {
+                                    if (g && g.monster_ref && !monsterIds.has(g.monster_ref)) {
+                                        errors.push({ file, loc: `${loc}.groups[${gi}].monster_ref`,
+                                            msg: `monster_ref "${g.monster_ref}" not found in bestiary or module_bestiary` });
+                                    }
+                                });
+                            }
+                            if (enc.rewards && Array.isArray(enc.rewards.treasure)) {
+                                enc.rewards.treasure.forEach((rw, ri) =>
+                                    checkReward(rw, file, `${loc}.rewards.treasure[${ri}]`, itemIdsIndex, errors));
+                            }
+                            if (Array.isArray(enc.on_defeat_effects)) {
+                                enc.on_defeat_effects.forEach((ef, ei) =>
+                                    checkEffect(ef, file, `${loc}.on_defeat_effects[${ei}]`,
+                                        roomConnIds, featureIds, errors));
+                            }
+                        });
+                    }
+
+                    // Hazards: dc_tier, damage_type, condition ids.
+                    if (Array.isArray(room.hazards)) {
+                        room.hazards.forEach((h, i) => {
+                            const loc = `rooms.${roomKey}.hazards[${i}]${h && h.id ? ` (${h.id})` : ''}`;
+                            checkDcTiersIn(h, file, loc, dcTierIds, errors);
+                            // Damage on avoidance.on_failure.
+                            const onFail = h.avoidance && h.avoidance.on_failure;
+                            if (onFail && onFail.damage && onFail.damage.type && damageTypeIds !== null
+                                && !damageTypeIds.has(onFail.damage.type)) {
+                                errors.push({ file, loc: `${loc}.avoidance.on_failure.damage.type`,
+                                    msg: `damage type "${onFail.damage.type}" not declared in rules.resources.damage_types` });
+                            }
+                            if (onFail && Array.isArray(onFail.conditions) && conditionIds.size > 0) {
+                                onFail.conditions.forEach((cid, ci) => {
+                                    if (!conditionIds.has(cid)) {
+                                        errors.push({ file, loc: `${loc}.avoidance.on_failure.conditions[${ci}]`,
+                                            msg: `condition id "${cid}" not declared in rules.conditions` });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+
+            // --- Bestiary refs (damage types) ---
+            if (bestiary && damageTypeIds !== null) {
+                const file = bestiaryF.path;
+                for (const [key, monster] of Object.entries(bestiary.monsters || {})) {
+                    checkMonsterDamageTypes(monster, file, `bestiary.monsters.${key}`, damageTypeIds, errors);
+                }
+            }
+            if (module_ && module_.module_bestiary && module_.module_bestiary.monsters && damageTypeIds !== null) {
+                const file = moduleF.path;
+                for (const [key, monster] of Object.entries(module_.module_bestiary.monsters)) {
+                    checkMonsterDamageTypes(monster, file, `module_bestiary.monsters.${key}`, damageTypeIds, errors);
+                }
+            }
+
+            // --- Items refs (damage types, magic bonus keys) ---
+            if (items) {
+                const file = itemsF.path;
+                for (const [key, item] of Object.entries(items.items || {})) {
+                    checkItemRefs(item, file, `items_library.items.${key}`,
+                        damageTypeIds, abilityIds, saveIds, skillIds, errors);
+                }
+            }
+            if (module_ && module_.module_items && module_.module_items.items) {
+                const file = moduleF.path;
+                for (const [key, item] of Object.entries(module_.module_items.items)) {
+                    checkItemRefs(item, file, `module_items.items.${key}`,
+                        damageTypeIds, abilityIds, saveIds, skillIds, errors);
+                }
+            }
+        }
+
+        // --- Reference-integrity helpers ------------------------------------
+
+        function checkDcTiersIn(node, file, loc, dcTierIds, errors) {
+            if (dcTierIds.size === 0) return;
+            const visit = (n, path) => {
+                if (n == null || typeof n !== 'object') return;
+                if (Array.isArray(n)) { n.forEach((v, i) => visit(v, `${path}[${i}]`)); return; }
+                for (const [k, v] of Object.entries(n)) {
+                    if (k === 'dc_tier' && typeof v === 'string' && !dcTierIds.has(v)) {
+                        errors.push({ file, loc: `${loc}.${path ? path + '.' : ''}dc_tier`,
+                            msg: `dc_tier "${v}" not declared in rules.difficulty.scale` });
+                    }
+                    visit(v, path ? `${path}.${k}` : k);
+                }
+            };
+            visit(node, '');
+        }
+
+        function checkFeaturePrereqs(feat, file, loc, featureIds, featureTypeById, encounterIds, errors) {
+            if (!feat || !feat.prerequisites) return;
+            const p = feat.prerequisites;
+            if (p.feature_state && typeof p.feature_state === 'object') {
+                for (const [fid, state] of Object.entries(p.feature_state)) {
+                    if (!featureIds.has(fid)) {
+                        errors.push({ file, loc: `${loc}.prerequisites.feature_state.${fid}`,
+                            msg: `feature id "${fid}" is not declared in any room's features[]` });
+                        continue;
+                    }
+                    // Lore features are stateless and cannot be prereq targets.
+                    if (featureTypeById[fid] === 'lore') {
+                        errors.push({ file, loc: `${loc}.prerequisites.feature_state.${fid}`,
+                            msg: `cannot depend on lore feature "${fid}" (stateless)` });
+                    }
+                }
+            }
+            if (Array.isArray(p.encounter_defeated)) {
+                p.encounter_defeated.forEach((eid, i) => {
+                    if (!encounterIds.has(eid)) {
+                        errors.push({ file, loc: `${loc}.prerequisites.encounter_defeated[${i}]`,
+                            msg: `encounter id "${eid}" is not declared in any room's encounters[]` });
+                    }
+                });
+            }
+        }
+
+        function checkEffect(ef, file, loc, roomConnIds, featureIds, errors) {
+            if (!ef || typeof ef !== 'object' || !ef.type) return;
+            if (ef.type === 'unlock_connection' || ef.type === 'reveal_connection') {
+                if (ef.target && !roomConnIds.has(ef.target)) {
+                    errors.push({ file, loc: `${loc}.target`,
+                        msg: `connection id "${ef.target}" is not declared in this room's connections{}` });
+                }
+            } else if (ef.type === 'activate_feature') {
+                if (ef.target && !featureIds.has(ef.target)) {
+                    errors.push({ file, loc: `${loc}.target`,
+                        msg: `feature id "${ef.target}" is not declared in any room's features[]` });
+                }
+            }
+        }
+
+        function checkReward(rw, file, loc, itemIdsIndex, errors) {
+            if (!rw || rw.type !== 'item') return;
+            if (rw.item_id && !itemIdsIndex.has(rw.item_id)) {
+                errors.push({ file, loc: `${loc}.item_id`,
+                    msg: `item_id "${rw.item_id}" not found in items_library or module_items` });
+            }
+        }
+
+        function checkMonsterDamageTypes(monster, file, loc, damageTypeIds, errors) {
+            const arrCheck = (arr, field) => {
+                if (!Array.isArray(arr)) return;
+                arr.forEach((dt, i) => {
+                    if (dt && !damageTypeIds.has(dt)) {
+                        errors.push({ file, loc: `${loc}.${field}[${i}]`,
+                            msg: `damage type "${dt}" not declared in rules.resources.damage_types` });
+                    }
+                });
+            };
+            arrCheck(monster.damage_resistance, 'damage_resistance');
+            arrCheck(monster.damage_immunity, 'damage_immunity');
+            arrCheck(monster.damage_vulnerability, 'damage_vulnerability');
+            if (Array.isArray(monster.attacks)) {
+                monster.attacks.forEach((atk, i) => {
+                    if (atk && atk.damage_type && !damageTypeIds.has(atk.damage_type)) {
+                        errors.push({ file, loc: `${loc}.attacks[${i}].damage_type`,
+                            msg: `damage type "${atk.damage_type}" not declared in rules.resources.damage_types` });
+                    }
+                });
+            }
+        }
+
+        function checkItemRefs(item, file, loc, damageTypeIds, abilityIds, saveIds, skillIds, errors) {
+            // Weapon damage type.
+            if (damageTypeIds !== null && item.weapon && item.weapon.damage_type
+                && !damageTypeIds.has(item.weapon.damage_type)) {
+                errors.push({ file, loc: `${loc}.weapon.damage_type`,
+                    msg: `damage type "${item.weapon.damage_type}" not declared in rules.resources.damage_types` });
+            }
+            const m = item.magic;
+            if (!m) return;
+
+            if (damageTypeIds !== null && m.bonus_damage && m.bonus_damage.type
+                && !damageTypeIds.has(m.bonus_damage.type)) {
+                errors.push({ file, loc: `${loc}.magic.bonus_damage.type`,
+                    msg: `damage type "${m.bonus_damage.type}" not declared in rules.resources.damage_types` });
+            }
+            if (damageTypeIds !== null) {
+                const arrCheck = (arr, field) => {
+                    if (!Array.isArray(arr)) return;
+                    arr.forEach((dt, i) => {
+                        if (dt && !damageTypeIds.has(dt)) {
+                            errors.push({ file, loc: `${loc}.magic.${field}[${i}]`,
+                                msg: `damage type "${dt}" not declared in rules.resources.damage_types` });
+                        }
+                    });
+                };
+                arrCheck(m.damage_resistance, 'damage_resistance');
+                arrCheck(m.damage_immunity, 'damage_immunity');
+            }
+            if (m.ability_bonus && typeof m.ability_bonus === 'object' && abilityIds.size > 0) {
+                for (const key of Object.keys(m.ability_bonus)) {
+                    if (!abilityIds.has(key)) {
+                        errors.push({ file, loc: `${loc}.magic.ability_bonus.${key}`,
+                            msg: `ability id "${key}" not declared in rules.character_model.abilities` });
+                    }
+                }
+            }
+            if (m.save_bonus && typeof m.save_bonus === 'object' && saveIds.size > 0) {
+                for (const key of Object.keys(m.save_bonus)) {
+                    // "all" is the reserved shortcut.
+                    if (key === 'all') continue;
+                    if (!saveIds.has(key)) {
+                        errors.push({ file, loc: `${loc}.magic.save_bonus.${key}`,
+                            msg: `save id "${key}" not declared in rules.character_model` });
+                    }
+                }
+            }
+            if (m.skill_bonus && typeof m.skill_bonus === 'object' && skillIds.size > 0) {
+                for (const key of Object.keys(m.skill_bonus)) {
+                    if (!skillIds.has(key)) {
+                        errors.push({ file, loc: `${loc}.magic.skill_bonus.${key}`,
+                            msg: `skill id "${key}" not declared in rules.character_model.skills` });
+                    }
+                }
+            }
+        }
+
+        // Gather every effect object appearing anywhere on a feature, with a
+        // readable path. Handles interactive actions, puzzle on_success.effects.
+        function collectEffects(feat) {
+            const out = [];
+            if (!feat) return out;
+            if (feat.type === 'interactive' && feat.actions && typeof feat.actions === 'object') {
+                for (const [state, action] of Object.entries(feat.actions)) {
+                    if (action && Array.isArray(action.effects)) {
+                        action.effects.forEach((ef, i) =>
+                            out.push({ node: ef, path: `actions.${state}.effects[${i}]` }));
+                    }
+                }
+            }
+            if (feat.type === 'puzzle' && feat.on_success && Array.isArray(feat.on_success.effects)) {
+                feat.on_success.effects.forEach((ef, i) =>
+                    out.push({ node: ef, path: `on_success.effects[${i}]` }));
+            }
+            return out;
+        }
+
+        // Gather every reward object on a feature. Searchable has a top-level
+        // reward[]; interactive has per-action reward[]; puzzle has on_success.reward[].
+        function collectRewards(feat) {
+            const out = [];
+            if (!feat) return out;
+            if (feat.type === 'searchable' && Array.isArray(feat.reward)) {
+                feat.reward.forEach((rw, i) => out.push({ node: rw, path: `reward[${i}]` }));
+            }
+            if (feat.type === 'interactive' && feat.actions && typeof feat.actions === 'object') {
+                for (const [state, action] of Object.entries(feat.actions)) {
+                    if (action && Array.isArray(action.reward)) {
+                        action.reward.forEach((rw, i) =>
+                            out.push({ node: rw, path: `actions.${state}.reward[${i}]` }));
+                    }
+                }
+            }
+            if (feat.type === 'puzzle' && feat.on_success && Array.isArray(feat.on_success.reward)) {
+                feat.on_success.reward.forEach((rw, i) =>
+                    out.push({ node: rw, path: `on_success.reward[${i}]` }));
+            }
+            return out;
         }
 
         // --- Required-field helpers -----------------------------------------
