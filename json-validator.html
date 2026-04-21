@@ -255,9 +255,506 @@
                 });
             }
 
-            // Chunks 2–4 will append to errors/warnings here, using `manifest` and `files`.
+            // Required-field pass.
+            checkManifestRequired(manifest, manifestPath, errors);
+            if (files.setting          && files.setting.ok)          checkSettingRequired(files.setting, errors);
+            if (files.rules            && files.rules.ok)            checkRulesRequired(files.rules, errors);
+            if (files.bestiary         && files.bestiary.ok)         checkBestiaryRequired(files.bestiary, errors);
+            if (files.items            && files.items.ok)            checkItemsRequired(files.items, errors);
+            if (files.adventure_module && files.adventure_module.ok) checkModuleRequired(files.adventure_module, errors);
+            if (files.character        && files.character.ok)        checkCharacterRequired(files.character, errors);
+
+            // Archetype-specific rules pass.
+            if (files.items            && files.items.ok)            checkItemsArchetype(files.items, errors);
+            if (files.adventure_module && files.adventure_module.ok) checkModuleArchetype(files.adventure_module, errors, warnings);
+
+            // Chunks 3–4 will append reference-integrity + warning checks here.
 
             return { manifest, manifestPath, files, errors, warnings, info };
+        }
+
+        // --- Required-field helpers -----------------------------------------
+
+        // Push an error on every missing field.
+        function requireFields(obj, fields, file, locPrefix, errors) {
+            if (obj == null || typeof obj !== 'object' || Array.isArray(obj)) {
+                errors.push({ file, loc: locPrefix, msg: `expected object` });
+                return;
+            }
+            for (const f of fields) {
+                if (obj[f] === undefined) {
+                    errors.push({ file, loc: locPrefix, msg: `missing required field "${f}"` });
+                }
+            }
+        }
+
+        function requireArray(obj, field, file, locPrefix, errors) {
+            if (obj == null || obj[field] === undefined) {
+                errors.push({ file, loc: locPrefix, msg: `missing required field "${field}"` });
+            } else if (!Array.isArray(obj[field])) {
+                errors.push({ file, loc: `${locPrefix}.${field}`, msg: `expected array` });
+            }
+        }
+
+        // --- Required-field pass: per archetype ----------------------------
+
+        function checkManifestRequired(manifest, file, errors) {
+            // Archetype file refs were checked in the load pass; only core metadata left.
+            requireFields(manifest, ['id', 'name'], file, 'manifest', errors);
+        }
+
+        function checkSettingRequired(f, errors) {
+            const file = f.path;
+            if (!f.data.setting) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "setting" wrapper` });
+                return;
+            }
+            requireFields(f.data.setting, ['id', 'name', 'content'], file, 'setting', errors);
+        }
+
+        function checkRulesRequired(f, errors) {
+            const file = f.path;
+            const rules = f.data.rules;
+            if (!rules) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "rules" wrapper` });
+                return;
+            }
+            requireFields(rules, [
+                'id', 'name',
+                'character_model', 'resolution', 'resources', 'combat',
+                'progression', 'difficulty', 'encumbrance'
+            ], file, 'rules', errors);
+
+            // character_model
+            const cm = rules.character_model;
+            if (cm) {
+                requireArray(cm, 'abilities', file, 'rules.character_model', errors);
+                requireFields(cm, ['modifier_formula', 'saves', 'uses_classes'], file, 'rules.character_model', errors);
+                if (cm.saves) {
+                    requireFields(cm.saves, ['type'], file, 'rules.character_model.saves', errors);
+                    if (cm.saves.type && !['per_ability', 'categorical'].includes(cm.saves.type)) {
+                        errors.push({ file, loc: 'rules.character_model.saves.type',
+                            msg: `value "${cm.saves.type}" is not one of "per_ability" / "categorical"` });
+                    }
+                }
+                if (cm.uses_classes === true && (cm.classes == null || typeof cm.classes !== 'object')) {
+                    errors.push({ file, loc: 'rules.character_model.classes',
+                        msg: `required when uses_classes: true, but missing or not an object` });
+                }
+                if (cm.classes && typeof cm.classes === 'object') {
+                    for (const [key, cls] of Object.entries(cm.classes)) {
+                        requireFields(cls, ['id', 'name', 'hit_die'], file,
+                            `rules.character_model.classes.${key}`, errors);
+                    }
+                }
+            }
+
+            // resolution
+            const res = rules.resolution;
+            if (res) {
+                if (res.checks) {
+                    requireFields(res.checks,
+                        ['method', 'dice', 'crit_success', 'crit_failure', 'advantage_disadvantage'],
+                        file, 'rules.resolution.checks', errors);
+                    if (res.checks.method && !['roll_high_vs_dc', 'roll_under_score'].includes(res.checks.method)) {
+                        errors.push({ file, loc: 'rules.resolution.checks.method',
+                            msg: `value "${res.checks.method}" is not one of "roll_high_vs_dc" / "roll_under_score"` });
+                    }
+                } else {
+                    errors.push({ file, loc: 'rules.resolution', msg: `missing required field "checks"` });
+                }
+                if (res.auxiliary) {
+                    requireFields(res.auxiliary, ['x_in_6', 'reaction_roll', 'morale_roll'],
+                        file, 'rules.resolution.auxiliary', errors);
+                } else {
+                    errors.push({ file, loc: 'rules.resolution', msg: `missing required field "auxiliary"` });
+                }
+            }
+
+            // resources
+            const rs = rules.resources;
+            if (rs) {
+                if (rs.hit_points) {
+                    requireFields(rs.hit_points, ['max_formula', 'at_zero', 'overflow'],
+                        file, 'rules.resources.hit_points', errors);
+                    if (rs.hit_points.at_zero && !['dead', 'unconscious'].includes(rs.hit_points.at_zero)) {
+                        errors.push({ file, loc: 'rules.resources.hit_points.at_zero',
+                            msg: `value "${rs.hit_points.at_zero}" is not one of "dead" / "unconscious"` });
+                    }
+                } else {
+                    errors.push({ file, loc: 'rules.resources', msg: `missing required field "hit_points"` });
+                }
+                if (rs.healing) {
+                    requireFields(rs.healing, ['natural_rest'], file, 'rules.resources.healing', errors);
+                } else {
+                    errors.push({ file, loc: 'rules.resources', msg: `missing required field "healing"` });
+                }
+            }
+
+            // combat
+            const cb = rules.combat;
+            if (cb) {
+                if (cb.attack) requireFields(cb.attack, ['resolution'], file, 'rules.combat.attack', errors);
+                else errors.push({ file, loc: 'rules.combat', msg: `missing required field "attack"` });
+                if (cb.damage) requireFields(cb.damage, ['formula'], file, 'rules.combat.damage', errors);
+                else errors.push({ file, loc: 'rules.combat', msg: `missing required field "damage"` });
+                if (cb.critical_hit) requireFields(cb.critical_hit, ['trigger', 'effect'], file, 'rules.combat.critical_hit', errors);
+                else errors.push({ file, loc: 'rules.combat', msg: `missing required field "critical_hit"` });
+                if (cb.initiative) requireFields(cb.initiative, ['type'], file, 'rules.combat.initiative', errors);
+                else errors.push({ file, loc: 'rules.combat', msg: `missing required field "initiative"` });
+            }
+
+            // progression
+            const pg = rules.progression;
+            if (pg) {
+                requireFields(pg, ['type', 'max_level', 'hp_gain_per_level'], file, 'rules.progression', errors);
+                if (pg.type === 'xp_and_level') {
+                    requireArray(pg, 'xp_sources', file, 'rules.progression', errors);
+                    requireArray(pg, 'level_table', file, 'rules.progression', errors);
+                }
+            }
+
+            // difficulty
+            const df = rules.difficulty;
+            if (df) {
+                requireArray(df, 'scale', file, 'rules.difficulty', errors);
+                requireFields(df, ['auto_success', 'auto_failure'], file, 'rules.difficulty', errors);
+            }
+
+            // encumbrance
+            const en = rules.encumbrance;
+            if (en) {
+                requireFields(en, ['method'], file, 'rules.encumbrance', errors);
+                if (en.method && !['slots', 'weight', 'none'].includes(en.method)) {
+                    errors.push({ file, loc: 'rules.encumbrance.method',
+                        msg: `value "${en.method}" is not one of "slots" / "weight" / "none"` });
+                }
+                if (en.method === 'slots' && en.slot_capacity === undefined) {
+                    errors.push({ file, loc: 'rules.encumbrance',
+                        msg: `"slot_capacity" is required when method is "slots"` });
+                }
+                if (en.method === 'weight' && !en.weight_formula) {
+                    errors.push({ file, loc: 'rules.encumbrance',
+                        msg: `"weight_formula" is required when method is "weight"` });
+                }
+            }
+        }
+
+        function checkBestiaryRequired(f, errors) {
+            const file = f.path;
+            const b = f.data.bestiary;
+            if (!b) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "bestiary" wrapper` });
+                return;
+            }
+            requireFields(b, ['id', 'name', 'monsters'], file, 'bestiary', errors);
+            if (b.monsters && typeof b.monsters === 'object' && !Array.isArray(b.monsters)) {
+                for (const [key, monster] of Object.entries(b.monsters)) {
+                    const loc = `bestiary.monsters.${key}`;
+                    requireFields(monster, ['id', 'name', 'hp', 'ac', 'attacks', 'xp_value'], file, loc, errors);
+                    if (Array.isArray(monster.attacks)) {
+                        monster.attacks.forEach((atk, i) => {
+                            requireFields(atk, ['name', 'bonus', 'range'], file, `${loc}.attacks[${i}]`, errors);
+                            if (atk.range && !['melee', 'ranged'].includes(atk.range)) {
+                                errors.push({ file, loc: `${loc}.attacks[${i}].range`,
+                                    msg: `value "${atk.range}" is not one of "melee" / "ranged"` });
+                            }
+                        });
+                    }
+                    if (Array.isArray(monster.special_abilities)) {
+                        monster.special_abilities.forEach((sa, i) => {
+                            requireFields(sa, ['id', 'name', 'description', 'type'], file,
+                                `${loc}.special_abilities[${i}]`, errors);
+                        });
+                    }
+                }
+            }
+        }
+
+        function checkItemsRequired(f, errors) {
+            const file = f.path;
+            const lib = f.data.items_library;
+            if (!lib) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "items_library" wrapper` });
+                return;
+            }
+            requireFields(lib, ['id', 'name', 'items'], file, 'items_library', errors);
+        }
+
+        function checkModuleRequired(f, errors) {
+            const file = f.path;
+            const d = f.data;
+            requireFields(d, ['module', 'rooms'], file, 'root', errors);
+            if (d.module) {
+                requireFields(d.module, ['id', 'title', 'starting_room'], file, 'module', errors);
+            }
+            if (d.rooms && typeof d.rooms === 'object' && !Array.isArray(d.rooms)) {
+                for (const [key, room] of Object.entries(d.rooms)) {
+                    const loc = `rooms.${key}`;
+                    requireFields(room, ['id', 'name', 'description', 'connections'], file, loc, errors);
+                    for (const arrName of ['features', 'encounters', 'hazards']) {
+                        if (room[arrName] === undefined) {
+                            errors.push({ file, loc, msg: `missing required field "${arrName}" (must be present as an array, even if empty)` });
+                        } else if (!Array.isArray(room[arrName])) {
+                            errors.push({ file, loc: `${loc}.${arrName}`, msg: `expected array` });
+                        }
+                    }
+                }
+            }
+        }
+
+        function checkCharacterRequired(f, errors) {
+            const file = f.path;
+            const c = f.data.character;
+            if (!c) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "character" wrapper` });
+                return;
+            }
+            requireFields(c, [
+                'id', 'game_pack_id', 'schema_version',
+                'basic_info', 'ability_scores', 'saves', 'skills',
+                'hp_current', 'equipment', 'pack', 'charged_items',
+                'conditions', 'gold', 'xp', 'class_features'
+            ], file, 'character', errors);
+            if (c.basic_info) {
+                requireFields(c.basic_info, ['name', 'class', 'level'], file, 'character.basic_info', errors);
+            }
+            if (c.saves)  requireFields(c.saves,  ['proficient'], file, 'character.saves',  errors);
+            if (c.skills) requireFields(c.skills, ['proficient'], file, 'character.skills', errors);
+        }
+
+        // --- Archetype-specific rules pass ---------------------------------
+
+        function checkItemsArchetype(f, errors) {
+            const file = f.path;
+            const items = f.data.items_library && f.data.items_library.items;
+            if (!items || typeof items !== 'object') return;
+
+            const TYPE_ENUM  = ['weapon', 'armor', 'consumable', 'lore', 'misc'];
+            const ARMOR_ENUM = ['light', 'medium', 'heavy', 'shield'];
+            const SLOT_ENUM = {
+                weapon: ['main_hand', 'off_hand', 'two_handed', 'ranged'],
+                armor:  ['body', 'shield', 'head', 'hands', 'feet', 'neck', 'ring', 'cloak', 'belt']
+            };
+
+            for (const [key, item] of Object.entries(items)) {
+                const loc = `items_library.items.${key}`;
+                requireFields(item, ['id', 'name', 'type', 'description', 'weight_slots'], file, loc, errors);
+                if (item.type && !TYPE_ENUM.includes(item.type)) {
+                    errors.push({ file, loc: `${loc}.type`,
+                        msg: `value "${item.type}" is not one of ${TYPE_ENUM.map(v => `"${v}"`).join(' / ')}` });
+                }
+
+                // Slot rules per type.
+                if (item.type === 'weapon' || item.type === 'armor') {
+                    if (item.slot === undefined) {
+                        errors.push({ file, loc, msg: `"slot" is required when type is "${item.type}"` });
+                    } else if (SLOT_ENUM[item.type] && !SLOT_ENUM[item.type].includes(item.slot)) {
+                        errors.push({ file, loc: `${loc}.slot`,
+                            msg: `value "${item.slot}" is not a valid slot for type "${item.type}"` });
+                    }
+                } else if (['consumable', 'lore', 'misc'].includes(item.type) && item.slot !== undefined) {
+                    errors.push({ file, loc: `${loc}.slot`,
+                        msg: `"slot" must be omitted when type is "${item.type}"` });
+                }
+
+                // Per-type blocks.
+                if (item.type === 'weapon') {
+                    if (!item.weapon) {
+                        errors.push({ file, loc, msg: `"weapon" block is required when type is "weapon"` });
+                    } else {
+                        requireFields(item.weapon, ['damage', 'damage_type', 'melee', 'ranged'],
+                            file, `${loc}.weapon`, errors);
+                    }
+                }
+                if (item.type === 'armor' && item.armor) {
+                    requireFields(item.armor, ['ac_bonus', 'type'], file, `${loc}.armor`, errors);
+                    if (item.armor.type && !ARMOR_ENUM.includes(item.armor.type)) {
+                        errors.push({ file, loc: `${loc}.armor.type`,
+                            msg: `value "${item.armor.type}" is not one of ${ARMOR_ENUM.map(v => `"${v}"`).join(' / ')}` });
+                    }
+                }
+                if (item.type === 'consumable') {
+                    if (!item.consumable) {
+                        errors.push({ file, loc, msg: `"consumable" block is required when type is "consumable"` });
+                    } else {
+                        requireFields(item.consumable, ['on_use'], file, `${loc}.consumable`, errors);
+                    }
+                }
+
+                // Magic charges — both fields required together.
+                if (item.magic && item.magic.charges) {
+                    requireFields(item.magic.charges, ['max', 'recharge'], file, `${loc}.magic.charges`, errors);
+                }
+            }
+        }
+
+        function checkModuleArchetype(f, errors, warnings) {
+            const file = f.path;
+            const d = f.data;
+            if (!d.rooms || typeof d.rooms !== 'object') return;
+
+            const FEATURE_TYPES   = ['lore', 'searchable', 'interactive', 'puzzle'];
+            const CONNECTION_STATES = ['open', 'locked', 'hidden'];
+
+            for (const [roomKey, room] of Object.entries(d.rooms)) {
+                // Connections (structured form).
+                if (room.connections && typeof room.connections === 'object') {
+                    for (const [connKey, conn] of Object.entries(room.connections)) {
+                        // Simple form is a string; nothing to check beyond reference integrity (chunk 3).
+                        if (typeof conn === 'string') continue;
+                        const loc = `rooms.${roomKey}.connections.${connKey}`;
+                        requireFields(conn, ['to', 'state'], file, loc, errors);
+                        if (conn.state && !CONNECTION_STATES.includes(conn.state)) {
+                            errors.push({ file, loc: `${loc}.state`,
+                                msg: `value "${conn.state}" is not one of "open" / "locked" / "hidden"` });
+                        }
+                    }
+                }
+
+                // Features.
+                if (Array.isArray(room.features)) {
+                    room.features.forEach((feat, i) => {
+                        const loc = `rooms.${roomKey}.features[${i}]${feat && feat.id ? ` (${feat.id})` : ''}`;
+                        requireFields(feat, ['id', 'type', 'name', 'description'], file, loc, errors);
+                        if (feat.type && !FEATURE_TYPES.includes(feat.type)) {
+                            errors.push({ file, loc: `${loc}.type`,
+                                msg: `value "${feat.type}" is not one of ${FEATURE_TYPES.map(v => `"${v}"`).join(' / ')}` });
+                        }
+                        checkFeatureNoDamage(feat, file, loc, errors);
+                        checkFeatureSubtype(feat, file, loc, errors);
+                    });
+                }
+
+                // Encounters.
+                if (Array.isArray(room.encounters)) {
+                    room.encounters.forEach((enc, i) => {
+                        const loc = `rooms.${roomKey}.encounters[${i}]${enc && enc.id ? ` (${enc.id})` : ''}`;
+                        requireFields(enc, ['id', 'name', 'groups', 'trigger'], file, loc, errors);
+                        if (!Array.isArray(enc.groups) || enc.groups.length === 0) {
+                            errors.push({ file, loc: `${loc}.groups`,
+                                msg: `must be a non-empty array` });
+                        } else {
+                            const hasMonster = enc.groups.some(g => g && g.monster_ref);
+                            if (!hasMonster) {
+                                errors.push({ file, loc: `${loc}.groups`,
+                                    msg: `at least one group must carry a "monster_ref"` });
+                            }
+                            enc.groups.forEach((g, gi) => {
+                                requireFields(g, ['monster_ref', 'quantity'], file,
+                                    `${loc}.groups[${gi}]`, errors);
+                            });
+                        }
+                        if (enc.trigger) {
+                            requireFields(enc.trigger, ['type'], file, `${loc}.trigger`, errors);
+                            if (enc.trigger.type === 'on_condition' && !enc.trigger.condition) {
+                                errors.push({ file, loc: `${loc}.trigger`,
+                                    msg: `"condition" is required when trigger.type is "on_condition"` });
+                            }
+                        }
+                    });
+                }
+
+                // Hazards.
+                if (Array.isArray(room.hazards)) {
+                    room.hazards.forEach((h, i) => {
+                        const loc = `rooms.${roomKey}.hazards[${i}]${h && h.id ? ` (${h.id})` : ''}`;
+                        requireFields(h, ['id', 'name', 'description', 'trigger', 'persists', 'resolved_by_detection'],
+                            file, loc, errors);
+                        if (h.trigger) requireFields(h.trigger, ['type'], file, `${loc}.trigger`, errors);
+                        // No monster_ref allowed anywhere in a hazard.
+                        if (containsKey(h, 'monster_ref')) {
+                            errors.push({ file, loc,
+                                msg: `hazards must not contain "monster_ref" — if the threat is a creature, move it to encounters` });
+                        }
+                        if (h.detection) {
+                            requireFields(h.detection, ['check', 'on_success'], file, `${loc}.detection`, errors);
+                        }
+                        if (h.avoidance) {
+                            requireFields(h.avoidance, ['check', 'on_success', 'on_failure'], file, `${loc}.avoidance`, errors);
+                            if (h.avoidance.on_failure && typeof h.avoidance.on_failure === 'object') {
+                                requireFields(h.avoidance.on_failure, ['narration'], file,
+                                    `${loc}.avoidance.on_failure`, errors);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        // Features never deal damage. Walk the feature and flag any nested `damage` key.
+        function checkFeatureNoDamage(feat, file, loc, errors) {
+            const visit = (node, path) => {
+                if (node == null || typeof node !== 'object') return;
+                if (Array.isArray(node)) {
+                    node.forEach((v, i) => visit(v, `${path}[${i}]`));
+                    return;
+                }
+                for (const [k, v] of Object.entries(node)) {
+                    if (k === 'damage') {
+                        errors.push({ file, loc: `${loc}.${path ? path + '.' : ''}${k}`,
+                            msg: `features cannot declare damage — move to a hazard` });
+                    }
+                    visit(v, path ? `${path}.${k}` : k);
+                }
+            };
+            visit(feat, '');
+        }
+
+        function checkFeatureSubtype(feat, file, loc, errors) {
+            if (!feat || !feat.type) return;
+            switch (feat.type) {
+                case 'lore':
+                    for (const forbidden of ['reward', 'check', 'states', 'solution']) {
+                        if (feat[forbidden] !== undefined) {
+                            errors.push({ file, loc: `${loc}.${forbidden}`,
+                                msg: `lore features cannot carry "${forbidden}"` });
+                        }
+                    }
+                    break;
+                case 'searchable':
+                    requireFields(feat, ['check', 'on_success', 'on_failure', 'persists'], file, loc, errors);
+                    break;
+                case 'interactive':
+                    requireFields(feat, ['states', 'initial_state', 'actions'], file, loc, errors);
+                    if (Array.isArray(feat.states) && feat.initial_state !== undefined
+                        && !feat.states.includes(feat.initial_state)) {
+                        errors.push({ file, loc: `${loc}.initial_state`,
+                            msg: `value "${feat.initial_state}" is not in states[]` });
+                    }
+                    if (Array.isArray(feat.states) && feat.actions && typeof feat.actions === 'object') {
+                        for (const key of Object.keys(feat.actions)) {
+                            if (!feat.states.includes(key)) {
+                                errors.push({ file, loc: `${loc}.actions.${key}`,
+                                    msg: `action key "${key}" is not in states[]` });
+                            }
+                        }
+                    }
+                    break;
+                case 'puzzle':
+                    requireFields(feat, ['solution', 'on_success', 'on_failure'], file, loc, errors);
+                    if (feat.solution) {
+                        requireFields(feat.solution, ['description', 'check'], file, `${loc}.solution`, errors);
+                    }
+                    if (feat.on_success && typeof feat.on_success === 'object') {
+                        requireFields(feat.on_success, ['narration'], file, `${loc}.on_success`, errors);
+                    }
+                    if (feat.on_failure && typeof feat.on_failure === 'object') {
+                        requireFields(feat.on_failure, ['narration'], file, `${loc}.on_failure`, errors);
+                    }
+                    break;
+            }
+        }
+
+        // Recursively scan for a key anywhere in an object tree.
+        function containsKey(node, target) {
+            if (node == null || typeof node !== 'object') return false;
+            if (Array.isArray(node)) return node.some(v => containsKey(v, target));
+            for (const [k, v] of Object.entries(node)) {
+                if (k === target) return true;
+                if (containsKey(v, target)) return true;
+            }
+            return false;
         }
 
         function topLevelSummary(data) {
