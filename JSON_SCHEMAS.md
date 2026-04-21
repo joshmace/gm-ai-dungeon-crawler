@@ -314,7 +314,26 @@ Declares the shape of character data. The character pack fills in values against
 | Value | Meaning |
 |---|---|
 | `"per_ability"` | One save per ability (5e-style). Character's `saves.proficient[]` holds ability ids. |
-| `"categorical"` | Categorical saves (B/X's Death Ray / Wands / Paralysis / Breath / Spells and similar). **Declaration shape TBD** — no v1 pack exercises this yet; the field layout will be specified once a pack that needs it is authored. Avoid in v1 packs. |
+| `"categorical"` | Categorical saves (B/X's Death Ray / Wands / Paralysis / Breath / Spells, and similar systems). Categories are declared as a sibling `categories[]` array; each entry has `id` (machine) and `name` (display). Character-side shape changes correspondingly — see the Character section's `saves` field. |
+
+**Categorical saves declaration** (required when `saves.type: "categorical"`):
+
+```jsonc
+"saves": {
+  "type": "categorical",
+  "categories": [
+    { "id": "death",     "name": "Death Ray or Poison" },
+    { "id": "wands",     "name": "Magic Wands" },
+    { "id": "paralysis", "name": "Paralysis or Turn to Stone" },
+    { "id": "breath",    "name": "Dragon Breath" },
+    { "id": "spells",    "name": "Rods, Staves, or Spells" }
+  ]
+}
+```
+
+Category ids must be unique within the pack. Display names are free-form; the B/X convention is full phrases (no abbreviations). Categories with identical ids across packs are treated as separate vocabularies — there is no shared category library in v1.
+
+Reference example: `rules_three_knots.json`.
 
 **Skills:**
 

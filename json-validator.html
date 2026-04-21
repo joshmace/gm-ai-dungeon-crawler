@@ -1025,6 +1025,15 @@
                         errors.push({ file, loc: 'rules.character_model.saves.type',
                             msg: `value "${cm.saves.type}" is not one of "per_ability" / "categorical"` });
                     }
+                    if (cm.saves.type === 'categorical') {
+                        requireArray(cm.saves, 'categories', file, 'rules.character_model.saves', errors);
+                        if (Array.isArray(cm.saves.categories)) {
+                            cm.saves.categories.forEach((cat, i) => {
+                                requireFields(cat, ['id', 'name'], file,
+                                    `rules.character_model.saves.categories[${i}]`, errors);
+                            });
+                        }
+                    }
                 }
                 if (cm.uses_classes === true && (cm.classes == null || typeof cm.classes !== 'object')) {
                     errors.push({ file, loc: 'rules.character_model.classes',
