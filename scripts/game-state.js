@@ -110,6 +110,11 @@
     }
 
     // Translate a v1 item into the pre-v1 legacy shape the renderer reads.
+    // Legacy expectations:
+    //  - weapons have top-level .damage / .damage_type / .range (legacy tests `!!item.damage`)
+    //  - armor has .ac = the FINAL AC when worn (not a bonus) — `getEffectiveAC()` returns
+    //    that number straight through. The full composite (10 + DEX + armor + shield)
+    //    is set by buildEquipmentBuckets on the body-slot item after computeAC runs.
     function legacyItemShape(item, slot, equipped) {
         const shape = {
             id:         item.id,
@@ -119,17 +124,17 @@
             type:       item.type || null,
             properties: item.properties || []
         };
-        if (item.damage)        shape.damage      = item.damage;
-        if (item.damage_type)   shape.damage_type = item.damage_type;
-        if (item.range)         shape.range       = item.range;
-        // Legacy renderer reads .ac as 10 + bonus. Accept armor.ac_bonus or magic.ac_bonus.
-        const armorAc = (item.armor && item.armor.ac_bonus) || 0;
-        const magicAc = (item.magic && item.magic.ac_bonus) || 0;
-        if (armorAc || magicAc) shape.ac = 10 + armorAc + magicAc;
+        // v1 nests weapon stats under item.weapon.* — surface them top-level so
+        // legacy code paths that test item.damage / item.range keep working.
+        const w = item.weapon || {};
+        if (w.damage)      shape.damage      = w.damage;
+        if (w.damage_type) shape.damage_type = w.damage_type;
+        if (item.range)    shape.range       = item.range;
+        if (w.ranged && !item.range) shape.range = 'ranged';
         return shape;
     }
 
-    function buildEquipmentBuckets(character, gameData) {
+    function buildEquipmentBuckets(character, rules, gameData) {
         const buckets = { worn: [], wielded: [], carried: [], backpack: [], coin: { gold: 0 } };
         for (const eq of (character.equipment || [])) {
             const item = resolveItem(eq.item_id, gameData);
@@ -137,6 +142,13 @@
             const bucket = equipmentBucket(item, eq.slot);
             buckets[bucket].push(legacyItemShape(item, eq.slot, true));
         }
+        // Legacy `getEffectiveAC()` returns the first worn armor's .ac as the final AC.
+        // Stamp the body-slot armor (preferred) or the first worn armor with the full
+        // composite so the value actually matches what combat_stats.armor_class reports.
+        const fullAC = computeAC(character, rules, gameData);
+        const bodyArmor = buckets.worn.find(w => w.slot === 'body')
+                       || buckets.worn.find(w => (w.type || '').toLowerCase() === 'armor');
+        if (bodyArmor) bodyArmor.ac = fullAC;
         for (const p of (character.pack || [])) {
             const item = resolveItem(p.item_id, gameData);
             if (!item) continue;
@@ -205,7 +217,7 @@
                 proficiency_bonus: profBonus
             },
             experience: { current: character.xp || 0 },
-            equipment:  buildEquipmentBuckets(character, gameData),
+            equipment:  buildEquipmentBuckets(character, rules, gameData),
             conditions: character.conditions || [],
             class_features:   character.class_features || [],
             feature_resources: character.feature_resources || {}
