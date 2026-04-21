@@ -20,8 +20,11 @@
       "description": "The road from Thornford's Common runs out of the woods and right up to the yard's low stone wall, as if it were still an imperial thoroughfare. Beyond the wall: a flagged courtyard strangled with dry grass, a half-collapsed stable, and the watch-house itself — two stories of squat grey limestone with a peaked slate roof. Above the oaken door, a carved crest: a stylized lantern encircled by a chain of laurels. Above the crest, set into sconces along the curtain wall, four iron watch-lanterns burn with a thin, steady, unshielded flame. It is mid-afternoon. There is no wind to speak of. The lanterns are lit anyway.",
       "tags": ["lore", "empty", "approach"],
       "connections": {
-        "back to the road": "watch_house_yard",
-        "through the oaken door": "gate_room"
+        "oaken_door": {
+          "label": "through the oaken door",
+          "to": "gate_room",
+          "state": "open"
+        }
       },
       "environment": {
         "name": "Unquiet Stillness",
@@ -58,10 +61,23 @@
       "description": "The oaken door opens on a high-ceilinged guardroom paved in slate, cold enough that the player's breath shows. A long wooden counter runs along the right wall, its surface worn smooth by a thousand signed duty-rosters. Above it, pegged to a plank, a Warden muster-roll. Two doorways lead off to the left and right; a third, directly ahead, is an iron-strapped door set deeper into the wall than seems structurally necessary. Everything is coated with the fine grey dust of sixty years of emptiness — except a single line of bootprints, fresh, small, leading inward from the threshold and vanishing at the rightmost doorway.",
       "tags": ["lore", "hub", "searchable"],
       "connections": {
-        "back to the yard": "watch_house_yard",
-        "left, into the barracks": "barracks",
-        "right, into the officer's study": "officers_study",
-        "the iron-strapped door": {
+        "to_yard": {
+          "label": "back to the yard",
+          "to": "watch_house_yard",
+          "state": "open"
+        },
+        "barracks_door": {
+          "label": "left, into the barracks",
+          "to": "barracks",
+          "state": "open"
+        },
+        "study_door": {
+          "label": "right, into the officer's study",
+          "to": "officers_study",
+          "state": "open"
+        },
+        "iron_strapped_door": {
+          "label": "the iron-strapped door",
           "to": "lantern_room",
           "state": "locked",
           "reveal_hint": "The iron-strapped door will not open. Its bar-latch is warded with an old lantern-sigil — it is not a mechanical lock."
@@ -136,7 +152,11 @@
       "description": "A long, low-ceilinged hall lined with six double-stacked wooden bunks and a single scarred trestle table down the middle. On the table: a tin cup, a deck of grey-backed playing cards fanned out mid-game, and — still in the small wooden bowl beside it — a pile of copper pennies representing somebody's lost hand. Nobody has finished this game yet. The air here is colder than the gate room. Not one of the bunks has its blankets pulled back.",
       "tags": ["encounter", "lore", "undead"],
       "connections": {
-        "back to the gate room": "gate_room"
+        "to_gate_room": {
+          "label": "back to the gate room",
+          "to": "gate_room",
+          "state": "open"
+        }
       },
       "environment": {
         "name": "Wrong Cold",
@@ -204,7 +224,11 @@
       "description": "A small square room lined on three walls with narrow shelves of Warden ledgers and bound codices, most of them intact but bloated with damp. The fourth wall is a single tall window of iron-bound glass, leaking grey afternoon light. In the middle of the room: a writing-desk of dark wood, its drawer pulled partly open, and the evidence of a very recent, very frustrated search — drawer tipped, paper scattered, a cold ash-ring on the floor where a small camp-lantern has burned out. On the desk itself, a heavy iron-bound lockbox, its hasp sealed by a softly-glowing lantern-sigil about the size of a thumbprint.",
       "tags": ["encounter", "puzzle", "searchable", "lore"],
       "connections": {
-        "back to the gate room": "gate_room"
+        "to_gate_room": {
+          "label": "back to the gate room",
+          "to": "gate_room",
+          "state": "open"
+        }
       },
       "features": [
         {
@@ -275,8 +299,13 @@
       "description": "A circular stone chamber no larger than a farmer's parlor, domed and windowless. At the center of the flagged floor, mounted on a low limestone plinth, a single **Wardstone Lantern** — a fist-sized sphere of clouded glass bound in tarnished silver, set atop a short rod. The lantern is dark. The plinth is carved around its rim with a repeating chain of laurels. Directly opposite the gate-room door, a low round-topped stair descends into darkness; the stair's mouth is sealed by a heavy black iron door with no handle, no hinges the player can see, and a single spent lantern-sigil on its face. The door is cold. The air in the room is not.",
       "tags": ["puzzle", "lore", "ritual"],
       "connections": {
-        "back to the gate room": "gate_room",
-        "the sealed crypt door": {
+        "to_gate_room": {
+          "label": "back to the gate room",
+          "to": "gate_room",
+          "state": "open"
+        },
+        "crypt_door": {
+          "label": "the sealed crypt door",
           "to": "wardens_crypt",
           "state": "locked",
           "reveal_hint": "The crypt door has no visible mechanism. Its lantern-sigil is spent and the Wardstone Lantern at the room's center is unlit — the two are surely linked."
@@ -303,7 +332,7 @@
               "label": "Speak the closing phrase at the wardstone and light it",
               "result": "You speak the phrase — WE KEEP THE LIGHT, AND THE LIGHT KEEPS US — and for a long moment nothing happens. Then, with a small patient sound like a match catching, the preserved flame inside the sphere takes and steadies. The room's held warmth falls away in a rush. Across the chamber the spent sigil on the crypt door flares, re-draws itself in four clean lines of pale light, and the door grinds inward half a handspan on mechanisms that have not moved in sixty years.",
               "effects": [
-                { "type": "unlock_connection", "target": "the sealed crypt door" }
+                { "type": "unlock_connection", "target": "crypt_door" }
               ]
             },
             "lit": {
@@ -328,7 +357,11 @@
       "description": "The stair comes out into a small vaulted chamber cut directly into the limestone under the watch-house. Cold. Lit by a thin greenish glow whose source the player cannot immediately locate. Against the far wall: a single stone sarcophagus on a raised platform, its lid askew. Carved into the platform's face, the Watch's laurel crest and the name ORICK HAVEL · LT · CROW'S HOLLOW · FELL IN THE FALLING WINTER. Standing between the platform and the stair, patient as a man waiting for a meeting, is the Lieutenant himself — or what is left of him. Tall. Grey. In the ruined half of a Warden's grey-blue coat. His eyes are the color of frozen water and he is looking directly at you. He has been looking at you for the entire time you have been descending the stair.",
       "tags": ["boss", "encounter", "lore", "undead", "climax"],
       "connections": {
-        "back up to the lantern room": "lantern_room"
+        "to_lantern_room": {
+          "label": "back up to the lantern room",
+          "to": "lantern_room",
+          "state": "open"
+        }
       },
       "environment": {
         "name": "Necrotic Cold",

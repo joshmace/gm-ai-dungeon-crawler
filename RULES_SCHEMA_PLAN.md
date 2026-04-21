@@ -433,8 +433,9 @@ No structured genre taxonomy (prose description covers tone). Compatible rules/b
       "tags": ["empty", "lore"],                    // optional pacing tags
 
       "connections": {
-        "out": "village_square",                    // simple: label → room_id
-        "secret_door": {                            // or structured: label → { to, state, reveal_hint }
+        "out": "village_square",                    // simple: machine_id → room_id (key is also fallback display label)
+        "secret_door": {                            // structured: machine_id → { label, to, state, reveal_hint }
+          "label": "the secret door",               // optional UI string; falls back to title-cased key when omitted
           "to": "hidden_crypt",
           "state": "hidden",                        // "open" | "locked" | "hidden"
           "reveal_hint": "Perception DC tier: easy"
@@ -452,7 +453,7 @@ No structured genre taxonomy (prose description covers tone). Compatible rules/b
 }
 ```
 
-**Connections** are label → id (simple) or label → object (locked/hidden state).
+**Connections** are machine_id → room_id (simple) or machine_id → object (structured: label, locked/hidden state, reveal hint). The map key is the stable machine id used by `unlock_connection` / `reveal_connection` effects. The structured form's optional `label` carries the player-facing UI string; in the simple form, the app falls back to the title-cased key.
 **Tags** are optional pacing hints: `"encounter"`, `"puzzle"`, `"empty"`, `"treasure"`, `"boss"`, `"lore"`.
 **First-visit vs. revisit narration** — handled by GM naturally, not structured.
 
@@ -541,6 +542,11 @@ All three arrays always present (possibly empty).
 - Four hazard shapes (detect-then-avoid / pure-avoidance / automatic / interaction-gated) emerge from which blocks are present — no type enum needed.
 - Hazards can grant XP rewards for detection or avoidance (opt-in, classic OSR flavor).
 - `gm_notes` per hazard is optional prose guidance.
+
+**Check shape — raw saves vs. skilled checks:**
+- Standard skilled check: `{ "skill": "perception", "ability": "wis", "dc_tier": "easy" }` — proficiency in the named skill applies if the character has it.
+- Raw save (no skill): `{ "skill": null, "ability": "con", "dc_tier": "medium" }` — the app rolls a save against the named ability without applying skill proficiency. Save proficiency from `character.saves.proficient[]` does apply.
+- Same shape used for hazards (`detection.check`, `avoidance.check`) and for puzzle fallback checks (`solution.check`).
 
 ## MQ4.5 — Counter groundwork
 
@@ -696,6 +702,7 @@ Puzzles as gates use `on_success.effects` with `unlock_connection` or `reveal_co
 - **Strict typing** — mixed-type features are split into multiple features (painting-as-lore + hidden-compartment-as-searchable discovered via `on_examine`).
 - **Feature chaining** via `activate_feature` effect is supported and encouraged.
 - **Features cannot:** deal damage, host creatures, grant XP directly. Rewards are items only.
+- **`reward[]` is universal across non-lore feature sub-types** — searchable, interactive, and puzzle may all carry a `reward[]` array using the standard reward shape (`{ "type": "item", "item_id", "quantity" }`). Lore features have no `reward[]` (they're stateless and informational). When present on an interactive or puzzle feature, rewards are granted on the action / solution that triggers them.
 
 ## MQ7 — Rewards, treasure, and loot (introduces the Items archetype)
 
@@ -863,7 +870,11 @@ Lightweight prereqs on features to support formal state-machine puzzles:
 ```jsonc
 {
   "prerequisites": {
-    "feature_state": { "crown_button": "pressed" },
+    "feature_state": {
+      "crown_button": "pressed",        // interactive: matches current_state value
+      "wardens_journal": "succeeded",   // searchable: "succeeded" (true) or "searched" (true regardless of outcome)
+      "time_riddle": "solved"           // puzzle: "solved" (true)
+    },
     "encounter_defeated": ["guardian"]
   },
   "prereq_hint": "The sceptre rune glows faintly, but something about the crown still needs attention."
@@ -871,6 +882,12 @@ Lightweight prereqs on features to support formal state-machine puzzles:
 ```
 
 AND logic only. If not met, feature is **hidden** from the UI; optional `prereq_hint` gives the GM a breadcrumb.
+
+**`feature_state` string convention** (per feature sub-type):
+- **Interactive features** — the value must match the feature's tracked `current_state`. Example: `"crown_button": "pressed"` is satisfied when the button's `current_state == "pressed"`.
+- **Searchable features** — `"succeeded"` is satisfied when the tracked `succeeded == true`. `"searched"` is satisfied when `searched == true` (regardless of success). Anything else is undefined.
+- **Puzzle features** — `"solved"` is satisfied when the tracked `solved == true`. Anything else is undefined.
+- **Lore features** are stateless and cannot be referenced in `feature_state` prereqs.
 
 **Unlocks:** multi-step puzzles via feature chaining, staged reveals, gated progression.
 
