@@ -302,11 +302,51 @@
 
         // --- Warnings pass --------------------------------------------------
 
+        // v1 controlled vocabularies — see JSON_SCHEMAS.md §"Controlled vocabularies".
+        const CONDITION_ICON_IDS = new Set([
+            'skull', 'drop', 'fire', 'eye', 'chains', 'heart', 'lightning', 'moon',
+            'falling', 'snowflake', 'sun', 'shield', 'sword', 'hand', 'swirl', 'ear', 'stone'
+        ]);
+        const ON_USE_KEYWORDS = new Set([
+            'heal_player', 'cure_condition', 'gm_adjudicate'
+        ]);
+
         function checkWarnings(files, warnings) {
+            const rulesF    = files.rules            && files.rules.ok            ? files.rules            : null;
+            const itemsF    = files.items            && files.items.ok            ? files.items            : null;
             const bestiaryF = files.bestiary         && files.bestiary.ok         ? files.bestiary         : null;
             const moduleF   = files.adventure_module && files.adventure_module.ok ? files.adventure_module : null;
-            const bestiary  = bestiaryF ? bestiaryF.data.bestiary : null;
-            const module_   = moduleF   ? moduleF.data            : null;
+            const rules     = rulesF    ? rulesF.data.rules             : null;
+            const items     = itemsF    ? itemsF.data.items_library     : null;
+            const bestiary  = bestiaryF ? bestiaryF.data.bestiary       : null;
+            const module_   = moduleF   ? moduleF.data                  : null;
+
+            // Condition icon ids: warn on unrecognized values (runtime falls back to skull).
+            if (rules && Array.isArray(rules.conditions)) {
+                rules.conditions.forEach((c, i) => {
+                    if (c && c.icon && !CONDITION_ICON_IDS.has(c.icon)) {
+                        warnings.push({ file: rulesF.path,
+                            loc: `rules.conditions[${i}]${c.id ? ` (${c.id})` : ''}.icon`,
+                            msg: `icon "${c.icon}" is not in the v1 library — runtime will fall back to "skull"` });
+                    }
+                });
+            }
+
+            // Consumable on_use keywords: warn on unrecognized values (runtime falls back to gm_adjudicate).
+            const checkOnUse = (itemsObj, file, locPrefix) => {
+                if (!itemsObj) return;
+                for (const [key, item] of Object.entries(itemsObj)) {
+                    if (item && item.type === 'consumable' && item.consumable && item.consumable.on_use
+                        && !ON_USE_KEYWORDS.has(item.consumable.on_use)) {
+                        warnings.push({ file, loc: `${locPrefix}.${key}.consumable.on_use`,
+                            msg: `on_use "${item.consumable.on_use}" is not in the v1 keyword set — runtime will fall back to "gm_adjudicate"` });
+                    }
+                }
+            };
+            if (items) checkOnUse(items.items, itemsF.path, 'items_library.items');
+            if (module_ && module_.module_items) {
+                checkOnUse(module_.module_items.items, moduleF.path, 'module_items.items');
+            }
 
             // Reachability from starting_room via the connection graph.
             // Structural only — locked and hidden connections count as traversable

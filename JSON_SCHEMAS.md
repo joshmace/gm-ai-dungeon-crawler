@@ -449,7 +449,7 @@ An array of condition definitions. The app tracks active condition ids on the ch
   {
     "id":          "poisoned",              // required
     "name":        "Poisoned",              // required
-    "icon":        "drop",                  // required — id from the fixed icon library (see "Open questions" at end of doc)
+    "icon":        "drop",                  // required — id from the fixed icon library (see "Controlled vocabularies" at end of doc)
     "description": "A toxin is working through you.",  // required — player-facing
     "effect":      "Disadvantage on attack rolls and ability checks.",  // required — prose applied by the GM
     "removal":     "Until the duration ends, antitoxin is administered, or the poison is neutralized." // required — prose
@@ -767,7 +767,7 @@ Equipping a `slot: "two_handed"` item occupies both `main_hand` and `off_hand` (
 
 // consumable (required when type is "consumable")
 "consumable": {
-  "on_use": "heal_player",    // required — keyword; see "Open questions" at end of doc for the current set
+  "on_use": "heal_player",    // required — keyword; see "Controlled vocabularies" at end of doc for the full set
   "amount": "2d4+2"           // required when on_use is a dice-expecting keyword; dice string or integer
 }
 
@@ -1618,31 +1618,51 @@ A compact checklist for the validator rewrite (`json-validator.html`).
 
 ---
 
-## Open questions
+## Controlled vocabularies
 
-Two small v1 surfaces that the plan doc flags as cross-cutting TODOs. Pack authors should treat the lists below as the current working set; final authoritative lists will be published here.
+Two small v1 surfaces with fixed vocabularies. These are authoritative for v1.
 
 ### Condition icon library
 
-The `conditions[].icon` field takes an id from a fixed library. **Known-safe icons** (use freely):
+The `conditions[].icon` field takes an id from the fixed library below. The runtime maps each id to a concrete visual; pack authors do not author the glyph itself. Custom icons remain a v2 feature.
 
-`skull`, `fire`, `drop`, `eye`, `chains`
+| Icon id | Typical use |
+|---|---|
+| `skull` | frightened, dying, cursed (also the fallback for any unrecognized icon id) |
+| `drop` | poisoned, bleeding, wounded |
+| `fire` | burning, on-fire |
+| `eye` | blinded, watched, seen |
+| `chains` | grappled, restrained, bound |
+| `heart` | charmed, friendly |
+| `lightning` | stunned, shocked, paralyzed |
+| `moon` | unconscious, asleep |
+| `falling` | prone, knocked down |
+| `snowflake` | frozen, slowed |
+| `sun` | blessed, illuminated, inspired |
+| `shield` | warded, guarded, protected |
+| `sword` | empowered, enraged, sharpened |
+| `hand` | incapacitated, gripped |
+| `swirl` | confused, dazed, disoriented |
+| `ear` | deafened, silenced |
+| `stone` | petrified, ossified |
 
-**Candidates surfaced by the 5e-shaped starter pack** (likely to be accepted):
+**Fallback:** unrecognized icon ids render as `skull`. Authors get a warning from the validator; the app keeps running.
 
-`heart`, `lightning`, `moon`, `falling`, `snowflake`, `sun`, `shield`, `sword`, `hand`, `swirl`
-
-Unrecognized icon ids fall back to `skull`. Custom icons are v2.
+**Covers** the 5e SRD condition list in full, the OSR condition set, and common buff conditions (blessed, guarded, empowered) that packs frequently declare alongside the debuffs.
 
 ### `consumable.on_use` keywords
 
-The consumable `on_use` field takes a keyword the app can parse. **Candidates surfaced by the starter pack:**
+The `consumable.on_use` field takes one of the three keywords below. The shape of the sibling `amount` field depends on which keyword is chosen.
 
-`heal_player`, `cure_condition`, `buff_ability`, `buff_save`, `gm_adjudicate`
+| Keyword | `amount` shape | App behavior |
+|---|---|---|
+| `heal_player` | Dice string (`"2d4+2"`) or integer | App rolls or reads the value, adds it to current HP, clamps to HP max. |
+| `cure_condition` | Condition id string (`"poisoned"`) or array of ids (`["poisoned", "frightened"]`) | App removes each id from `character.conditions`. Ids not currently on the character are no-ops. |
+| `gm_adjudicate` | Prose | App shows a "use item?" confirmation; on confirm, the GM narrates the effect using `amount` as flavor. |
 
-`gm_adjudicate` is the catch-all: the item's `amount` field is treated as prose and the GM narrates the effect. Any non-keyword `on_use` value should default to `gm_adjudicate`.
+**Fallback:** any unrecognized `on_use` value is treated as `gm_adjudicate`. This means pack authors can ship bespoke consumables without waiting for a schema bump — they just lose the app's structured handling.
 
-Full authoritative list pending.
+**Deferred to v2:** `buff_ability` and `buff_save` were candidates but require a duration system (per-encounter ticks, time-limited effects) that v1 does not have. Ship those as `gm_adjudicate` with prose duration until v2 lands the tick model.
 
 ---
 
