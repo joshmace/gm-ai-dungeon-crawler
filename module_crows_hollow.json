@@ -17,10 +17,37 @@
     "watch_house_yard": {
       "id": "watch_house_yard",
       "name": "The Watch-House Yard",
-      "description": "",
-      "tags": [],
-      "connections": {},
-      "features": [],
+      "description": "The road from Thornford's Common runs out of the woods and right up to the yard's low stone wall, as if it were still an imperial thoroughfare. Beyond the wall: a flagged courtyard strangled with dry grass, a half-collapsed stable, and the watch-house itself — two stories of squat grey limestone with a peaked slate roof. Above the oaken door, a carved crest: a stylized lantern encircled by a chain of laurels. Above the crest, set into sconces along the curtain wall, four iron watch-lanterns burn with a thin, steady, unshielded flame. It is mid-afternoon. There is no wind to speak of. The lanterns are lit anyway.",
+      "tags": ["lore", "empty", "approach"],
+      "connections": {
+        "back to the road": "watch_house_yard",
+        "through the oaken door": "gate_room"
+      },
+      "environment": {
+        "name": "Unquiet Stillness",
+        "description": "No birds. No insects. The sound of the player's own breath is audible. The lanterns do not flicker.",
+        "effects": [
+          "Sound carries further than it should — the slightest noise from inside the watch-house is likely to be heard."
+        ]
+      },
+      "features": [
+        {
+          "id": "warden_crest",
+          "type": "lore",
+          "name": "The Warden Crest",
+          "description": "A single large stone carved above the oaken door: a lantern wrapped in a chain of laurels. Beneath it, in small deeply-cut script, the Watch's motto — WE KEEP THE LIGHT SO THE LIGHT KEEPS US.",
+          "on_examine": "The laurels are not a Dawnlight convention — they are older, pre-imperial, and the Wardens borrowed them from someone who mattered to the pre-imperial cults. The crest predates the watch-house itself; it's been moved here from somewhere else. Someone is buried under the stone the crest is carved into, or was.",
+          "gm_notes": "Players bearing the Rubbing of the Lantern Tree will recognize the motto instantly. Players bearing the Lanternblade will see the blade's runes warm slightly against the crest."
+        },
+        {
+          "id": "watch_lanterns",
+          "type": "lore",
+          "name": "The Burning Watch-Lanterns",
+          "description": "Four iron watch-lanterns along the curtain wall, set in bracketed sconces at roughly head height. Each is burning with a steady, pale, unshielded flame about the size of a thumb. There is no oil in them. There is no wick.",
+          "on_examine": "The flames do not respond to breath. A palm brought near one feels warmth, but the warmth does not spread — it is present exactly in the flame and nowhere else. This is proper Warden lantern-work behaving the way Warden lantern-work is supposed to behave. Something inside the watch-house has relit them.",
+          "gm_notes": "The lanterns are a breadcrumb: whatever is in the crypt is waking, and the old lantern-work is responding. Do not let the player extinguish them — they cannot be put out from outside."
+        }
+      ],
       "encounters": [],
       "hazards": []
     },
@@ -28,12 +55,79 @@
     "gate_room": {
       "id": "gate_room",
       "name": "The Gate Room",
-      "description": "",
-      "tags": [],
-      "connections": {},
-      "features": [],
+      "description": "The oaken door opens on a high-ceilinged guardroom paved in slate, cold enough that the player's breath shows. A long wooden counter runs along the right wall, its surface worn smooth by a thousand signed duty-rosters. Above it, pegged to a plank, a Warden muster-roll. Two doorways lead off to the left and right; a third, directly ahead, is an iron-strapped door set deeper into the wall than seems structurally necessary. Everything is coated with the fine grey dust of sixty years of emptiness — except a single line of bootprints, fresh, small, leading inward from the threshold and vanishing at the rightmost doorway.",
+      "tags": ["lore", "hub", "searchable"],
+      "connections": {
+        "back to the yard": "watch_house_yard",
+        "left, into the barracks": "barracks",
+        "right, into the officer's study": "officers_study",
+        "the iron-strapped door": {
+          "to": "lantern_room",
+          "state": "locked",
+          "reveal_hint": "The iron-strapped door will not open. Its bar-latch is warded with an old lantern-sigil — it is not a mechanical lock."
+        }
+      },
+      "environment": {
+        "name": "Old Cold",
+        "description": "The room holds the specific deep chill of a cellar that has not been warmed in decades. Breath shows. Metal is painful to touch ungloved.",
+        "effects": [
+          "Prolonged bare contact with metal risks numb fingers; a GM may call for a Constitution save against extended exposure."
+        ]
+      },
+      "features": [
+        {
+          "id": "muster_roll",
+          "type": "lore",
+          "name": "The Muster-Roll",
+          "description": "A split oak plank pegged to the wall above the counter, roughly two feet wide, bearing a list of fourteen names in the neat column-hand of a Warden quartermaster. The top of the plank reads CROW'S HOLLOW GARRISON · WINTER OF THE SIXTY-THIRD YEAR. Beside each name, a small inked symbol: fourteen of them match — a laurel. One name, second from the top — LT. ORICK HAVEL — has no laurel beside it. Instead, a small circle with a line through it.",
+          "on_examine": "A character with Warden lore or who has read any Warden document before will know: the laurel means 'returned home properly' — a Warden who died was laid to rest under their own name. The circle-with-a-line is the older mark — 'returned, but not properly.' Lt. Orick Havel, whoever he was, is somewhere in this watch-house, and the Watch itself knew he had not been put away correctly.",
+          "gm_notes": "First major clue. This is the player's introduction to the Warden-Lieutenant as a named figure with an unfinished problem."
+        },
+        {
+          "id": "overturned_locker",
+          "type": "searchable",
+          "name": "Overturned Equipment Locker",
+          "description": "A tall wooden locker behind the counter has been pulled from the wall and dumped on its side. The Warden quartermaster's seal — a small waxy lantern stamp — has been broken off the latch, evidently very recently. Most of what it held is scattered: mothballed gambesons, a pair of broken belt-hooks, and a surprising quantity of grey paper envelopes sealed with a cord.",
+          "check": { "skill": "investigation", "ability": "int", "dc_tier": "easy" },
+          "on_success": "Among the scattered envelopes is a small oilcloth-wrapped bundle that escaped the thieves' notice: two sealed vials, a folded paper bearing a hand-drawn diagram, and a few iron nails.",
+          "on_failure": "The locker is mostly empty; someone has been through it already.",
+          "reward": [
+            { "type": "item", "item_id": "antitoxin", "quantity": 1 },
+            { "type": "item", "item_id": "healing_potion", "quantity": 1 }
+          ],
+          "persists": true,
+          "gm_notes": "Whoever broke the quartermaster's seal is the same party whose bootprints lead into the officer's study. Foreshadow without naming."
+        }
+      ],
       "encounters": [],
-      "hazards": []
+      "hazards": [
+        {
+          "id": "rotten_floorboard",
+          "name": "Rotten Floorboard",
+          "description": "A single wide board of the slate flooring is, in fact, not slate — it is a rotten plank painted grey to match. It covers an old drainage pit that the original garrison used for washing blood off the slate after a fight.",
+          "gm_notes": "Easy detect, medium avoidance. A player who finds it may use the pit tactically later (dragging an enemy in, hiding).",
+          "trigger": {
+            "type": "on_traverse",
+            "target": null
+          },
+          "detection": {
+            "check": { "skill": "perception", "ability": "wis", "dc_tier": "easy" },
+            "on_success": "One of the slate flags rings hollow under the foot. Closer, it's plainly a painted plank. Below: a rectangular pit, maybe four feet deep, dry but for old brown staining."
+          },
+          "avoidance": {
+            "check": { "skill": "acrobatics", "ability": "dex", "dc_tier": "medium" },
+            "on_success": "You spread your weight across the adjacent flags and cross the plank without putting full weight on it.",
+            "on_failure": {
+              "narration": "The plank gives all at once, with the sound of a dry branch snapping, and drops you four feet down into a cold stone-walled pit. You land hard on an ankle.",
+              "damage": { "amount": "1d6", "type": "bludgeoning" },
+              "conditions": ["wounded"]
+            }
+          },
+          "reward_on_detection": { "xp": 15, "narration": "You keep your footing and note the pit for later." },
+          "persists": false,
+          "resolved_by_detection": true
+        }
+      ]
     },
 
     "barracks": {
