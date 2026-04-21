@@ -583,3 +583,254 @@ Optional markdown. Loaded into `{{GUIDANCE_BLOCK}}` in the system prompt. Good h
 `rules_lantern_and_blade.json` + `lantern_and_blade_guidance.md`.
 
 ---
+
+## Bestiary Pack
+
+A keyed library of monster stat blocks. Referenced by encounters via `monster_ref`. Everything mechanically tunable is **pre-computed** — no derivation from ability scores, no proficiency math. Authors author; the app reads.
+
+### Top-level shape
+
+```jsonc
+{
+  "bestiary": {
+    "id":          "lantern_and_blade_bestiary_v1",  // required
+    "name":        "Lantern & Blade — Starter Bestiary", // required
+    "version":     "1.0",                            // optional
+    "author":      "…",                              // optional
+    "description": "…",                              // optional
+
+    "monsters": {                                    // required — keyed object, id → monster block
+      "goblin": { /* see below */ }
+    }
+  }
+}
+```
+
+### Monster shape
+
+```jsonc
+{
+  "id":          "goblin",                         // required — must match the key in monsters{}
+  "name":        "Goblin",                         // required
+  "description": "Small green-skinned raiders.",   // optional — short flavor, kept in JSON
+  "type":        "humanoid",                       // optional — free-form string (v1); may bear mechanics in v2
+
+  "hp":          7,                                // required — pre-rolled integer
+  "ac":          13,                               // required — ascending AC
+  "morale":      7,                                // optional — meaningful only when rules pack auxiliary.morale_roll: true
+
+  "attacks": [ /* see "Attack shape" */ ],         // required — array; may be empty for purely environmental foes
+
+  "special_abilities": [                           // optional
+    {
+      "id":          "darkvision",                 // required
+      "name":        "Darkvision",                 // required
+      "description": "Sees in darkness up to 60 feet.",  // required — prose
+      "type":        "passive"                     // required — "passive" | "active" | "triggered"
+    }
+  ],
+
+  "damage_resistance":    [],                      // optional — damage type ids taken at half
+  "damage_immunity":      [],                      // optional — damage type ids ignored
+  "damage_vulnerability": [],                      // optional — damage type ids taken doubled
+
+  "xp_value": 25,                                  // required — authoritative default; encounter may override
+  "behavior": "…",                                 // optional — prose tactical hint
+  "tactics":  "…"                                  // optional — prose tactical hint
+}
+```
+
+### Minimum viable monster
+
+Required: `id`, `name`, `hp`, `ac`, `attacks`, `xp_value`. Everything else is optional.
+
+### Attack shape
+
+```jsonc
+{
+  "name":        "Scimitar",         // required
+  "bonus":       2,                  // required — pre-computed total to-hit bonus; not derived
+  "damage":      "1d6+2",            // optional — pre-computed dice string; omit for non-damaging attacks
+  "damage_type": "slashing",         // optional — damage type id; ignored when rules pack has no damage_types
+  "range":       "melee",            // required — "melee" | "ranged"
+  "on_hit":      "Target saves vs. DC 12 CON or is poisoned for 1 minute."  // optional — prose rider; GM adjudicates
+}
+```
+
+**Attack shape notes:**
+
+- `damage` and `damage_type` are both optional. Omit both for non-damaging attacks (web, grapple, shove, disarm).
+- `on_hit` is optional prose for any rider — save-or-suffer effects, conditions applied on hit, max-HP drains, position changes. The GM reads and adjudicates; v1 does not structurally parse riders.
+- Same design line as item magic blocks: structured common fields + prose escape hatch.
+
+**Special abilities:**
+
+- Same design line. The `description` is the prose the GM reads; `type` is a hint about when it fires (`passive` = always on, `active` = the monster spends a turn or action, `triggered` = fires on a condition).
+- Free-form effects live in the `description`. Structured rider schemas deferred to v2.
+
+### Damage resistance, immunity, vulnerability
+
+- All three are arrays of damage-type ids declared in the active rules pack's `resources.damage_types[]`.
+- When the rules pack has no `damage_types`, these arrays are ignored.
+- Resistance = half damage; immunity = no damage; vulnerability = doubled damage. Applied by the app if a rules engine is resolving damage; otherwise narrated by the GM.
+
+### Reference example
+
+`bestiary_lantern_and_blade.json`.
+
+---
+
+## Items Library
+
+A keyed library of items — weapons, armor, consumables, lore, miscellany. Referenced by character equipment and by reward shapes via `item_id`.
+
+Base item shape is the same for every type; per-type blocks add the mechanical specifics; the `magic` block overlays structured bonuses onto any item.
+
+### Top-level shape
+
+```jsonc
+{
+  "items_library": {
+    "id":          "lantern_and_blade_items_v1",   // required
+    "name":        "Lantern & Blade — Starter Items", // required
+    "version":     "1.0",                          // optional
+    "author":      "…",                            // optional
+    "description": "…",                            // optional
+
+    "items": {                                     // required — keyed object, id → item block
+      "silver_dagger": { /* see below */ }
+    }
+  }
+}
+```
+
+### Base item shape
+
+```jsonc
+{
+  "id":           "silver_dagger",          // required — must match the key in items{}
+  "name":         "Silver-Edged Dagger",    // required
+  "type":         "weapon",                 // required — "weapon" | "armor" | "consumable" | "lore" | "misc"
+  "slot":         "main_hand",              // required for weapon/armor; omit for consumable/lore/misc
+  "description":  "…",                      // required — prose
+  "weight_slots": 1,                        // required — unified field; interpretation depends on rules pack's encumbrance.method
+  "tags":         ["common", "silvered"],   // optional — free-form string array
+
+  // Type-specific block — present only when the type warrants one; see per-type sections below
+  "weapon": { /* … */ },
+
+  // Magic block — optional on any item; see "Magic block" below
+  "magic":  { /* … */ }
+}
+```
+
+**`weight_slots` is a unified field, method-dependent interpretation:**
+
+| Rules pack `encumbrance.method` | Interpretation |
+|---|---|
+| `"slots"` | Number of inventory slots the item occupies. |
+| `"weight"` | Weight in the pack's default unit (pounds by convention). |
+| `"none"` | Ignored. |
+
+Keeps items portable across packs with different encumbrance regimes.
+
+### Type enum and slots
+
+| `type` | Valid `slot` values |
+|---|---|
+| `"weapon"` | `"main_hand"`, `"off_hand"`, `"two_handed"`, `"ranged"` |
+| `"armor"` | `"body"`, `"shield"`, `"head"`, `"hands"`, `"feet"`, `"neck"`, `"ring"`, `"cloak"`, `"belt"` |
+| `"consumable"` | — (omit `slot`) |
+| `"lore"` | — (omit `slot`) |
+| `"misc"` | — (omit `slot`) |
+
+"Armor" covers all wearables — body armor, shields, boots, gloves, rings, cloaks, circlets. Type is `"armor"`; differences are captured by `slot`. A ring that grants only a save bonus is `type: "armor"` with no `armor` block, just a `magic.save_bonus`.
+
+Equipping a `slot: "two_handed"` item occupies both `main_hand` and `off_hand` (enforced by rules-pack `slot_limits`).
+
+### Per-type blocks
+
+```jsonc
+// weapon (required when type is "weapon")
+"weapon": {
+  "damage":      "1d4",       // required — dice string
+  "damage_type": "piercing",  // required — damage type id
+  "melee":       true,        // required — boolean
+  "ranged":      false        // required — boolean
+}
+
+// armor (optional even when type is "armor" — omit for wearables that don't grant AC, like a plain ring)
+"armor": {
+  "ac_bonus": 4,              // required — integer
+  "type":     "heavy"         // required — "light" | "medium" | "heavy" | "shield"
+}
+
+// consumable (required when type is "consumable")
+"consumable": {
+  "on_use": "heal_player",    // required — keyword; see "Open questions" at end of doc for the current set
+  "amount": "2d4+2"           // required when on_use is a dice-expecting keyword; dice string or integer
+}
+
+// lore, misc — no type-specific block; the item is inert mechanically and the GM narrates its use
+```
+
+Weapons include staves and wands — use `type: "weapon"` with an appropriate slot (typically `main_hand` or `two_handed`) and a real `damage` for when the item is used as a club, plus a `magic.charges` block for the magical effect.
+
+### Magic block
+
+Optional on **any** item type. The design line:
+
+> **Structured fields for common mechanical effects; prose for everything else.**
+
+Enforced by the app: `attack_bonus`, `damage_bonus`, `ac_bonus`, `ability_bonus`, `save_bonus`, `skill_bonus`, `bonus_damage`, `damage_resistance`, `damage_immunity`, `charges.max`, `charges.recharge`.
+
+Adjudicated narratively by the GM: `charge_effect`, `special_effects`.
+
+```jsonc
+"magic": {
+  "attack_bonus":  1,                                    // optional — flat bonus to all attack rolls with this item
+  "damage_bonus":  1,                                    // optional — flat bonus to weapon damage
+  "ac_bonus":      1,                                    // optional — flat bonus to AC (on any slot)
+
+  "ability_bonus": { "str": 0, "dex": 1 },               // optional — keyed by rules-pack ability id
+  "save_bonus":    { "all": 1, "wis": 2 },               // optional — keyed by save id; "all" is a reserved shortcut
+  "skill_bonus":   { "stealth": 2 },                     // optional — keyed by rules-pack skill id
+
+  "bonus_damage":        { "amount": "1d4", "type": "fire" },  // optional — extra dice on a weapon hit
+  "damage_resistance":   [],                             // optional — damage type ids taken at half while equipped
+  "damage_immunity":     [],                             // optional — damage type ids ignored while equipped
+
+  "charges": {                                           // optional — wands, staves, charged rings
+    "max":      3,                                       // required when charges is present
+    "recharge": "long_rest"                              // required when charges is present; "long_rest" | "short_rest" | "daily" | "none"
+  },
+  "charge_effect":   "Spend 1 charge to cast …",         // optional — prose; GM adjudicates
+  "special_effects": "Sheds dim light; undead flinch …"  // optional — prose escape hatch for anything structural fields don't cover
+}
+```
+
+**`save_bonus` shape:**
+
+- Keys are save ids (ability ids when `saves.type: "per_ability"`; category ids when `"categorical"`).
+- Reserved key `"all"` applies to every save. Specific keys **stack** on top — `{ "all": 1, "wis": 2 }` = +1 to every save, +3 to wisdom saves.
+- Flat numbers only. Advantage/disadvantage on saves goes in `special_effects` prose.
+
+**`skill_bonus` shape:**
+
+- Keys are skill ids from `character_model.skills`.
+- Flat numbers only. No `"all"` shortcut (universal skill bonuses are rare enough that the convention isn't worth the complexity).
+- Advantage/disadvantage on skills goes in `special_effects` prose.
+
+### Tags
+
+Free-form string array (`["magical", "cursed", "quest-item", "silvered", "heirloom"]`). No controlled vocabulary in v1 — useful for authoring tools and future treasure generation.
+
+### Cursed / attunement / item sets
+
+Handled as prose in `magic.special_effects` for v1. Structured mechanics deferred to v2.
+
+### Reference example
+
+`items_lantern_and_blade.json`.
+
+---
