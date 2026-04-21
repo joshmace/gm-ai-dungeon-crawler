@@ -834,3 +834,206 @@ Handled as prose in `magic.special_effects` for v1. Structured mechanics deferre
 `items_lantern_and_blade.json`.
 
 ---
+
+## Adventure Module
+
+The playable content: rooms connected by connections, populated with features, encounters, and hazards. The most structurally rich archetype. v1 supports dungeon-style modules (rooms + connections); hex crawls, point crawls, and overland travel are v2.
+
+This section covers the module's structural spine — outer shape, metadata, rooms, connections, environment, module-scoped libraries, and completion condition. The **content trinity** (features, encounters, hazards) and **feature prerequisites** are covered in the next section.
+
+### Top-level shape
+
+```jsonc
+{
+  "module":     { /* metadata block */ },   // required
+  "rooms":      { /* keyed object, id → room */ },   // required
+
+  "module_bestiary": { /* optional — one-off monsters scoped to this module */ },
+  "module_items":    { /* optional — one-off items scoped to this module */ },
+
+  "completion_condition": { /* optional — null or omitted means GM judges narratively */ }
+}
+```
+
+### `module` — metadata block
+
+```jsonc
+{
+  "module": {
+    "id":                 "watch_at_crows_hollow",   // required — machine id
+    "title":              "The Watch at Crow's Hollow",  // required — display title
+    "version":            "1.0",                     // optional
+    "author":             "…",                       // optional
+    "description":        "A derelict Warden watch-house…",  // optional — pack-picker blurb
+    "starting_room":      "watch_house_yard",        // required — room id the player begins in
+    "level_range":        { "min": 2, "max": 4 },    // optional — advisory, shown in pack picker
+    "estimated_rooms":    6,                         // optional — pack-picker info
+    "estimated_playtime": "75–90 min",               // optional — pack-picker info
+    "tags":               ["undead", "horror", "short"],  // optional — free-form v1
+    "guidance":           "crows_hollow_guidance.md" // optional — path to module guidance sidecar
+  }
+}
+```
+
+**`starting_room` must resolve to a key in `rooms{}`.** The validator checks this.
+
+### Guidance sidecar (`<name>_guidance.md`)
+
+Optional markdown. Loaded alongside rules-pack guidance. Good homes for:
+
+- Author's running notes.
+- Tone essays / pacing philosophy for this specific module.
+- Rules-pack-specific adjustments ("if running under Shadowdark, …").
+- Design intent / spoiler / reveal guidance.
+
+---
+
+### Rooms
+
+```jsonc
+{
+  "rooms": {
+    "watch_house_yard": {
+      "id":          "watch_house_yard",             // required — must match the map key
+      "name":        "The Watch-House Yard",         // required — display label
+      "description": "The road from Thornford's…",   // required — player-facing on first entry
+
+      "tags": ["lore", "empty", "approach"],         // optional — pacing hints: "encounter" | "puzzle" | "empty" | "treasure" | "boss" | "lore" | "hub" | "searchable"
+
+      "connections": { /* see "Connections" below */ },  // required — may be an empty object for dead-end rooms
+
+      "environment": { /* optional — see "Environment" below */ },
+
+      // The content trinity — arrays always present, possibly empty. Covered in the next section.
+      "features":   [],   // required array — may be empty
+      "encounters": [],   // required array — may be empty
+      "hazards":    []    // required array — may be empty
+    }
+  }
+}
+```
+
+**First-visit vs. revisit narration** is not structured. The GM naturally varies description on re-entry based on the room's `description` and state.
+
+### Connections
+
+Room-to-room connections are declared as a keyed object inside each room. **The key is a stable machine id** used by `unlock_connection` / `reveal_connection` effects. Two forms are supported.
+
+**Simple form** — just a machine id → room id:
+
+```jsonc
+"connections": {
+  "out": "village_square"                  // machine id → room id; no state, defaults to "open"
+}
+```
+
+**Structured form** — machine id → full object:
+
+```jsonc
+"connections": {
+  "iron_strapped_door": {
+    "label":        "the iron-strapped door",      // optional — player-facing UI string; falls back to the title-cased key
+    "to":           "lantern_room",                // required — target room id
+    "state":        "locked",                      // required — "open" | "locked" | "hidden"
+    "reveal_hint":  "Perception DC tier: easy"     // optional — prose hint the GM can surface when a relevant check succeeds
+  }
+}
+```
+
+**Fields:**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `to` | string (room id) | required | Target room. Must resolve. |
+| `state` | enum | required | `"open"` \| `"locked"` \| `"hidden"` — initial state. `"locked"` shows in UI but blocks traversal; `"hidden"` is invisible until revealed. |
+| `label` | string | optional | Player-facing UI string. Falls back to title-cased key (`iron_strapped_door` → "Iron Strapped Door"). |
+| `reveal_hint` | string | optional | Prose the GM may use when a relevant check or action reveals a hidden/locked connection. |
+
+**Use the simple form when there's no state to track.** Use the structured form when the connection starts locked or hidden, or when the display label is meaningfully different from the key.
+
+**Effects that modify connections** (fired from features, encounters, or puzzles):
+
+- `unlock_connection` — sets `state: "open"` on a target connection id.
+- `reveal_connection` — same, but intended for connections that started hidden (UI may animate the reveal).
+
+Targets are the machine-id key of the connection (e.g., `"secret_door"`), not the target room id.
+
+### Environment
+
+Optional per-room block — atmospheric flavor plus any mechanical modifiers.
+
+```jsonc
+"environment": {
+  "name":        "Waist-deep Water",                // optional — short label for UI
+  "description": "Cold water sloshes around your waist, slowing every step.",  // required
+  "effects": [                                      // optional — array of prose effects
+    "Movement is halved.",
+    "Ranged weapons requiring two hands cannot be used.",
+    "Fire sources extinguish on contact."
+  ]
+}
+```
+
+Effects are prose applied by the GM. Structured environment modifiers (auto-applied by the app) are v2. Module-level default environment (applies to all rooms unless overridden) is also v2.
+
+---
+
+### Module-scoped bestiary
+
+Optional top-level block for one-off bosses and unique NPCs that shouldn't live in the shared bestiary. Same shape as the standalone Bestiary Pack's `monsters{}`.
+
+```jsonc
+"module_bestiary": {
+  "id":          "crows_hollow_module_bestiary",    // required
+  "name":        "Crow's Hollow — Module Foes",     // required
+  "description": "Unique foes specific to this module.",  // optional
+  "monsters": {                                     // required
+    "warden_lieutenant_havel": { /* full monster shape — see Bestiary section */ }
+  }
+}
+```
+
+**Resolution order:** the `monster_ref` resolver checks `module_bestiary.monsters` first, then falls back to the shared `bestiary.monsters`. A module-scoped id shadows a shared-library id of the same name (authors can override shared monsters for a specific module this way, though it's typically cleaner to pick a unique id).
+
+### Module-scoped items
+
+Same pattern for module-unique items.
+
+```jsonc
+"module_items": {
+  "id":          "crows_hollow_module_items",
+  "name":        "Crow's Hollow — Module Items",
+  "description": "Unique items specific to this module.",
+  "items": {
+    "wardens_journal": { /* full item shape — see Items section */ }
+  }
+}
+```
+
+Checked first by the `item_id` resolver, then the shared items library.
+
+---
+
+### Completion condition
+
+Optional top-level block. Declares when the app should fire the end-of-module event (summary screen, final rewards, disable further interaction).
+
+```jsonc
+"completion_condition": {
+  "type":   "defeat_encounter",       // required — "defeat_encounter" | "reach_room" | "all_encounters_defeated" | null
+  "target": "warden_lieutenants_last_stand"  // required for "defeat_encounter" and "reach_room"; omit for "all_encounters_defeated"
+}
+```
+
+**`type` values:**
+
+| Value | Meaning | `target` |
+|---|---|---|
+| `"defeat_encounter"` | Completes when the named encounter is fully resolved (all groups defeated). | encounter id |
+| `"reach_room"` | Completes on first entry to the named room. | room id |
+| `"all_encounters_defeated"` | Completes when every encounter in every room is defeated. | omit |
+| `null` (or the block omitted) | GM judges narratively; no app-fired completion. | — |
+
+Complex multi-ending logic is deferred to v2.
+
+---
