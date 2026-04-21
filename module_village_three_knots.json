@@ -191,6 +191,285 @@
         }
       ],
       "hazards": []
+    },
+
+    "tomb_chamber": {
+      "id":          "tomb_chamber",
+      "name":        "The Chamber of the Seal",
+      "description": "A square chamber of cut limestone, ceiling lost in darkness. Three waist-high pillars of black stone stand in a row across the floor, each carved on its top face with a different rune: a crown, a sceptre, a coffin. The far door is not locked in any mechanical sense — it simply shimmers faintly, a thin seal of old light running edge-to-edge across its frame. Above the door, scored into the lintel in a plain hand, five words: THE ORDER OF THE CROWN OPENS THE WAY.",
+      "tags":        ["puzzle", "lore"],
+      "connections": {
+        "sealed_inner_door": {
+          "label":        "through the sealed inner door",
+          "to":           "tomb_hall",
+          "state":        "locked",
+          "reveal_hint":  "The inner door is not barred; its seal is a ward of light. The pillars are surely how it is broken."
+        },
+        "back_to_corridor": {
+          "label": "back to the guard corridor",
+          "to":    "tomb_corridor",
+          "state": "open"
+        }
+      },
+      "features": [
+        {
+          "id":          "rune_pillars",
+          "type":        "puzzle",
+          "name":        "The Three Rune-Pillars",
+          "description": "Three pillars, three runes: a crown, a sceptre, a coffin. Each pillar's top is a shallow stone plate, hinged to sink a handspan when weight is applied — they are made to be pressed. The inscription on the lintel implies an order.",
+          "solution": {
+            "description": "The correct order is crown → sceptre → coffin: the king takes the throne, the king wields the rod, the king lies down. Accept any phrasing in the player's reasoning that arrives at this sequence (rule, rule, rest; reign, authority, death; take, hold, release). A wrong order produces a harmless flash of light and the pillars reset; the player may try again freely. GM may offer the INT check as a fallback if the player is stuck.",
+            "check":       { "skill": null, "ability": "int", "dc_tier": "hard" }
+          },
+          "on_success": {
+            "narration": "You press the pillars in order — crown, sceptre, coffin. On the third, the chamber draws a single long breath inward, the light-seal across the inner door thins to a line, and the line goes out. The door shifts back in its frame a handspan, unsealed.",
+            "effects": [
+              { "type": "unlock_connection", "target": "sealed_inner_door" }
+            ],
+            "reward": []
+          },
+          "on_failure": {
+            "narration": "A soft, harmless flash of white light runs across all three pillars; the runes dim a moment and return. The seal on the door is unchanged. The pillars are ready to try again."
+          }
+        }
+      ],
+      "encounters": [],
+      "hazards":    []
+    },
+
+    "tomb_hall": {
+      "id":          "tomb_hall",
+      "name":        "The Hall of Blades",
+      "description": "A long hall, twice the length of any room yet. The floor is laid in a regular grid of square flagstones, each the length of a boot, and perhaps a third of them sit a quarter-inch proud of their neighbors — pressure plates, old but plainly functional. The walls to either side are pierced at shin height and shoulder height with a row of narrow slots, blackened inside with old blood. The far end of the hall is a closed stone door.",
+      "tags":        ["hazard", "empty"],
+      "connections": {
+        "forward": {
+          "label": "through the far door",
+          "to":    "tomb_antechamber",
+          "state": "open"
+        },
+        "back_to_chamber": {
+          "label": "back to the chamber of the seal",
+          "to":    "tomb_chamber",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [],
+      "hazards": [
+        {
+          "id":          "pressure_plates",
+          "name":        "The Darts of the Hall",
+          "description": "A third of the floor's flagstones are pressure plates. Depressing one drops a counterweight behind the wall; the wall-slots fire a volley of old iron darts across the hall at shin and shoulder height. The safe path is along the edges, where the flags are unraised.",
+          "gm_notes":    "Classic detect-then-avoid. A player who looks before stepping can solve this without a roll. A player who walks in carelessly takes the darts. The hazard resets between visits only if the party left the hall; within a single crossing, a failed roll does not re-trigger — the player is through.",
+          "trigger": {
+            "type":   "on_traverse",
+            "target": null
+          },
+          "detection": {
+            "check":      { "skill": null, "ability": "wis", "dc_tier": "medium" },
+            "on_success": "You crouch at the threshold and read the floor before stepping. The raised flags are a shade paler than the rest — cleaner, because no foot has scuffed their tops. The safe path is plain: hug the left wall for the first six flags, cross at the second seam, hug the right wall the rest of the way."
+          },
+          "avoidance": {
+            "check":      { "skill": null, "ability": "dex", "dc_tier": "medium" },
+            "on_success": "You pick your way across the hall in a half-dozen careful steps, shifting your weight from heel to toe, and none of the flags under you drops.",
+            "on_failure": {
+              "narration":  "Your third step rings hollow under the heel, the flag drops a finger's-width, and the hall fires. Old iron darts clatter off the walls and off your mail; one takes you in the thigh and one in the shoulder before you can fall flat.",
+              "damage":     { "amount": "1d6+1" },
+              "conditions": []
+            }
+          },
+          "reward_on_detection": { "xp": 25, "narration": "You read the floor before it reads you. The dart-volley never fires." },
+          "reward_on_avoidance": { "xp": 10 },
+          "persists":             false,
+          "resolved_by_detection": true
+        }
+      ]
+    },
+
+    "tomb_antechamber": {
+      "id":          "tomb_antechamber",
+      "name":        "The Antechamber",
+      "description": "A low square room with a single pair of great bronze doors at its far end. Between you and the doors stands a thing that was a man once — a tall corpse in the heavy ringed coat of an old royal guard, a bronze helm still on its skull, a longsword drawn and held low in its right hand. It does not rot. It does not rattle. It simply turns its head as you come in, and steps forward once.",
+      "tags":        ["encounter", "undead"],
+      "connections": {
+        "throne_doors": {
+          "label": "through the great bronze doors",
+          "to":    "tomb_throne",
+          "state": "open"
+        },
+        "back_to_hall": {
+          "label": "back through the hall of blades",
+          "to":    "tomb_hall",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [
+        {
+          "id":    "antechamber_guardian",
+          "name":  "The Tomb Guardian",
+          "groups": [
+            { "monster_ref": "tomb_guardian", "quantity": 1 }
+          ],
+          "trigger": {
+            "type":      "on_enter",
+            "condition": null
+          },
+          "placement": "The guardian stands square in the middle of the chamber, between the player and the bronze doors. It will not let the player past. It does not pursue beyond the threshold of the hall of blades.",
+          "behavior":  "Mindless and bound to its post. Attacks the nearest living thing and does not flee. Unlike a common zombie it is no slower than a living man — the old oaths still move the body.",
+          "gm_notes":  "The player's second combat; meant to be noticeably harder than the corridor skeleton and a clear warning that the throne-room fight will be worse. If the player retreats through the bronze doors (impossible until guardian is down) or back to the hall of blades, the guardian holds its post.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": 15 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "tomb_throne": {
+      "id":          "tomb_throne",
+      "name":        "The Throne of the Dead King",
+      "description": "The bronze doors open on a great hall, low-vaulted and lit by a pale blue fire that burns in iron braziers along the walls without fuel or heat. At the far end, on a dais of black stone, a plain stone throne; on the throne, a tall figure in the ruin of a royal surcoat and a corroded iron crown, a longsword laid across his knees. Where his eyes should be, two points of the same pale fire. He does not rise at once. He watches you cross half the hall before he lifts the sword from his knees and stands. His voice, when it comes, is plain and tired and terrible. 'You disturb my rest. You will share it.'",
+      "tags":        ["encounter", "boss", "undead", "climax"],
+      "connections": {
+        "retreat": {
+          "label": "flee back toward the surface",
+          "to":    "tomb_antechamber",
+          "state": "open"
+        }
+      },
+      "environment": {
+        "name":        "Cold of the Crown",
+        "description": "The hall's pale blue fire gives no heat. The air draws warmth out of living flesh slowly and deliberately — not enough to harm, but enough that the player's breath shows, sword-hand stiffens, and every moment in the hall costs a little.",
+        "effects":     [
+          "The cold is atmospheric, not mechanical. The GM should narrate its pressure but not roll against it; the Dead King himself is the threat."
+        ]
+      },
+      "features": [],
+      "encounters": [
+        {
+          "id":    "dead_king_boss",
+          "name":  "The Dead King",
+          "groups": [
+            { "monster_ref": "dead_king", "quantity": 1 }
+          ],
+          "trigger": {
+            "type":      "on_enter",
+            "condition": null
+          },
+          "placement": "The Dead King stands from the throne and walks down the three shallow steps of the dais at an unhurried pace. He does not close quickly. He closes inevitably.",
+          "behavior":  "Fights to the end. Does not flee; does not parley; does not check morale. Opens with Crown's Wrath (the longsword) in melee. Reserves Drain of the Crown for a wounded opponent. If reduced below half HP, narrates the pale fire in his eyes guttering lower but does not retreat.",
+          "gm_notes":  "The module's climax. Tuned to be dangerous but survivable for a level-1 fighter with chain, shield, and a measure of luck — and plainly easier with the Sword of the Dawn, which the player does not have yet. The fight is meant to be the hardest thing in the module and the player should feel it. If the fight is clearly going wrong and the player has not had an escape beat, the GM may have the Dead King break off for a round after a clean hit from the player — he has eternity; he can afford to savor this.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": 50 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
     }
+  },
+
+  "module_bestiary": {
+    "id":          "three_knots_module_bestiary",
+    "name":        "Three Knots — Module Foes",
+    "description": "Unique foes specific to The Haunting of Three Knots. Module-scoped entries are resolved before the shared bestiary.",
+    "monsters": {
+      "tomb_guardian": {
+        "id":          "tomb_guardian",
+        "name":        "Tomb Guardian",
+        "description": "A tall corpse in the heavy ringed coat of an old royal guard, a bronze helm still on its skull, a longsword drawn and held low in a dry grip. It does not rot and does not rattle. Whatever kept the old oaths still moves it.",
+        "type":        "undead",
+        "hp":          18,
+        "ac":          14,
+        "morale":      12,
+        "attacks": [
+          {
+            "name":   "Oathsworn Longsword",
+            "bonus":  3,
+            "damage": "1d8+1",
+            "range":  "melee"
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "mindless",
+            "name":        "Mindless",
+            "description": "Cannot be charmed, frightened, or reasoned with. Does not check morale.",
+            "type":        "passive"
+          },
+          {
+            "id":          "bound_to_post",
+            "name":        "Bound to Post",
+            "description": "Will not pursue beyond the antechamber's doors. Holds the line between the player and the throne room.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 100,
+        "behavior": "Mindless but disciplined. Attacks the nearest living thing. Does not pursue; does not flee.",
+        "tactics":  "Straight melee with the longsword. Positions itself between the player and the bronze doors. No tricks — it does not need them."
+      },
+
+      "dead_king": {
+        "id":          "dead_king",
+        "name":        "The Dead King",
+        "description": "A tall, dry figure on a stone throne, in the ruin of a royal surcoat and a corroded iron crown. Where his eyes should be, two points of cold blue fire. His voice, when he speaks, is plain and tired and terrible — the voice of a man who ruled once and remembers it and resents every waking moment.",
+        "type":        "undead",
+        "hp":          35,
+        "ac":          16,
+        "morale":      12,
+        "attacks": [
+          {
+            "name":   "Crown's Wrath (Longsword)",
+            "bonus":  5,
+            "damage": "1d10+3",
+            "range":  "melee"
+          },
+          {
+            "name":   "Drain of the Crown",
+            "bonus":  5,
+            "damage": "1d6",
+            "range":  "melee",
+            "on_hit": "On a successful touch, the target must save vs. Death. On a failed save, the pale fire of the crown passes through the target's chest and takes the warmth of it; the target's maximum hit points are reduced by the damage dealt until they complete a full night's rest in a warm place. If this reduces maximum hit points to 0, the target dies on the spot. The Dead King uses this only against a clearly wounded opponent."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "mindless_resolve",
+            "name":        "Mindless Resolve",
+            "description": "Cannot be charmed, frightened, or reasoned with. Does not check morale. Does not flee.",
+            "type":        "passive"
+          },
+          {
+            "id":          "crown_of_cold",
+            "name":        "Crown of Cold",
+            "description": "The pale blue fire of the crown gives no heat. Living creatures within the throne hall feel the air draw warmth from them; the effect is atmospheric and narrated by the GM, with no mechanical toll beyond the Dead King's own attacks.",
+            "type":        "passive"
+          },
+          {
+            "id":          "dawn_vulnerability",
+            "name":        "Undone by the Dawn",
+            "description": "Strikes from a weapon marked for the sun — the Sword of the Dawn, a cleric's Turn at high level, or equivalent — deal an additional 1d6 damage. The Dead King cannot gain this vulnerability mid-fight; he enters the hall knowing whether it applies.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 450,
+        "behavior": "Rules from the throne and will not yield it. Fights to destruction; does not flee, does not negotiate, does not check morale. Opens at walking pace to let the player cross half the hall.",
+        "tactics":  "Longsword in melee; Drain of the Crown saved for a clearly-wounded target. The fight is meant to be the hardest thing in the module and should feel it — narrate the pale fire of his eyes dimming as his HP falls, so the player knows the end is within reach."
+      }
+    }
+  },
+
+  "completion_condition": {
+    "type":   "defeat_encounter",
+    "target": "dead_king_boss"
   }
 }
