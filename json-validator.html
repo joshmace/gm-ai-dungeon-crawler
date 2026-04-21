@@ -68,6 +68,28 @@
             color: #a0907a;
             cursor: not-allowed;
         }
+        .summary {
+            background: #2a1f15;
+            border-left: 3px solid #d4af37;
+            border-radius: 4px;
+            padding: 12px 15px;
+            margin-bottom: 12px;
+        }
+        .summary .summary-line {
+            font-weight: bold;
+            font-size: 1.05em;
+        }
+        .summary .summary-counts {
+            color: #a0907a;
+            margin-top: 4px;
+        }
+        .summary .muted {
+            color: #a0907a;
+            font-weight: normal;
+        }
+        .summary .status-ok   { color: #50c050; }
+        .summary .status-err  { color: #c85050; }
+        .summary .status-warn { color: #f0a000; }
         .section {
             background: #2a1f15;
             border-left: 3px solid #5a4a3a;
@@ -272,9 +294,95 @@
             // Reference-integrity pass (cross-file).
             checkReferenceIntegrity(files, manifest, manifestPath, errors);
 
-            // Chunk 4 will append warnings here.
+            // Warnings pass (non-fatal authoring hints).
+            checkWarnings(files, warnings);
 
             return { manifest, manifestPath, files, errors, warnings, info };
+        }
+
+        // --- Warnings pass --------------------------------------------------
+
+        function checkWarnings(files, warnings) {
+            const bestiaryF = files.bestiary         && files.bestiary.ok         ? files.bestiary         : null;
+            const moduleF   = files.adventure_module && files.adventure_module.ok ? files.adventure_module : null;
+            const bestiary  = bestiaryF ? bestiaryF.data.bestiary : null;
+            const module_   = moduleF   ? moduleF.data            : null;
+
+            // Reachability from starting_room via the connection graph.
+            // Structural only — locked and hidden connections count as traversable
+            // for topology purposes (the player can unlock or reveal them).
+            if (module_ && module_.rooms && module_.module && module_.module.starting_room) {
+                const start = module_.module.starting_room;
+                if (module_.rooms[start]) {
+                    const reachable = new Set([start]);
+                    const queue = [start];
+                    while (queue.length > 0) {
+                        const rid = queue.shift();
+                        const room = module_.rooms[rid];
+                        if (!room || !room.connections) continue;
+                        for (const conn of Object.values(room.connections)) {
+                            const target = typeof conn === 'string' ? conn : conn && conn.to;
+                            if (target && module_.rooms[target] && !reachable.has(target)) {
+                                reachable.add(target);
+                                queue.push(target);
+                            }
+                        }
+                    }
+                    for (const rid of Object.keys(module_.rooms)) {
+                        if (!reachable.has(rid)) {
+                            warnings.push({ file: moduleF.path, loc: `rooms.${rid}`,
+                                msg: `room is not reachable from starting_room "${start}" via any connection chain` });
+                        }
+                    }
+                }
+            }
+
+            // Monsters with empty attacks[] — technically valid, usually an oversight.
+            const walkMonsters = (monsters, file, locPrefix) => {
+                if (!monsters) return;
+                for (const [key, m] of Object.entries(monsters)) {
+                    if (Array.isArray(m.attacks) && m.attacks.length === 0) {
+                        warnings.push({ file, loc: `${locPrefix}.${key}.attacks`,
+                            msg: `empty — valid but usually an oversight; environmental foes can omit this intentionally` });
+                    }
+                }
+            };
+            if (bestiary) walkMonsters(bestiary.monsters, bestiaryF.path, 'bestiary.monsters');
+            if (module_ && module_.module_bestiary) {
+                walkMonsters(module_.module_bestiary.monsters, moduleF.path, 'module_bestiary.monsters');
+            }
+
+            // Per-room content walk for hazard + encounter warnings.
+            if (module_ && module_.rooms) {
+                for (const [roomKey, room] of Object.entries(module_.rooms)) {
+                    // Hazards with neither detection nor avoidance.
+                    if (Array.isArray(room.hazards)) {
+                        room.hazards.forEach((h, i) => {
+                            if (!h.detection && !h.avoidance) {
+                                const loc = `rooms.${roomKey}.hazards[${i}]${h.id ? ` (${h.id})` : ''}`;
+                                warnings.push({ file: moduleF.path, loc,
+                                    msg: `no detection or avoidance block — hazard will auto-fire; intentional "automatic" shape or missing block?` });
+                            }
+                        });
+                    }
+
+                    // Encounter groups carrying inline stat data alongside monster_ref.
+                    if (Array.isArray(room.encounters)) {
+                        room.encounters.forEach((enc, i) => {
+                            if (!Array.isArray(enc.groups)) return;
+                            enc.groups.forEach((g, gi) => {
+                                if (!g || typeof g !== 'object') return;
+                                const extras = Object.keys(g).filter(k => k !== 'monster_ref' && k !== 'quantity');
+                                if (extras.length > 0) {
+                                    const loc = `rooms.${roomKey}.encounters[${i}]${enc.id ? ` (${enc.id})` : ''}.groups[${gi}]`;
+                                    warnings.push({ file: moduleF.path, loc,
+                                        msg: `inline stat fields (${extras.join(', ')}) — move to module_bestiary and keep only monster_ref + quantity on the group` });
+                                }
+                            });
+                        });
+                    }
+                }
+            }
         }
 
         // --- Reference-integrity pass ---------------------------------------
@@ -1308,13 +1416,34 @@
         }
 
         function render(result) {
-            const { errors = [], warnings = [], info = [] } = result;
+            const { errors = [], warnings = [], info = [], manifest, manifestPath } = result;
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '';
-            // Open errors by default when there are any; otherwise open info.
+
+            // Summary line: pack id + error/warning/info counts.
+            const summary = document.createElement('div');
+            summary.className = 'summary';
+            const packLabel = manifest && manifest.id
+                ? `${escapeHtml(manifest.name || manifest.id)} <span class="muted">(${escapeHtml(manifest.id)})</span>`
+                : `<span class="muted">${escapeHtml(manifestPath || '(unknown)')}</span>`;
+            const status = errors.length === 0 && warnings.length === 0
+                ? '<span class="status-ok">clean</span>'
+                : errors.length > 0
+                    ? '<span class="status-err">failed</span>'
+                    : '<span class="status-warn">warnings only</span>';
+            summary.innerHTML = `
+                <div class="summary-line">${packLabel} &mdash; ${status}</div>
+                <div class="summary-counts">
+                    ${errors.length} error${errors.length === 1 ? '' : 's'} ·
+                    ${warnings.length} warning${warnings.length === 1 ? '' : 's'} ·
+                    ${info.length} info
+                </div>`;
+            resultsDiv.appendChild(summary);
+
+            // Section open-by-default: whichever tier has the highest-severity content.
             resultsDiv.appendChild(renderSection('errors',   'Errors',   errors,   errors.length > 0));
-            resultsDiv.appendChild(renderSection('warnings', 'Warnings', warnings, false));
-            resultsDiv.appendChild(renderSection('info',     'Info',     info,     errors.length === 0));
+            resultsDiv.appendChild(renderSection('warnings', 'Warnings', warnings, errors.length === 0 && warnings.length > 0));
+            resultsDiv.appendChild(renderSection('info',     'Info',     info,     errors.length === 0 && warnings.length === 0));
         }
 
         function renderSection(kind, label, findings, openByDefault) {
