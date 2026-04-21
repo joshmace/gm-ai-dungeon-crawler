@@ -1,0 +1,95 @@
+{
+  "module": {
+    "id": "watch_at_crows_hollow",
+    "title": "The Watch at Crow's Hollow",
+    "version": "1.0",
+    "author": "Lantern & Blade Project",
+    "description": "A derelict Warden watch-house on the Hollow Edge. For three nights running, the lanterns along its curtain wall have relit themselves at dusk and burned until dawn. The nearest village sent a child to investigate; the child did not come back. A short dungeon in six rooms, climaxing in the Warden-Lieutenant's crypt. Designed for a level 3 character operating solo.",
+    "starting_room": "watch_house_yard",
+    "level_range": { "min": 2, "max": 4 },
+    "estimated_rooms": 6,
+    "estimated_playtime": "75–90 min",
+    "tags": ["undead", "horror", "ruin", "warden-lore", "short", "solo"],
+    "guidance": "crows_hollow_guidance.md"
+  },
+
+  "rooms": {
+    "watch_house_yard": {
+      "id": "watch_house_yard",
+      "name": "The Watch-House Yard",
+      "description": "",
+      "tags": [],
+      "connections": {},
+      "features": [],
+      "encounters": [],
+      "hazards": []
+    },
+
+    "gate_room": {
+      "id": "gate_room",
+      "name": "The Gate Room",
+      "description": "",
+      "tags": [],
+      "connections": {},
+      "features": [],
+      "encounters": [],
+      "hazards": []
+    },
+
+    "barracks": {
+      "id": "barracks",
+      "name": "The Barracks",
+      "description": "",
+      "tags": [],
+      "connections": {},
+      "features": [],
+      "encounters": [],
+      "hazards": []
+    },
+
+    "officers_study": {
+      "id": "officers_study",
+      "name": "The Officer's Study",
+      "description": "",
+      "tags": [],
+      "connections": {},
+      "features": [],
+      "encounters": [],
+      "hazards": []
+    },
+
+    "lantern_room": {
+      "id": "lantern_room",
+      "name": "The Lantern Room",
+      "description": "",
+      "tags": [],
+      "connections": {},
+      "features": [],
+      "encounters": [],
+      "hazards": []
+    },
+
+    "wardens_crypt": {
+      "id": "wardens_crypt",
+      "name": "The Warden's Crypt",
+      "description": "",
+      "tags": [],
+      "connections": {},
+      "features": [],
+      "encounters": [],
+      "hazards": []
+    }
+  },
+
+  "module_bestiary": {
+    "id": "crows_hollow_module_bestiary",
+    "name": "Crow's Hollow — Module Foes",
+    "description": "Unique foes specific to The Watch at Crow's Hollow.",
+    "monsters": {}
+  },
+
+  "completion_condition": {
+    "type": "defeat_encounter",
+    "target": "warden_lieutenants_last_stand"
+  }
+}
