@@ -314,7 +314,7 @@ Declares the shape of character data. The character pack fills in values against
 | Value | Meaning |
 |---|---|
 | `"per_ability"` | One save per ability (5e-style). Character's `saves.proficient[]` holds ability ids. |
-| `"categorical"` | Categorical saves (e.g., B/X's Death Ray, Wands, Paralysis, Breath, Spells). Declared via a `categories[]` array on `saves`; character's `saves.proficient[]` holds category ids. |
+| `"categorical"` | Categorical saves (B/X's Death Ray / Wands / Paralysis / Breath / Spells and similar). **Declaration shape TBD** — no v1 pack exercises this yet; the field layout will be specified once a pack that needs it is authored. Avoid in v1 packs. |
 
 **Skills:**
 
@@ -491,7 +491,7 @@ Character advancement — XP, levels, and how HP grows per level.
 |---|---|
 | `"roll_class_hd_plus_con"` | Roll the class's hit die + CON modifier on level up. |
 | `"average_class_hd_plus_con"` | Take fixed average of the hit die + CON modifier. Lantern & Blade's default. |
-| `"flat"` | Fixed gain regardless of class. Declare amount in a `hp_flat_gain` sibling field. |
+| `"flat"` | Fixed gain regardless of class. **Amount-declaration shape TBD** — no v1 pack uses this yet; the exact sibling-field layout will be specified when one does. Avoid in v1 packs. |
 
 Characters always start at level 1.
 
