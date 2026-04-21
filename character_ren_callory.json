@@ -1,0 +1,93 @@
+{
+  "character": {
+    "id": "ren_callory_v1",
+    "game_pack_id": "lantern_and_blade_starter_v1",
+    "schema_version": 1,
+
+    "basic_info": {
+      "name": "Ren Callory",
+      "class": "fighter",
+      "level": 3
+    },
+
+    "ability_scores": {
+      "str": 16,
+      "dex": 12,
+      "con": 14,
+      "int": 10,
+      "wis": 13,
+      "cha": 8
+    },
+
+    "saves": {
+      "proficient": ["str", "con"]
+    },
+
+    "skills": {
+      "proficient": ["athletics", "perception", "survival", "insight"]
+    },
+
+    "hp_current": 28,
+
+    "equipment": [
+      { "item_id": "lanternblade",         "slot": "main_hand" },
+      { "item_id": "chain_mail",           "slot": "body"      },
+      { "item_id": "iron_shield",          "slot": "shield"    },
+      { "item_id": "ring_of_protection",   "slot": "ring"      }
+    ],
+
+    "pack": [
+      { "item_id": "healing_potion", "quantity": 2 },
+      { "item_id": "torch",          "quantity": 3 },
+      { "item_id": "rope_50ft",      "quantity": 1 },
+      { "item_id": "silver_dagger",  "quantity": 1 }
+    ],
+
+    "charged_items": {},
+
+    "feature_resources": {
+      "second_wind": {
+        "name": "Second Wind",
+        "current": 1,
+        "max": 1,
+        "recharge": "short_rest"
+      },
+      "action_surge": {
+        "name": "Action Surge",
+        "current": 1,
+        "max": 1,
+        "recharge": "short_rest"
+      }
+    },
+
+    "conditions": [],
+
+    "gold": 15,
+    "xp": 900,
+
+    "class_features": [
+      {
+        "id": "fighting_style_defense",
+        "name": "Fighting Style: Defense",
+        "description": "While wearing armor, Ren gains a +1 bonus to Armor Class. Applies whenever the body slot is filled with any armor item (included in derived AC)."
+      },
+      {
+        "id": "second_wind",
+        "name": "Second Wind",
+        "description": "On their turn, Ren may spend a bonus action to draw on a reserve of stamina and regain 1d10 + fighter level hit points. Once per short or long rest. Tracked as the 'second_wind' resource; decrement on use via [RESOURCE_USE: second_wind]."
+      },
+      {
+        "id": "action_surge",
+        "name": "Action Surge",
+        "description": "On their turn, Ren may push themselves beyond normal limits to take one additional action that turn (most often a second weapon attack). Once per short or long rest. Tracked as the 'action_surge' resource; decrement on use via [RESOURCE_USE: action_surge]."
+      },
+      {
+        "id": "champion_improved_critical",
+        "name": "Martial Archetype: Champion — Improved Critical",
+        "description": "Ren's weapon attacks score a critical hit on a natural 19 or 20, not only 20. Applies to all attacks made with a melee or ranged weapon."
+      }
+    ],
+
+    "guidance": "ren_callory_guidance.md"
+  }
+}
