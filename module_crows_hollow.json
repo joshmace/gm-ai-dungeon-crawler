@@ -399,8 +399,67 @@
   "module_bestiary": {
     "id": "crows_hollow_module_bestiary",
     "name": "Crow's Hollow — Module Foes",
-    "description": "Unique foes specific to The Watch at Crow's Hollow.",
-    "monsters": {}
+    "description": "Unique foes specific to The Watch at Crow's Hollow. Module-scoped entries are resolved before the shared bestiary.",
+    "monsters": {
+      "warden_lieutenant_havel": {
+        "id": "warden_lieutenant_havel",
+        "name": "Lt. Orick Havel, of the Watch",
+        "description": "Tall, grey-skinned, still in the ruined half of a Warden-Lieutenant's grey-blue coat. The coat is buttoned correctly. The boots are polished — not recently, but once, properly, and no one has walked in them since. His eyes are the pale blue of ice in a drinking trough. When he speaks it is in the plain officer's column-voice of a Warden giving an order, and it is an uncomfortable thing to hear a voice be that alive coming from a face that is not.",
+        "type": "undead",
+        "hp": 55,
+        "ac": 15,
+        "attacks": [
+          {
+            "name": "Warden's Longsword",
+            "bonus": 5,
+            "damage": "1d8+3",
+            "damage_type": "slashing",
+            "range": "melee",
+            "on_hit": "On a critical hit, Havel narrates aloud the name of the soldier whose blow it was in imitation of — 'that's Velen's', or 'that's how Corporal Mooring did it' — GM prose. No mechanical effect beyond the crit itself."
+          },
+          {
+            "name": "Life Drain",
+            "bonus": 5,
+            "damage": "1d6+3",
+            "damage_type": "necrotic",
+            "range": "melee",
+            "on_hit": "Target makes a Constitution save (DC 13) or has their hit point maximum reduced by the damage dealt. The reduction lasts until the target finishes a long rest; if this reduces a target's maximum to 0, the target dies. Havel uses this only against a clearly wounded target — he prefers not to, and the narration should reflect the reluctance."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "sunlight_sensitivity",
+            "name": "Sunlight Sensitivity",
+            "description": "In direct sunlight, Havel has disadvantage on attack rolls and on Perception checks that rely on sight. The crypt is windowless; this almost never comes up.",
+            "type": "passive"
+          },
+          {
+            "id": "wardens_habit",
+            "name": "Warden's Habit",
+            "description": "Havel fights with the tactical discipline of an officer. He never targets a creature who has not attacked him; he prioritizes foes who handle the sarcophagus or desecrate Warden gear. When reduced to half HP or less, he retreats to the sarcophagus platform and begins reciting the Watch's closing formula under his breath. A player who recognizes the formula and speaks it aloud with him resolves the encounter without killing him narratively — his body returns to the sarcophagus, the light of the crypt fails, and the encounter counts as defeated for all purposes (XP, treasure, completion).",
+            "type": "triggered"
+          },
+          {
+            "id": "closing_phrase_vulnerability",
+            "name": "Unfinished",
+            "description": "Havel's undeath is caused specifically by an incomplete ritual. Any attempt by a player to speak the phrase 'WE KEEP THE LIGHT, AND THE LIGHT KEEPS US' at Havel directly, during combat, is treated as a standard action that provokes a Wisdom save from Havel (DC 12) — on a failure, he takes 2d8 radiant damage and loses his next turn; on a success, he shrugs it off but looks briefly more tired. GM narrates.",
+            "type": "active"
+          }
+        ],
+        "damage_resistance": ["necrotic", "slashing", "piercing", "bludgeoning"],
+        "damage_immunity": ["poison"],
+        "damage_vulnerability": ["radiant"],
+        "xp_value": 800,
+        "behavior": "Havel does not advance first. He waits, he speaks, and if the player attacks he fights with a sad competence. He does not pursue a fleeing target out of the crypt — he cannot leave the sarcophagus's orbit, and he knows it.",
+        "tactics": "Lanternblade-equipped players have a decisive advantage (radiant vulnerability + magical damage bypasses his physical resistances). Without the Lanternblade, wands, spells, or silvered weapons are essential — pure mundane steel will take a level-3 party apart. GM should telegraph the Lanternblade's relevance throughout the module so the player either carries it into the crypt or has time to go back for it. If the fight is clearly going wrong, soften: Havel may retreat early, giving the player a chance to regroup and return."
+      }
+    }
   },
 
   "completion_condition": {
