@@ -1,0 +1,240 @@
+{
+  "bestiary": {
+    "id":          "bestiary_three_knots_v1",
+    "name":        "Three Knots — Starter Bestiary",
+    "version":     "1.0",
+    "author":      "Three Knots Project",
+    "description": "A starter set of low-to-mid-tier monsters for B/X-flavored dungeon play — undead, humanoid raiders, and a pair of common wilderness threats. Module-unique foes (Tomb Guardian, Dead King) live in the module_bestiary on module_village_three_knots.json.",
+
+    "monsters": {
+      "skeleton_warrior": {
+        "id":          "skeleton_warrior",
+        "name":        "Skeleton Warrior",
+        "description": "A rattling soldier of dead bone in rusted mail, clutching a shortsword it still remembers how to swing.",
+        "type":        "undead",
+        "hp":          4,
+        "ac":          13,
+        "morale":      12,
+        "attacks": [
+          {
+            "name":   "Shortsword",
+            "bonus":  1,
+            "damage": "1d6",
+            "range":  "melee"
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "mindless",
+            "name":        "Mindless",
+            "description": "Cannot be charmed, frightened, or turned by deception. Fights until destroyed.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 25,
+        "behavior": "Attacks on sight. Does not negotiate. Does not flee.",
+        "tactics":  "Melee only. Moves toward the nearest living creature and swings until broken."
+      },
+
+      "zombie": {
+        "id":          "zombie",
+        "name":        "Zombie",
+        "description": "A shambling corpse, slow and reeking. Its eyes are dull; its hands are not.",
+        "type":        "undead",
+        "hp":          9,
+        "ac":          11,
+        "morale":      12,
+        "attacks": [
+          {
+            "name":   "Slam",
+            "bonus":  2,
+            "damage": "1d8",
+            "range":  "melee"
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "slow",
+            "name":        "Slow",
+            "description": "Moves at half speed; acts last in any round it is standing.",
+            "type":        "passive"
+          },
+          {
+            "id":          "mindless",
+            "name":        "Mindless",
+            "description": "Cannot be charmed, frightened, or reasoned with.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 50,
+        "behavior": "Mindless hunger. Pursues the living until destroyed or left behind.",
+        "tactics":  "Walks forward. Swings heavily. The trick is to keep moving."
+      },
+
+      "goblin": {
+        "id":          "goblin",
+        "name":        "Goblin",
+        "description": "A small green-skinned raider with a cruel grin and a stolen knife.",
+        "type":        "humanoid",
+        "hp":          4,
+        "ac":          13,
+        "morale":      7,
+        "attacks": [
+          {
+            "name":   "Scimitar",
+            "bonus":  1,
+            "damage": "1d6",
+            "range":  "melee"
+          },
+          {
+            "name":   "Shortbow",
+            "bonus":  1,
+            "damage": "1d6",
+            "range":  "ranged"
+          }
+        ],
+        "xp_value": 10,
+        "behavior": "Cowardly. Fights in groups. Flees when outnumbered or bloodied.",
+        "tactics":  "Prefers ranged shots from cover. Melees only when it has numbers."
+      },
+
+      "giant_rat": {
+        "id":          "giant_rat",
+        "name":        "Giant Rat",
+        "description": "A dog-sized rat with matted fur and yellowed teeth. It watches the torchlight with bad intent.",
+        "type":        "beast",
+        "hp":          3,
+        "ac":          12,
+        "morale":      5,
+        "attacks": [
+          {
+            "name":   "Bite",
+            "bonus":  0,
+            "damage": "1d3",
+            "range":  "melee",
+            "on_hit": "On a successful bite, the target must save vs. Death or contract filth fever at the GM's discretion — sickened for 1d6 days, halving natural healing."
+          }
+        ],
+        "xp_value": 10,
+        "behavior": "Opportunistic. Fights for food or territory; breaks and runs easily.",
+        "tactics":  "Swarms in groups; a lone rat bites once and retreats."
+      },
+
+      "bandit": {
+        "id":          "bandit",
+        "name":        "Bandit",
+        "description": "A hungry road-thief in patched leathers, sword dulled from use and disuse in equal measure.",
+        "type":        "humanoid",
+        "hp":          5,
+        "ac":          12,
+        "morale":      8,
+        "attacks": [
+          {
+            "name":   "Scimitar",
+            "bonus":  1,
+            "damage": "1d6",
+            "range":  "melee"
+          },
+          {
+            "name":   "Shortbow",
+            "bonus":  1,
+            "damage": "1d6",
+            "range":  "ranged"
+          }
+        ],
+        "xp_value": 25,
+        "behavior": "Will parley for gold. Fights to take valuables, not to the death.",
+        "tactics":  "Shoots first, melees when pressed. Flees when a companion falls."
+      },
+
+      "wolf": {
+        "id":          "wolf",
+        "name":        "Wolf",
+        "description": "A lean grey wolf, hollow-ribbed from a hard winter.",
+        "type":        "beast",
+        "hp":          7,
+        "ac":          13,
+        "morale":      6,
+        "attacks": [
+          {
+            "name":   "Bite",
+            "bonus":  3,
+            "damage": "1d6+1",
+            "range":  "melee"
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "pack_tactics",
+            "name":        "Pack Tactics",
+            "description": "+2 to attack rolls while at least one other wolf threatens the same target.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 30,
+        "behavior": "Hunts in packs. A lone wolf is probably starving and desperate.",
+        "tactics":  "Circles, snaps, retreats. Goes for the weakest-looking target."
+      },
+
+      "ghoul": {
+        "id":          "ghoul",
+        "name":        "Ghoul",
+        "description": "A gaunt undead figure with too-long fingers and yellowed eyes. It remembers being hungry.",
+        "type":        "undead",
+        "hp":          13,
+        "ac":          13,
+        "morale":      9,
+        "attacks": [
+          {
+            "name":   "Claw",
+            "bonus":  3,
+            "damage": "1d3",
+            "range":  "melee",
+            "on_hit": "On a successful claw, the target must save vs. Paralysis. On a failed save, the target is paralyzed for 2d4 turns — helpless, all attacks against it hit automatically."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "mindless",
+            "name":        "Mindless",
+            "description": "Cannot be charmed or reasoned with.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 75,
+        "behavior": "Ambush predator. Lunges from tomb shadows at anything warm.",
+        "tactics":  "Uses the paralyzing claw first, then feeds at leisure. Multiple ghouls coordinate."
+      },
+
+      "giant_spider": {
+        "id":          "giant_spider",
+        "name":        "Giant Spider",
+        "description": "A pony-sized spider with black eyes and a venom that drops men as cleanly as any blade.",
+        "type":        "beast",
+        "hp":          11,
+        "ac":          14,
+        "morale":      8,
+        "attacks": [
+          {
+            "name":   "Bite",
+            "bonus":  4,
+            "damage": "1d8",
+            "range":  "melee",
+            "on_hit": "On a successful bite, the target must save vs. Death or take an additional 2d6 poison damage as the venom works through them."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "web_walker",
+            "name":        "Web Walker",
+            "description": "Moves freely across its own webs and treats webs in the environment as clear terrain.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 50,
+        "behavior": "Territorial. Ambushes from webs on ceilings and walls.",
+        "tactics":  "Drops on the nearest target. Bites once, then retreats to wait for the venom to work."
+      }
+    }
+  }
+}

@@ -1,0 +1,215 @@
+{
+  "items_library": {
+    "id":          "items_three_knots_v1",
+    "name":        "Three Knots — Starter Items",
+    "version":     "1.0",
+    "author":      "Three Knots Project",
+    "description": "Starter items for a B/X-flavored dungeon pack: simple weapons and armor, torches and rope, a short line of consumables, and the module's signature reward blade. No damage-type metadata; the ruleset is typeless.",
+
+    "items": {
+      "longsword": {
+        "id":           "longsword",
+        "name":         "Longsword",
+        "type":         "weapon",
+        "slot":         "main_hand",
+        "description":  "A plain steel longsword, well-kept. A workmanlike blade for a working fighter.",
+        "weight_slots": 1,
+        "tags":         ["common"],
+        "weapon": {
+          "damage":      "1d8",
+          "damage_type": "slashing",
+          "melee":       true,
+          "ranged":      false
+        }
+      },
+
+      "shortbow": {
+        "id":           "shortbow",
+        "name":         "Shortbow",
+        "type":         "weapon",
+        "slot":         "ranged",
+        "description":  "A hunter's bow of ash and horn. Ammunition tracked separately.",
+        "weight_slots": 1,
+        "tags":         ["common"],
+        "weapon": {
+          "damage":      "1d6",
+          "damage_type": "piercing",
+          "melee":       false,
+          "ranged":      true
+        }
+      },
+
+      "silver_dagger": {
+        "id":           "silver_dagger",
+        "name":         "Silver-Edged Dagger",
+        "type":         "weapon",
+        "slot":         "off_hand",
+        "description":  "A short blade with a silvered edge. Costs more than it should; worth more than it cost, when the dead come walking.",
+        "weight_slots": 0,
+        "tags":         ["common", "silvered"],
+        "weapon": {
+          "damage":      "1d4",
+          "damage_type": "piercing",
+          "melee":       true,
+          "ranged":      false
+        }
+      },
+
+      "chain_mail": {
+        "id":           "chain_mail",
+        "name":         "Chain Mail",
+        "type":         "armor",
+        "slot":         "body",
+        "description":  "Linked rings of steel over a padded coat. Heavy, loud in the halls, and proof against most edges.",
+        "weight_slots": 3,
+        "tags":         ["common"],
+        "armor": {
+          "ac_bonus": 4,
+          "type":     "heavy"
+        }
+      },
+
+      "leather_armor": {
+        "id":           "leather_armor",
+        "name":         "Leather Armor",
+        "type":         "armor",
+        "slot":         "body",
+        "description":  "Boiled and fitted hide. Light, quiet, not much.",
+        "weight_slots": 1,
+        "tags":         ["common"],
+        "armor": {
+          "ac_bonus": 2,
+          "type":     "light"
+        }
+      },
+
+      "iron_shield": {
+        "id":           "iron_shield",
+        "name":         "Iron-Rimmed Shield",
+        "type":         "armor",
+        "slot":         "shield",
+        "description":  "An iron-rimmed wooden shield, scored by old fights.",
+        "weight_slots": 1,
+        "tags":         ["common"],
+        "armor": {
+          "ac_bonus": 1,
+          "type":     "shield"
+        }
+      },
+
+      "healing_potion": {
+        "id":           "healing_potion",
+        "name":         "Healing Potion",
+        "type":         "consumable",
+        "description":  "A red-brown draught in a stoppered vial. Tastes like bark and blood.",
+        "weight_slots": 0,
+        "tags":         ["magical"],
+        "consumable": {
+          "on_use": "heal_player",
+          "amount": "2d4+2"
+        }
+      },
+
+      "antitoxin": {
+        "id":           "antitoxin",
+        "name":         "Antitoxin",
+        "type":         "consumable",
+        "description":  "A cloudy herbal tincture. Clears most poisons if taken before they take hold.",
+        "weight_slots": 0,
+        "tags":         ["common"],
+        "consumable": {
+          "on_use": "cure_condition",
+          "amount": "poisoned"
+        }
+      },
+
+      "holy_water": {
+        "id":           "holy_water",
+        "name":         "Vial of Holy Water",
+        "type":         "consumable",
+        "description":  "Water blessed in the Keeper's temple. Still, cold, and faintly luminous.",
+        "weight_slots": 0,
+        "tags":         ["holy", "magical"],
+        "consumable": {
+          "on_use": "gm_adjudicate",
+          "amount": "Thrown as a ranged attack at an undead creature: 1d8 damage on a hit. Poured on an unconscious undead: 1d8 automatic. Has no effect on the living."
+        }
+      },
+
+      "torch": {
+        "id":           "torch",
+        "name":         "Torch",
+        "type":         "misc",
+        "description":  "Pitch-soaked oakwood. Bright for about an hour, then smoke and stub.",
+        "weight_slots": 1,
+        "tags":         ["light"]
+      },
+
+      "lantern_hooded": {
+        "id":           "lantern_hooded",
+        "name":         "Hooded Lantern",
+        "type":         "misc",
+        "description":  "A tin lantern with a louvered shutter. Burns six hours on a pint of oil.",
+        "weight_slots": 1,
+        "tags":         ["light"]
+      },
+
+      "rope_50ft": {
+        "id":           "rope_50ft",
+        "name":         "Rope, 50 ft",
+        "type":         "misc",
+        "description":  "Fifty feet of good hemp, coiled. Holds a man easily.",
+        "weight_slots": 1,
+        "tags":         ["common"]
+      },
+
+      "rations": {
+        "id":           "rations",
+        "name":         "Trail Rations",
+        "type":         "misc",
+        "description":  "A day's hard bread, dried meat, and the usual unremarkable cheese.",
+        "weight_slots": 1,
+        "tags":         ["common"]
+      },
+
+      "waterskin": {
+        "id":           "waterskin",
+        "name":         "Waterskin",
+        "type":         "misc",
+        "description":  "A leather skin, full. Good for a day afield, less in summer.",
+        "weight_slots": 1,
+        "tags":         ["common"]
+      },
+
+      "bedroll": {
+        "id":           "bedroll",
+        "name":         "Bedroll",
+        "type":         "misc",
+        "description":  "Wool roll and oilcloth. No warmer than it ought to be, but enough.",
+        "weight_slots": 1,
+        "tags":         ["common"]
+      },
+
+      "sword_of_the_dawn": {
+        "id":           "sword_of_the_dawn",
+        "name":         "Sword of the Dawn",
+        "type":         "weapon",
+        "slot":         "main_hand",
+        "description":  "A longsword of pale steel with a sun engraved on the pommel. The blade holds its edge without honing, and in deep shadow it sheds a dim, almost-warm light.",
+        "weight_slots": 1,
+        "tags":         ["magical", "heirloom", "quest-reward"],
+        "weapon": {
+          "damage":      "1d8",
+          "damage_type": "slashing",
+          "melee":       true,
+          "ranged":      false
+        },
+        "magic": {
+          "attack_bonus":    1,
+          "damage_bonus":    1,
+          "special_effects": "Sheds dim light in a 15-foot radius while drawn. Undead struck by the Sword of the Dawn take an additional 1d6 damage; the blade flares briefly at the moment of contact."
+        }
+      }
+    }
+  }
+}
