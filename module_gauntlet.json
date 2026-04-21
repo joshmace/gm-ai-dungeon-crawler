@@ -1,0 +1,241 @@
+{
+  "module": {
+    "id":                 "gauntlet_rules_test_v1",
+    "title":              "The Gauntlet",
+    "version":            "1.0",
+    "author":             "Lantern & Blade Project",
+    "description":        "A Warden training hall under the Hollowmarch — a central foyer with eight sigiled doors, each a purpose-built chamber that exercises one mechanical surface of the Lantern & Blade rules engine. Combat flow, multi-group encounters, boss tuning, detect-then-avoid hazards, puzzle resolution with effect chaining, item pickup-and-use, consumables (all three on_use keywords), and save-or-suffer riders each get their own door. Designed for rapid regression testing during rules-engine development, not as a narrative playthrough. Walkable in ten minutes; useful after every refactor.",
+    "starting_room":      "hall_of_initiation",
+    "level_range":        { "min": 3, "max": 5 },
+    "estimated_rooms":    9,
+    "estimated_playtime": "10 min (dev walkthrough); 20–25 min (thorough)",
+    "tags":               ["test-hub", "warden", "solo", "dev"],
+    "guidance":           "gauntlet_module_guidance.md"
+  },
+
+  "rooms": {
+    "hall_of_initiation": {
+      "id":          "hall_of_initiation",
+      "name":        "The Hall of Initiation",
+      "description": "A circular stone chamber, domed and windowless, its floor flagged in pale limestone laid in the Warden laurel-pattern. Eight iron-banded doors are set at regular intervals around the wall, each carved above the lintel with a single sigil — arms, line, gate, foot, word, blade, herb, breath — and each lit from within its frame by the steady unshielded flame of old Warden lantern-work. A bronze plaque is set into the floor at the room's center: WALK EACH DOOR ONCE. RETURN. THE LANTERNBLADE WILL KNOW. The air is still, cold, and older than any current master of the Watch.",
+      "tags":        ["hub", "lore"],
+      "connections": {
+        "door_first_arms": {
+          "label": "the door marked ARMS",
+          "to":    "chamber_first_arms",
+          "state": "open"
+        },
+        "door_the_line": {
+          "label": "the door marked LINE",
+          "to":    "chamber_the_line",
+          "state": "open"
+        },
+        "door_black_gate": {
+          "label": "the door marked GATE",
+          "to":    "chamber_black_gate",
+          "state": "open"
+        },
+        "door_careful_foot": {
+          "label": "the door marked FOOT",
+          "to":    "chamber_careful_foot",
+          "state": "open"
+        },
+        "door_hidden_word": {
+          "label": "the door marked WORD",
+          "to":    "chamber_hidden_word",
+          "state": "open"
+        },
+        "door_oathblade": {
+          "label": "the door marked BLADE",
+          "to":    "chamber_oathblade",
+          "state": "open"
+        },
+        "door_apothecary": {
+          "label": "the door marked HERB",
+          "to":    "chamber_apothecary",
+          "state": "open"
+        },
+        "door_breath_held": {
+          "label": "the door marked BREATH",
+          "to":    "chamber_breath_held",
+          "state": "open"
+        }
+      },
+      "features": [
+        {
+          "id":          "bronze_plaque",
+          "type":        "lore",
+          "name":        "The Bronze Plaque",
+          "description": "A rectangular plate of old bronze set flush into the floor at the room's center. Three lines, cleanly cast: WALK EACH DOOR ONCE. RETURN. THE LANTERNBLADE WILL KNOW.",
+          "on_examine":  "The plaque is older than the watch-houses. The phrasing is Warden initiatory: a recruit walked the eight doors in whatever order, returned to the hub between each, and the Lanternblade — or whatever ritual blade the initiate was to inherit — was held to witness the work. The 'knowing' is a lantern-craft — the blade warms visibly when its bearer has walked the full circuit. Nothing compels the order. The doors do not lock behind the initiate.",
+          "gm_notes":    "Framing beat for the test hub. The player may walk the doors in any order; the module does not enforce a sequence. If you want a completion signal, narrate the Lanternblade (or the Oathblade, if picked up) warming steadily when the player returns to the hub after the last chamber."
+        }
+      ],
+      "encounters": [],
+      "hazards":    []
+    },
+
+    "chamber_first_arms": {
+      "id":          "chamber_first_arms",
+      "name":        "The Chamber of First Arms",
+      "description": "A small square training cell, its walls pitted with the marks of old blade-practice. A straw training-dummy stands on a cross of wooden legs at the center of the floor — but the dummy is not cloth and wood anymore. Something old and small and thin has climbed into it, wearing the dummy the way a crow wears a coat. It lifts a practice shortsword as you cross the threshold.",
+      "tags":        ["encounter", "undead", "test-combat-single"],
+      "connections": {
+        "back_to_hub": {
+          "label": "back to the hall of initiation",
+          "to":    "hall_of_initiation",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [
+        {
+          "id":    "first_arms_dummy",
+          "name":  "The Training Dummy",
+          "groups": [
+            { "monster_ref": "practice_skeleton", "quantity": 1 }
+          ],
+          "trigger": {
+            "type":      "on_enter",
+            "condition": null
+          },
+          "placement": "The animated dummy takes a single step forward from the center of the floor, levels the practice shortsword, and comes on at a walking pace.",
+          "behavior":  "Mindless. Attacks until broken. Does not flee; does not parley; does not check morale.",
+          "gm_notes":  "Single-enemy baseline. The intended test path: player declares attack → rolls d20 + mod → hit/miss announced → damage roll → HP tracked → enemy turn. One full combat cycle against a weak enemy. If this chamber does not resolve cleanly, the combat pipeline is broken.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": "1d6" }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "chamber_the_line": {
+      "id":          "chamber_the_line",
+      "name":        "The Chamber of the Line",
+      "description": "A long rectangular drill-hall. Three training-dummies stand in a line along the far wall, arranged at the spacing an old sergeant would set for a three-man shield-line. Whatever occupies the first of them takes a step down off its peg as you enter, and the other two follow a beat later, uneven — the third of them staggers like it remembers a bad knee.",
+      "tags":        ["encounter", "undead", "test-combat-multi", "test-morale"],
+      "connections": {
+        "back_to_hub": {
+          "label": "back to the hall of initiation",
+          "to":    "hall_of_initiation",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [
+        {
+          "id":    "the_line_squad",
+          "name":  "The Shield-Line",
+          "groups": [
+            { "monster_ref": "practice_skeleton", "quantity": 3 }
+          ],
+          "trigger": {
+            "type":      "on_enter",
+            "condition": null
+          },
+          "placement": "Three animated dummies step down off their pegs in sequence — left, center, right — and close in a loose shield-line at fifteen feet, ten feet, five feet.",
+          "behavior":  "Mindless — the three fight independently rather than as a coordinated line. Standard undead behavior: attack nearest living thing, do not flee, do not check morale. The 'uneven third' narration is flavor only; all three share the practice_skeleton stat block.",
+          "gm_notes":  "Multi-enemy baseline. Tests the rules engine's handling of several instances in one encounter: HP tracked independently per instance, turn order resolved, enemies defeated one at a time while others continue. If the engine collapses HP or fires a shared defeat condition early, this chamber will surface it. Morale is explicitly not triggered — these are mindless undead — so if the engine rolls morale on this encounter, that's a bug. A morale-check test belongs on a different chamber (Chamber of the Line can absorb one in a future iteration by swapping in a humanoid group).",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold",  "amount": "2d6" }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "chamber_black_gate": {
+      "id":          "chamber_black_gate",
+      "name":        "The Chamber of the Black Gate",
+      "description": "A taller chamber than the others, ceiling lost in shadow. A single iron-banded door — black, scored by generations of blade-points — is set into the far wall. Standing before it, not moving, is a figure in the grey-blue coat of an old Warden officer, helmed, a bearded axe held across the body in the low guard. The officer does not speak. The eyes are the colorless blue of ice in a trough. This is what the sigil above the door means: the gate is the officer, and the officer is the gate.",
+      "tags":        ["encounter", "boss", "undead", "test-combat-boss", "test-crit"],
+      "connections": {
+        "back_to_hub": {
+          "label": "back to the hall of initiation",
+          "to":    "hall_of_initiation",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [
+        {
+          "id":    "black_gate_officer",
+          "name":  "The Black Gate Warden",
+          "groups": [
+            { "monster_ref": "black_gate_warden", "quantity": 1 }
+          ],
+          "trigger": {
+            "type":      "on_enter",
+            "condition": null
+          },
+          "placement": "The officer stays in the low guard until the player steps fully into the chamber, then advances at a measured walking pace, axe held two-handed. The officer closes to melee range on the first round without rolling movement — this is a set-piece; the fight begins at arm's length.",
+          "behavior":  "Old Warden tactics, still sharp. Opens with a two-handed axe swing. Uses Measured Cleave (see stat block) when the player is below half HP. Does not flee; does not parley; does not check morale. Collapses on defeat.",
+          "gm_notes":  "Boss-tier baseline. Tests heavier HP (defeat takes several rounds, not one or two), a harder to-hit bonus, and an attack with a proper crit threat against a level-3 Fighter. If the engine's damage scales misbehave against HP ~30, this chamber will show it. If crit handling is broken, the officer will be the place it shows — narrate crit natural-20s clearly and watch how the engine reports damage.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": "4d6" },
+              { "type": "item", "item_id": "healing_potion", "quantity": 1 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "chamber_careful_foot": {
+      "id":          "chamber_careful_foot",
+      "name":        "The Chamber of the Careful Foot",
+      "description": "A long narrow chamber, the floor patterned in a regular grid of square flagstones. A number of them sit a finger's-width proud of their neighbors, and the walls on both sides are pierced at shin height with narrow slots, all of them blackened inside with old grime. The far end of the room holds nothing but the sigil-lit lintel of the return door. Whatever this chamber once taught a recruit, it taught by hurting them slightly.",
+      "tags":        ["hazard", "test-hazard-detect-avoid"],
+      "connections": {
+        "back_to_hub": {
+          "label": "back to the hall of initiation",
+          "to":    "hall_of_initiation",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [],
+      "hazards": [
+        {
+          "id":          "careful_foot_plates",
+          "name":        "The Training Dart-Plates",
+          "description": "A third of the floor's flagstones are pressure plates wired to a spring-loaded rack of training darts behind the wall. The darts are not poisoned (this was a training hall), but they are sharp enough to teach the lesson. The safe path is along the unraised flags near the walls.",
+          "gm_notes":    "The full detect-then-avoid hazard pipeline in one room. Tests: detection check runs first and, on success, awards the detection XP and skips the avoidance roll entirely; on detection failure, the avoidance check is offered; on avoidance failure, damage is applied AND the wounded condition is set; a successful avoidance awards its own (smaller) XP. If the engine skips straight to avoidance without offering detection, or applies damage on a detection-success, the pipeline is broken.",
+          "trigger": {
+            "type":   "on_traverse",
+            "target": null
+          },
+          "detection": {
+            "check":      { "skill": "perception", "ability": "wis", "dc_tier": "easy" },
+            "on_success": "You stop at the threshold and read the floor. Half of the raised flags sit a shade paler than their neighbors — dust-free on top, because the rack has fired enough times to keep the rising plates polished. The safe path is along the left wall for the first four flags, then a single diagonal step at the fifth seam, then the right wall the rest of the way."
+          },
+          "avoidance": {
+            "check":      { "skill": "acrobatics", "ability": "dex", "dc_tier": "medium" },
+            "on_success": "You pick your way across the hall in a string of careful half-steps, shifting your weight along the heel-line of each flag, and none of them drops.",
+            "on_failure": {
+              "narration":  "Your third step rings hollow under the heel and the flag drops a finger-width. The rack behind the wall fires. A pair of training darts glance off your mail and one catches you in the shin, deep enough to bleed and slow you the rest of the way across.",
+              "damage":     { "amount": "1d6", "type": "piercing" },
+              "conditions": ["wounded"]
+            }
+          },
+          "reward_on_detection": { "xp": 25, "narration": "You read the floor before it reads you. The rack never fires." },
+          "reward_on_avoidance": { "xp": 10 },
+          "persists":             false,
+          "resolved_by_detection": true
+        }
+      ]
+    }
+  }
+}
