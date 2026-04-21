@@ -1037,3 +1037,341 @@ Optional top-level block. Declares when the app should fire the end-of-module ev
 Complex multi-ending logic is deferred to v2.
 
 ---
+
+## Adventure Module — the content trinity
+
+Each room carries three content arrays: **features**, **encounters**, and **hazards**. All three are always present (possibly empty). They serve distinct purposes and the schema enforces the separation.
+
+| Property | Feature | Encounter | Hazard |
+|---|---|---|---|
+| HP / AC? | No | Yes (via bestiary) | No |
+| Triggers `[COMBAT: on]`? | No | **Yes** | **No** |
+| Causes damage? | **Never** | Yes (attack rolls) | Yes (declared damage) |
+| Uses skill checks? | Often | Sometimes | Often (detect, avoid) |
+| GM treats as… | Detail or puzzle | Adversary | Environmental condition |
+
+**Strict rule:** features never deal damage. If an interaction can damage the player, it's a hazard.
+
+**Validator enforces:**
+
+- Hazards cannot contain `monster_ref`.
+- Encounters must contain `monster_ref` (on at least one group).
+- Features cannot declare damage in any outcome.
+
+---
+
+### Features
+
+Four sub-types, identified by the `type` field. All four share a common head; each has its own body shape.
+
+**Universal fields (every feature):**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | string | required | Unique within the module. |
+| `type` | enum | required | `"lore"` \| `"searchable"` \| `"interactive"` \| `"puzzle"`. |
+| `name` | string | required | Display label. |
+| `description` | string | required | Player-facing, first-look prose. |
+| `on_examine` | string | optional | Deeper prose revealed when the player looks more closely. Available on any type. |
+| `gm_notes` | string | optional | GM-facing hint. Not shown to the player. |
+| `prerequisites` | object | optional | Gate on feature state / encounter defeat. See "Feature prerequisites" below. |
+| `prereq_hint` | string | optional | Breadcrumb the GM can surface when prerequisites are unmet. |
+
+**Strict typing rule:** mixed-type features are split into multiple features. A painting with a hidden compartment is one `lore` feature (the painting) plus one `searchable` feature (the compartment), discovered via the lore feature's `on_examine`.
+
+#### 1. `lore`
+
+Pure information or atmosphere. Stateless.
+
+```jsonc
+{
+  "id":          "blood_stain",
+  "type":        "lore",
+  "name":        "Blood-stained Floor",
+  "description": "Dried bloodstains spatter the floor.",
+  "on_examine":  "Closer inspection reveals ritual drainage patterns."   // optional
+}
+```
+
+Lore features have no `reward[]` (stateless, informational). No mechanical outcome.
+
+#### 2. `searchable`
+
+Hidden content revealed by a check.
+
+```jsonc
+{
+  "id":          "old_tomes",
+  "type":        "searchable",
+  "name":        "Old Tomes",
+  "description": "Shelves of dust-covered books.",
+  "check":       { "skill": "investigation", "ability": "int", "dc_tier": "medium" },  // required
+  "on_success":  "You find a rolled map of the crypt.",        // required — prose
+  "on_failure":  "Nothing of use.",                            // required — prose
+  "reward":      [                                             // optional — reward shape array
+    { "type": "item", "item_id": "crypt_map", "quantity": 1 }
+  ],
+  "persists":    true                                          // required — true = stays searched, false = can retry
+}
+```
+
+**Notes:**
+
+- `check` uses the standard check shape (see Conventions). Use `skill: null` for raw ability saves.
+- `reward[]` fires on success only. No rewards on `lore` features.
+- `persists: true` means the feature's `searched` state sticks in the save file; the player can't re-roll.
+
+#### 3. `interactive`
+
+Manipulable features with explicit state — levers, buttons, dials, altars.
+
+```jsonc
+{
+  "id":            "stone_lever",
+  "type":          "interactive",
+  "name":          "Stone Lever",
+  "description":   "A heavy stone lever.",
+  "states":        ["up", "down"],         // required — string array of possible states
+  "initial_state": "up",                   // required — must be one of states[]
+  "actions": {                             // required — keyed by state; each value is the action available IN that state
+    "up": {
+      "label":   "Pull down",              // required — UI button text
+      "result":  "Distant grinding echoes.",  // required — prose shown on use
+      "effects": [                         // optional — side effects; see "Effects" below
+        { "type": "unlock_connection", "target": "sealed_door" }
+      ],
+      "reward":  []                        // optional — reward shape array
+    },
+    "down": {
+      "label":   "Push up",
+      "result":  "It won't budge.",
+      "effects": []
+    }
+  }
+}
+```
+
+**Notes:**
+
+- After an action fires, the feature transitions to the other state (or stays put if the state machine doesn't progress — see "Push up" above where the down-state action is narratively a no-op).
+- `effects[]` accepts the same shape described below under "Effects".
+- `reward[]` may be attached per-action and fires when that action is taken.
+
+#### 4. `puzzle`
+
+Structured challenges with a declared solution.
+
+```jsonc
+{
+  "id":          "time_riddle",
+  "type":        "puzzle",
+  "name":        "The Sage's Riddle",
+  "description": "'I am always coming, but never arrive.'",
+  "solution": {                                    // required
+    "description": "Time. Accept 'tomorrow' and similar variations.",  // required — GM-facing; prose
+    "check":       null                            // required — null | standard check object
+  },
+  "on_success": {                                  // required
+    "narration": "The voice whispers approval.",   // required
+    "effects":   [                                 // optional
+      { "type": "unlock_connection", "target": "sage_chamber" }
+    ],
+    "reward":    []                                // optional — reward shape array
+  },
+  "on_failure": {                                  // required
+    "narration": "The voice goes quiet."           // required
+  }
+}
+```
+
+**Puzzle resolution — three modes using the same shape:**
+
+1. **Pure narrative:** `check: null`, `solution.description` describes the answer. Player says the right thing; the puzzle resolves. (Riddles, passwords, clever answers.)
+2. **Narrative bypass + check fallback:** `check` is set AND `solution.description` describes the answer. The GM recognizes the clever solve; otherwise offers the roll.
+3. **Check-gated:** `check` is set, `solution.description` is cryptic or GM-only. No narrative shortcut.
+
+**Multi-step puzzles** are authored by chaining multiple features: each step is its own feature whose `effects[]` calls `activate_feature` on the next. The final feature's effects open the gate. Sequence enforcement in v1 is prose-only (the GM reads puzzle descriptions and enforces order narratively); structured prerequisite chaining is in the next section.
+
+---
+
+### Effects
+
+Used by interactive actions, puzzle `on_success`, and (via a different name) on encounter `on_defeat_effects`. Same shape in all three cases.
+
+```jsonc
+{ "type": "unlock_connection", "target": "sealed_door" }
+{ "type": "reveal_connection", "target": "hidden_passage" }
+{ "type": "activate_feature",  "target": "altar", "state": "blessed" }
+```
+
+**v1 effect types:**
+
+| `type` | `target` | Optional fields | Effect |
+|---|---|---|---|
+| `unlock_connection` | connection id | — | Sets the named connection's `state` to `"open"`. |
+| `reveal_connection` | connection id | — | Makes a hidden connection visible; also sets `state: "open"`. |
+| `activate_feature` | feature id | `state` (string) | Fires another feature. For interactive targets, `state` sets the target's `current_state`. |
+
+Other effect types — `spawn_encounter`, `trigger_event`, `end_module` — are deferred to v2.
+
+---
+
+### Encounters
+
+One combat event per encounter. Mixed-creature encounters are first-class via `groups[]`.
+
+```jsonc
+{
+  "id":    "tomb_guardians",                      // required
+  "name":  "The Tomb Guardians",                  // required — display label
+
+  "groups": [                                     // required — at least one group
+    { "monster_ref": "skeleton_warrior", "quantity": 2 },   // monster_ref resolves against module_bestiary → bestiary
+    { "monster_ref": "skeleton_captain", "quantity": 1 }
+  ],
+
+  "trigger": {                                    // required
+    "type":      "on_enter",                      // required — "on_enter" | "on_condition" | "scripted"
+    "condition": null                             // required when type is "on_condition" — prose the GM reads; null otherwise
+  },
+
+  "placement": "…",                               // optional — prose; where/how the creatures appear
+  "behavior":  "…",                               // optional — tactical hint
+  "gm_notes":  "…",                               // optional — GM-facing guidance
+
+  "rewards": {                                    // optional
+    "xp": "from_bestiary",                        // optional — "from_bestiary" (default) OR a fixed integer override
+    "treasure": [                                 // optional — array of reward shapes; module-owned
+      { "type": "gold", "amount": "2d6" },
+      { "type": "item", "item_id": "silver_dagger", "quantity": 1 }
+    ]
+  },
+
+  "on_defeat_effects": [                          // optional — fires when ALL groups defeated
+    { "type": "unlock_connection", "target": "secret_door" }
+  ]
+}
+```
+
+**Groups:**
+
+- Each group = one monster type + a quantity. Each creature instance is tracked independently at runtime (HP bars per instance, not per group).
+- Solo encounter = one group with `quantity: 1`.
+
+**XP ownership:** bestiary entries carry a `xp_value` default; encounters inherit via `"xp": "from_bestiary"` (sum of `quantity × bestiary.xp_value` across groups). Encounters may override with a fixed integer (useful for set-piece boss fights valued differently from the bestiary default).
+
+**Treasure ownership:** module-owned. The bestiary doesn't carry treasure data; it lives only on encounters.
+
+**Trigger types:**
+
+| Value | Meaning | `condition` |
+|---|---|---|
+| `"on_enter"` | Fires the first time the room is entered. | — (null) |
+| `"on_condition"` | Fires when a GM-judged condition is met (prose-driven). | required — prose the GM evaluates |
+| `"scripted"` | Fires when an effect or system event triggers it (typically from another feature's `effects`). | — (null) |
+
+Wandering-monster triggers are deferred to v2 (they need an exploration-turn counter).
+
+---
+
+### Hazards
+
+Environmental dangers — traps, corrupted zones, hostile terrain. Never carry `monster_ref`; never trigger `[COMBAT: on]`.
+
+```jsonc
+{
+  "id":           "pressure_plates",               // required
+  "name":         "Pressure-plate Trap",           // required
+  "description":  "Darts fire from the walls when the plates are triggered.",  // required
+  "gm_notes":     "Let low-HP players retreat without penalty.",  // optional
+
+  "trigger": {                                     // required
+    "type":   "on_traverse",                       // required — "on_enter" | "on_traverse" | "on_interact" | "on_examine"
+    "target": null                                 // optional — feature or connection id when the hazard is tied to one
+  },
+
+  "detection": {                                   // optional — present when the hazard can be spotted in advance
+    "check":      { "skill": "perception", "ability": "wis", "dc_tier": "easy" },  // required within detection
+    "on_success": "You spot the safe path — the plates are slightly discolored."   // required within detection
+  },
+
+  "avoidance": {                                   // optional — present when the hazard can be rolled against
+    "check":      { "skill": "acrobatics", "ability": "dex", "dc_tier": "medium" },  // required within avoidance
+    "on_success": "You pick your way across without triggering it.",                 // required within avoidance
+    "on_failure": {                                                                  // required within avoidance
+      "narration":  "Darts fire from the walls; one strikes deep.",                  // required
+      "damage":     { "amount": "1d6+1", "type": "piercing" },                       // optional — reward-like shape
+      "conditions": []                                                               // optional — condition ids to apply
+    }
+  },
+
+  "reward_on_detection": { "xp": 10, "narration": "…" },   // optional — classic-OSR flavor
+  "reward_on_avoidance": { "xp": 5 },                      // optional
+
+  "persists":             false,                   // required — true = fires again on every qualifying revisit; false = fires once
+  "resolved_by_detection": true,                   // required — if true, successful detection skips the avoidance roll entirely
+  "cooldown_rounds":      0                        // optional — RESERVED for v2; ignored in v1
+}
+```
+
+**The four hazard shapes emerge from which blocks are present:**
+
+| Detection? | Avoidance? | Shape | Example |
+|---|---|---|---|
+| ✓ | ✓ | **detect-then-avoid** | Pressure plate trap (standard) |
+| — | ✓ | **pure-avoidance** | Crypt chill, unavoidable hostile terrain |
+| — | — | **automatic** | Unavoidable damage on entry (narrated via `trigger` + custom prose) |
+| ✓ | — | **interaction-gated** | Detected-only hazards; effect resolved via connected features |
+
+No type enum is needed — the presence of blocks tells the app (and the GM) which shape applies.
+
+**Triggers:**
+
+| Value | Meaning |
+|---|---|
+| `"on_enter"` | Fires the first time the room is entered. |
+| `"on_traverse"` | Fires when moving through the affected area (repeatable if `persists: true`). |
+| `"on_interact"` | Fires when the player interacts with a specific feature or connection (`target` required). |
+| `"on_examine"` | Fires when the player examines the trigger target closely (`target` required). |
+
+**Reward fields** (`reward_on_detection`, `reward_on_avoidance`) accept only `xp` and `narration` in v1. Treasure-as-hazard-reward is not a v1 pattern.
+
+---
+
+### Feature prerequisites
+
+Lightweight gating on features. When prerequisites are not met, the feature is **hidden** from the UI; an optional `prereq_hint` lets the GM drop a breadcrumb.
+
+```jsonc
+"prerequisites": {
+  "feature_state": {
+    "crown_button":     "pressed",      // interactive: must match the target's current_state
+    "wardens_journal":  "succeeded",    // searchable: satisfied when tracked succeeded == true
+    "time_riddle":      "solved"        // puzzle: satisfied when tracked solved == true
+  },
+  "encounter_defeated": ["guardian"]    // array of encounter ids that must be resolved
+},
+"prereq_hint": "The sceptre rune glows faintly, but something about the crown still needs attention."
+```
+
+**Logic:** AND only. Every declared condition must be satisfied.
+
+**`feature_state` string convention per sub-type:**
+
+| Target feature type | Value | Meaning |
+|---|---|---|
+| `interactive` | any state string | Satisfied when the target's `current_state` equals this value. |
+| `searchable` | `"succeeded"` | Satisfied when tracked `succeeded == true`. |
+| `searchable` | `"searched"` | Satisfied when tracked `searched == true` (regardless of success). |
+| `puzzle` | `"solved"` | Satisfied when tracked `solved == true`. |
+| `lore` | — | Lore features are stateless and cannot be referenced in prereqs. |
+
+**Unlocks:** multi-step puzzles via feature chaining, staged reveals, gated progression.
+
+**Deferred to v2:** OR logic, negated conditions, complex expressions; prereqs on encounters / hazards / connections; scripted state-transition events.
+
+### Reference example
+
+`module_crows_hollow.json` + `crows_hollow_guidance.md`.
+
+---
