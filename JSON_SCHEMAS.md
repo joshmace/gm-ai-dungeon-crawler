@@ -1444,7 +1444,8 @@ Pregen or player-built character sheet. Stores **raw values only**; everything d
     },
 
     "saves": {
-      "proficient": ["str", "con"]                      // required — id list (ability ids or category ids depending on saves.type)
+      "proficient": ["str", "con"]                      // required when rules.saves.type is "per_ability" — ability id list
+      // When rules.saves.type is "categorical", use "values" instead — see below.
     },
 
     "skills": {
@@ -1495,6 +1496,38 @@ Pregen or player-built character sheet. Stores **raw values only**; everything d
   }
 }
 ```
+
+### Saves
+
+The character-side `saves` block is one of two shapes, determined by the rules pack's `character_model.saves.type`:
+
+**`per_ability`** — modern save-per-ability systems (5e-style):
+
+```jsonc
+"saves": {
+  "proficient": ["str", "con"]   // required — array of ability ids from rules.character_model.abilities
+}
+```
+
+Ability save numbers are derived at runtime (ability modifier + proficiency bonus if present, + item bonuses). The character stores only which saves are proficient.
+
+**`categorical`** — classic categorical save systems (B/X's Death Ray / Wands / Paralysis / Breath / Spells, and similar):
+
+```jsonc
+"saves": {
+  "values": {                    // required — keyed by category id from rules.character_model.saves.categories
+    "death":     14,
+    "wands":     15,
+    "paralysis": 14,
+    "breath":    16,
+    "spells":    15
+  }
+}
+```
+
+Categorical save targets are authored directly — the character carries a numeric target per category, typically sourced from the class's level-based save table. Keys must match category ids declared in the rules pack; every declared category must have a value. Values are integers (the number the player needs to meet or beat on 1d20 for an OSR save-high variant, or to roll under on 1d20/2d10 for other systems — the rules pack's `resolution.checks.method` decides direction).
+
+The two shapes are mutually exclusive: a character declaring `values` against a `per_ability` rules pack (or vice versa) is an authoring error and will be flagged by the validator.
 
 ### Equipment
 

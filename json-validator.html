@@ -568,8 +568,61 @@
                     }
                 }
 
-                // Saves.proficient ids must resolve.
-                if (character.saves && Array.isArray(character.saves.proficient) && saveIds.size > 0) {
+                // Saves: shape depends on rules.saves.type.
+                const rulesSavesType = rules && rules.character_model && rules.character_model.saves
+                    ? rules.character_model.saves.type
+                    : null;
+
+                if (character.saves && rulesSavesType === 'categorical') {
+                    // "values" required; "proficient" must not be present.
+                    if (!character.saves.values || typeof character.saves.values !== 'object'
+                        || Array.isArray(character.saves.values)) {
+                        errors.push({ file, loc: 'character.saves.values',
+                            msg: `required object (keyed by category id) when rules.saves.type is "categorical"` });
+                    } else {
+                        // Every declared category must have a numeric value; every key must resolve.
+                        const declared = saveIds;
+                        const present  = new Set(Object.keys(character.saves.values));
+                        declared.forEach(cid => {
+                            if (!present.has(cid)) {
+                                errors.push({ file, loc: `character.saves.values.${cid}`,
+                                    msg: `missing save target for category "${cid}" declared in rules.character_model.saves.categories` });
+                            }
+                        });
+                        for (const [k, v] of Object.entries(character.saves.values)) {
+                            if (!declared.has(k)) {
+                                errors.push({ file, loc: `character.saves.values.${k}`,
+                                    msg: `save category "${k}" not declared in rules.character_model.saves.categories` });
+                            }
+                            if (typeof v !== 'number' || !Number.isInteger(v)) {
+                                errors.push({ file, loc: `character.saves.values.${k}`,
+                                    msg: `save target must be an integer; got ${JSON.stringify(v)}` });
+                            }
+                        }
+                    }
+                    if (Array.isArray(character.saves.proficient)) {
+                        errors.push({ file, loc: 'character.saves.proficient',
+                            msg: `"proficient" is only valid when rules.saves.type is "per_ability"; use "values" for categorical saves` });
+                    }
+                } else if (character.saves && rulesSavesType === 'per_ability') {
+                    // "proficient" required; "values" must not be present.
+                    if (!Array.isArray(character.saves.proficient)) {
+                        errors.push({ file, loc: 'character.saves.proficient',
+                            msg: `required array (of ability ids) when rules.saves.type is "per_ability"` });
+                    } else if (saveIds.size > 0) {
+                        character.saves.proficient.forEach((sid, i) => {
+                            if (!saveIds.has(sid)) {
+                                errors.push({ file, loc: `character.saves.proficient[${i}]`,
+                                    msg: `save id "${sid}" not declared in rules.character_model` });
+                            }
+                        });
+                    }
+                    if (character.saves.values !== undefined) {
+                        errors.push({ file, loc: 'character.saves.values',
+                            msg: `"values" is only valid when rules.saves.type is "categorical"; use "proficient" for per-ability saves` });
+                    }
+                } else if (character.saves && Array.isArray(character.saves.proficient) && saveIds.size > 0) {
+                    // Rules type not declared — fall back to the existing proficient-id check.
                     character.saves.proficient.forEach((sid, i) => {
                         if (!saveIds.has(sid)) {
                             errors.push({ file, loc: `character.saves.proficient[${i}]`,
@@ -1217,7 +1270,7 @@
             if (c.basic_info) {
                 requireFields(c.basic_info, ['name', 'class', 'level'], file, 'character.basic_info', errors);
             }
-            if (c.saves)  requireFields(c.saves,  ['proficient'], file, 'character.saves',  errors);
+            // saves sub-shape is rules-pack-dependent; the reference pass enforces the right one.
             if (c.skills) requireFields(c.skills, ['proficient'], file, 'character.skills', errors);
         }
 
