@@ -1,0 +1,502 @@
+{
+  "module": {
+    "id": "watch_at_crows_hollow",
+    "title": "The Watch at Crow's Hollow",
+    "version": "1.0",
+    "author": "Lantern & Blade Project",
+    "description": "A derelict Warden watch-house on the Hollow Edge. For three nights running, the lanterns along its curtain wall have relit themselves at dusk and burned until dawn. The nearest village sent a child to investigate; the child did not come back. A short dungeon in six rooms, climaxing in the Warden-Lieutenant's crypt. Designed for a level 3 character operating solo.",
+    "starting_room": "watch_house_yard",
+    "level_range": { "min": 2, "max": 4 },
+    "estimated_rooms": 6,
+    "estimated_playtime": "75–90 min",
+    "tags": ["undead", "horror", "ruin", "warden-lore", "short", "solo"],
+    "guidance": "crows_hollow_guidance.md"
+  },
+
+  "rooms": {
+    "watch_house_yard": {
+      "id": "watch_house_yard",
+      "name": "The Watch-House Yard",
+      "description": "The road from Thornford's Common runs out of the woods and right up to the yard's low stone wall, as if it were still an imperial thoroughfare. Beyond the wall: a flagged courtyard strangled with dry grass, a half-collapsed stable, and the watch-house itself — two stories of squat grey limestone with a peaked slate roof. Above the oaken door, a carved crest: a stylized lantern encircled by a chain of laurels. Above the crest, set into sconces along the curtain wall, four iron watch-lanterns burn with a thin, steady, unshielded flame. It is mid-afternoon. There is no wind to speak of. The lanterns are lit anyway.",
+      "tags": ["lore", "empty", "approach"],
+      "connections": {
+        "oaken_door": {
+          "label": "through the oaken door",
+          "to": "gate_room",
+          "state": "open"
+        }
+      },
+      "environment": {
+        "name": "Unquiet Stillness",
+        "description": "No birds. No insects. The sound of the player's own breath is audible. The lanterns do not flicker.",
+        "effects": [
+          "Sound carries further than it should — the slightest noise from inside the watch-house is likely to be heard."
+        ]
+      },
+      "features": [
+        {
+          "id": "warden_crest",
+          "type": "lore",
+          "name": "The Warden Crest",
+          "description": "A single large stone carved above the oaken door: a lantern wrapped in a chain of laurels. Beneath it, in small deeply-cut script, the Watch's motto — WE KEEP THE LIGHT SO THE LIGHT KEEPS US.",
+          "on_examine": "The laurels are not a Dawnlight convention — they are older, pre-imperial, and the Wardens borrowed them from someone who mattered to the pre-imperial cults. The crest predates the watch-house itself; it's been moved here from somewhere else. Someone is buried under the stone the crest is carved into, or was.",
+          "gm_notes": "Players bearing the Rubbing of the Lantern Tree will recognize the motto instantly. Players bearing the Lanternblade will see the blade's runes warm slightly against the crest."
+        },
+        {
+          "id": "watch_lanterns",
+          "type": "lore",
+          "name": "The Burning Watch-Lanterns",
+          "description": "Four iron watch-lanterns along the curtain wall, set in bracketed sconces at roughly head height. Each is burning with a steady, pale, unshielded flame about the size of a thumb. There is no oil in them. There is no wick.",
+          "on_examine": "The flames do not respond to breath. A palm brought near one feels warmth, but the warmth does not spread — it is present exactly in the flame and nowhere else. This is proper Warden lantern-work behaving the way Warden lantern-work is supposed to behave. Something inside the watch-house has relit them.",
+          "gm_notes": "The lanterns are a breadcrumb: whatever is in the crypt is waking, and the old lantern-work is responding. Do not let the player extinguish them — they cannot be put out from outside."
+        }
+      ],
+      "encounters": [],
+      "hazards": []
+    },
+
+    "gate_room": {
+      "id": "gate_room",
+      "name": "The Gate Room",
+      "description": "The oaken door opens on a high-ceilinged guardroom paved in slate, cold enough that the player's breath shows. A long wooden counter runs along the right wall, its surface worn smooth by a thousand signed duty-rosters. Above it, pegged to a plank, a Warden muster-roll. Two doorways lead off to the left and right; a third, directly ahead, is an iron-strapped door set deeper into the wall than seems structurally necessary. Everything is coated with the fine grey dust of sixty years of emptiness — except a single line of bootprints, fresh, small, leading inward from the threshold and vanishing at the rightmost doorway.",
+      "tags": ["lore", "hub", "searchable"],
+      "connections": {
+        "to_yard": {
+          "label": "back to the yard",
+          "to": "watch_house_yard",
+          "state": "open"
+        },
+        "barracks_door": {
+          "label": "left, into the barracks",
+          "to": "barracks",
+          "state": "open"
+        },
+        "study_door": {
+          "label": "right, into the officer's study",
+          "to": "officers_study",
+          "state": "open"
+        },
+        "iron_strapped_door": {
+          "label": "the iron-strapped door",
+          "to": "lantern_room",
+          "state": "locked",
+          "reveal_hint": "The iron-strapped door will not open. Its bar-latch is warded with an old lantern-sigil — it is not a mechanical lock."
+        }
+      },
+      "environment": {
+        "name": "Old Cold",
+        "description": "The room holds the specific deep chill of a cellar that has not been warmed in decades. Breath shows. Metal is painful to touch ungloved.",
+        "effects": [
+          "Prolonged bare contact with metal risks numb fingers; a GM may call for a Constitution save against extended exposure."
+        ]
+      },
+      "features": [
+        {
+          "id": "muster_roll",
+          "type": "lore",
+          "name": "The Muster-Roll",
+          "description": "A split oak plank pegged to the wall above the counter, roughly two feet wide, bearing a list of fourteen names in the neat column-hand of a Warden quartermaster. The top of the plank reads CROW'S HOLLOW GARRISON · WINTER OF THE SIXTY-THIRD YEAR. Beside each name, a small inked symbol: fourteen of them match — a laurel. One name, second from the top — LT. ORICK HAVEL — has no laurel beside it. Instead, a small circle with a line through it.",
+          "on_examine": "A character with Warden lore or who has read any Warden document before will know: the laurel means 'returned home properly' — a Warden who died was laid to rest under their own name. The circle-with-a-line is the older mark — 'returned, but not properly.' Lt. Orick Havel, whoever he was, is somewhere in this watch-house, and the Watch itself knew he had not been put away correctly.",
+          "gm_notes": "First major clue. This is the player's introduction to the Warden-Lieutenant as a named figure with an unfinished problem."
+        },
+        {
+          "id": "overturned_locker",
+          "type": "searchable",
+          "name": "Overturned Equipment Locker",
+          "description": "A tall wooden locker behind the counter has been pulled from the wall and dumped on its side. The Warden quartermaster's seal — a small waxy lantern stamp — has been broken off the latch, evidently very recently. Most of what it held is scattered: mothballed gambesons, a pair of broken belt-hooks, and a surprising quantity of grey paper envelopes sealed with a cord.",
+          "check": { "skill": "investigation", "ability": "int", "dc_tier": "easy" },
+          "on_success": "Among the scattered envelopes is a small oilcloth-wrapped bundle that escaped the thieves' notice: two sealed vials, a folded paper bearing a hand-drawn diagram, and a few iron nails.",
+          "on_failure": "The locker is mostly empty; someone has been through it already.",
+          "reward": [
+            { "type": "item", "item_id": "antitoxin", "quantity": 1 },
+            { "type": "item", "item_id": "healing_potion", "quantity": 1 }
+          ],
+          "persists": true,
+          "gm_notes": "Whoever broke the quartermaster's seal is the same party whose bootprints lead into the officer's study. Foreshadow without naming."
+        }
+      ],
+      "encounters": [],
+      "hazards": [
+        {
+          "id": "rotten_floorboard",
+          "name": "Rotten Floorboard",
+          "description": "A single wide board of the slate flooring is, in fact, not slate — it is a rotten plank painted grey to match. It covers an old drainage pit that the original garrison used for washing blood off the slate after a fight.",
+          "gm_notes": "Easy detect, medium avoidance. A player who finds it may use the pit tactically later (dragging an enemy in, hiding).",
+          "trigger": {
+            "type": "on_traverse",
+            "target": null
+          },
+          "detection": {
+            "check": { "skill": "perception", "ability": "wis", "dc_tier": "easy" },
+            "on_success": "One of the slate flags rings hollow under the foot. Closer, it's plainly a painted plank. Below: a rectangular pit, maybe four feet deep, dry but for old brown staining."
+          },
+          "avoidance": {
+            "check": { "skill": "acrobatics", "ability": "dex", "dc_tier": "medium" },
+            "on_success": "You spread your weight across the adjacent flags and cross the plank without putting full weight on it.",
+            "on_failure": {
+              "narration": "The plank gives all at once, with the sound of a dry branch snapping, and drops you four feet down into a cold stone-walled pit. You land hard on an ankle.",
+              "damage": { "amount": "1d6", "type": "bludgeoning" },
+              "conditions": ["wounded"]
+            }
+          },
+          "reward_on_detection": { "xp": 15, "narration": "You keep your footing and note the pit for later." },
+          "persists": false,
+          "resolved_by_detection": true
+        }
+      ]
+    },
+
+    "barracks": {
+      "id": "barracks",
+      "name": "The Barracks",
+      "description": "A long, low-ceilinged hall lined with six double-stacked wooden bunks and a single scarred trestle table down the middle. On the table: a tin cup, a deck of grey-backed playing cards fanned out mid-game, and — still in the small wooden bowl beside it — a pile of copper pennies representing somebody's lost hand. Nobody has finished this game yet. The air here is colder than the gate room. Not one of the bunks has its blankets pulled back.",
+      "tags": ["encounter", "lore", "undead"],
+      "connections": {
+        "to_gate_room": {
+          "label": "back to the gate room",
+          "to": "gate_room",
+          "state": "open"
+        }
+      },
+      "environment": {
+        "name": "Wrong Cold",
+        "description": "The temperature drops visibly as the player enters — breath shows immediately, the cards on the table stir as if in a draft that is not there.",
+        "effects": [
+          "Living creatures in the room have disadvantage on saves against fear-inducing effects while the Private's spirit is active."
+        ]
+      },
+      "features": [
+        {
+          "id": "abandoned_card_game",
+          "type": "lore",
+          "name": "The Unfinished Hand",
+          "description": "The cards on the trestle table are laid out mid-hand. Three players; all three hands visible, which is not how the game is played. The pile of pennies sits in the middle, untouched. The topmost card has been dealt face-down on top of the pile, as if the dealer had been interrupted exactly then.",
+          "on_examine": "The cards are Warden quartermaster's issue — grey backs with a small lantern printed in the corner. Nothing about the game is unusual except that all three hands are visible and nobody has collected the penny-pile.",
+          "gm_notes": "If the restless spirit encounter fires, the GM should narrate the spirit sitting down to deal the missing fourth card before attacking, or similar pathos."
+        },
+        {
+          "id": "kit_racks",
+          "type": "searchable",
+          "name": "The Kit Racks",
+          "description": "Along the back wall, six narrow kit racks — one per bunk — each hung with what its occupant left behind. Most of the racks have been stripped by sixty years of rust and rodents. Two are mostly intact, their contents sealed in oilcloth wrappings.",
+          "check": { "skill": "investigation", "ability": "int", "dc_tier": "easy" },
+          "on_success": "You find an oilcloth-wrapped bundle containing a serviceable torch, fifty feet of good hempen rope, and a small glass vial of grey-green antitoxin.",
+          "on_failure": "The surviving bundles turn out to hold only mothballed cloth and a few rusted buckles.",
+          "reward": [
+            { "type": "item", "item_id": "torch", "quantity": 2 },
+            { "type": "item", "item_id": "rope_50ft", "quantity": 1 },
+            { "type": "item", "item_id": "antitoxin", "quantity": 1 }
+          ],
+          "persists": true,
+          "prerequisites": {
+            "encounter_defeated": ["barracks_haunting"]
+          },
+          "prereq_hint": "The racks are behind the bunks at the far end of the room — it would be rash to turn your back on whatever is in here to go rummaging."
+        }
+      ],
+      "encounters": [
+        {
+          "id": "barracks_haunting",
+          "name": "The Unfinished Hand",
+          "groups": [
+            { "monster_ref": "restless_spirit", "quantity": 1 },
+            { "monster_ref": "skeleton_warrior", "quantity": 2 }
+          ],
+          "trigger": { "type": "on_enter", "condition": null },
+          "placement": "The restless spirit rises from the trestle-table side, reaching for the undealt card. The two skeleton warriors sit up simultaneously in adjacent bunks, the bunks creaking under the motion.",
+          "behavior": "The skeletons fight mindlessly and pursue the nearest living thing. The spirit attacks only targets who handled the cards, the pennies, or the table; it leaves alone anyone who simply crosses the room to the kit racks.",
+          "gm_notes": "Bludgeoning damage fells the skeletons quickly (they have vulnerability). The spirit is the real problem: resistant to non-magical weapons, so a level-3 party without the Lanternblade or the wand should expect attrition. A clever player may realize the spirit calms if the dealt card is turned over and the hand finished — prose-adjudicate this as a full resolution if the player reasons it out.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": "2d6" }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "officers_study": {
+      "id": "officers_study",
+      "name": "The Officer's Study",
+      "description": "A small square room lined on three walls with narrow shelves of Warden ledgers and bound codices, most of them intact but bloated with damp. The fourth wall is a single tall window of iron-bound glass, leaking grey afternoon light. In the middle of the room: a writing-desk of dark wood, its drawer pulled partly open, and the evidence of a very recent, very frustrated search — drawer tipped, paper scattered, a cold ash-ring on the floor where a small camp-lantern has burned out. On the desk itself, a heavy iron-bound lockbox, its hasp sealed by a softly-glowing lantern-sigil about the size of a thumbprint.",
+      "tags": ["encounter", "puzzle", "searchable", "lore"],
+      "connections": {
+        "to_gate_room": {
+          "label": "back to the gate room",
+          "to": "gate_room",
+          "state": "open"
+        }
+      },
+      "features": [
+        {
+          "id": "wardens_journal",
+          "type": "searchable",
+          "name": "The Warden-Lieutenant's Journal",
+          "description": "Beneath the mess the goblins made, still partially hidden under the drawer's false bottom, is a small leather-bound book. The ink is faded; the hand is Lt. Orick Havel's, the same as the signature on the muster-roll.",
+          "check": { "skill": "investigation", "ability": "int", "dc_tier": "medium" },
+          "on_success": "You find the false bottom on the second pass of the drawer. The journal is written in the plain column-hand of a Warden officer and covers the last two weeks of the Falling Winter. The final entry, undated:\n\n\"The thing from the Blackfall broke through the ward at Thornford's Common and we pursued. Caught it at the crypt beneath this post. My company is dead. I am bleeding out as I write. I cannot reach the crypt door — the seal requires the closing phrase, and my voice is going. If a Warden finds this, the phrase is engraved on the inside of my cloak-pin. Speak it at the Wardstone Lantern and the crypt will open. Finish what I began. Light the lantern. Speak the phrase: WE KEEP THE LIGHT, AND THE LIGHT KEEPS US. Burn me. Do not leave me unfinished. — Orick\"",
+          "on_failure": "Paper, paper, paper — and no journal. Maybe next pass.",
+          "reward": [],
+          "persists": true,
+          "prerequisites": {
+            "encounter_defeated": ["goblin_scavengers"]
+          },
+          "prereq_hint": "There are goblins in here. Searching the desk properly means dealing with them first."
+        },
+        {
+          "id": "wardens_lockbox",
+          "type": "puzzle",
+          "name": "The Warden's Lockbox",
+          "description": "A heavy iron-bound lockbox on the desk. No hinges, no visible seam. A single small lantern-sigil glows softly on the lid, warm to the touch, its light too steady to be a fire.",
+          "solution": {
+            "description": "The lockbox is sealed with a proper Warden lantern-sigil. It will open to any Warden who speaks the Watch's motto aloud, and to anyone who can convincingly invoke the Light. Accept any utterance of 'We keep the light so the light keeps us' or a clear declaration of Warden allegiance. The sigil responds to intent as much as to words — a bearer of the Lanternblade or of the Rubbing of the Lantern Tree will find the box opens for them with minimal prompting.",
+            "check": { "skill": "arcana", "ability": "int", "dc_tier": "hard" }
+          },
+          "on_success": {
+            "narration": "The lantern-sigil brightens, steadies, and flows out across the lid in four thin lines of light that meet at the corners. The lid rises on its own. Inside: a folded square of oilcloth wrapped around a single rolled parchment, and a small silver cloak-pin shaped like a lantern in laurels.",
+            "effects": []
+          },
+          "on_failure": {
+            "narration": "The sigil dims disapprovingly and does not respond further. The box remains sealed."
+          },
+          "reward": [
+            { "type": "item", "item_id": "scroll_of_mending", "quantity": 1 }
+          ],
+          "gm_notes": "Pure-narrative bypass is the intended path; a player quoting the motto auto-succeeds. The arcana check is a fallback for players who don't make the connection. The cloak-pin itself is flavor — no mechanical effect in v1, but note it for players who carry it (villagers on return may recognize them as Warden-adjacent)."
+        }
+      ],
+      "encounters": [
+        {
+          "id": "goblin_scavengers",
+          "name": "Goblin Scavengers",
+          "groups": [
+            { "monster_ref": "goblin_scout", "quantity": 2 },
+            { "monster_ref": "goblin_brute", "quantity": 1 }
+          ],
+          "trigger": { "type": "on_enter", "condition": null },
+          "placement": "Two scouts duck behind the overturned drawer and the window as the player enters; the brute, who had been crowbarring the lockbox without success, turns with the crowbar still in hand and bellows for his fellows.",
+          "behavior": "The brute commits immediately with Savage Rush on the first round; scouts open with shortbows from cover and use Nimble Escape to disengage if the player closes. If the brute falls, remaining scouts break morale narratively — run for the gate room and the door. They do not return.",
+          "gm_notes": "First proper combat. The goblins are here because they followed the reopened seal's glow from the forest; they are out of their depth. If one flees to the gate room and makes it outside, treat the watch-house's lanterns as extinguishing briefly as it crosses the yard — small narrative beat, the Wardens of the Light are still doing their job in their own way.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": "3d6" },
+              { "type": "item", "item_id": "silver_dagger", "quantity": 1 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "lantern_room": {
+      "id": "lantern_room",
+      "name": "The Lantern Room",
+      "description": "A circular stone chamber no larger than a farmer's parlor, domed and windowless. At the center of the flagged floor, mounted on a low limestone plinth, a single **Wardstone Lantern** — a fist-sized sphere of clouded glass bound in tarnished silver, set atop a short rod. The lantern is dark. The plinth is carved around its rim with a repeating chain of laurels. Directly opposite the gate-room door, a low round-topped stair descends into darkness; the stair's mouth is sealed by a heavy black iron door with no handle, no hinges the player can see, and a single spent lantern-sigil on its face. The door is cold. The air in the room is not.",
+      "tags": ["puzzle", "lore", "ritual"],
+      "connections": {
+        "to_gate_room": {
+          "label": "back to the gate room",
+          "to": "gate_room",
+          "state": "open"
+        },
+        "crypt_door": {
+          "label": "the sealed crypt door",
+          "to": "wardens_crypt",
+          "state": "locked",
+          "reveal_hint": "The crypt door has no visible mechanism. Its lantern-sigil is spent and the Wardstone Lantern at the room's center is unlit — the two are surely linked."
+        }
+      },
+      "environment": {
+        "name": "Held Air",
+        "description": "The air in the lantern room is warmer than the gate room by perhaps four degrees — not pleasant, exactly, but pointedly different. Dust hangs motionless in the light from the stairwell above.",
+        "effects": [
+          "The warmth fails the moment the wardstone lantern is lit; the room goes as cold as the gate room. GM should narrate this at the moment of lighting."
+        ]
+      },
+      "features": [
+        {
+          "id": "wardstone_lantern",
+          "type": "interactive",
+          "name": "The Wardstone Lantern",
+          "description": "A fist-sized sphere of clouded glass bound in tarnished silver, set atop a plinth carved with the Watch's laurel-chain. Its glass is cold. Its silver is colder.",
+          "on_examine": "The sphere contains a single tiny motionless flame, preserved and unlit. The silver casing bears the engraved words TO BE LIT BY THE CLOSING PHRASE — IN PEACE OR IN EXTREMIS. The laurel chain around the plinth is continuous, unbroken — Warden lantern-work at its purest. This is a door-ward, not a light-ward.",
+          "states": ["unlit", "lit"],
+          "initial_state": "unlit",
+          "actions": {
+            "unlit": {
+              "label": "Speak the closing phrase at the wardstone and light it",
+              "result": "You speak the phrase — WE KEEP THE LIGHT, AND THE LIGHT KEEPS US — and for a long moment nothing happens. Then, with a small patient sound like a match catching, the preserved flame inside the sphere takes and steadies. The room's held warmth falls away in a rush. Across the chamber the spent sigil on the crypt door flares, re-draws itself in four clean lines of pale light, and the door grinds inward half a handspan on mechanisms that have not moved in sixty years.",
+              "effects": [
+                { "type": "unlock_connection", "target": "crypt_door" }
+              ]
+            },
+            "lit": {
+              "label": "The lantern burns steadily",
+              "result": "The lantern continues to burn. The crypt door stands ajar.",
+              "effects": []
+            }
+          },
+          "prerequisites": {
+            "feature_state": { "wardens_journal": "succeeded" }
+          },
+          "prereq_hint": "The lantern has an air of waiting for something specific. Whoever set it knew a phrase that has not been spoken here in sixty years. Better to look for a record of it before trying."
+        }
+      ],
+      "encounters": [],
+      "hazards": []
+    },
+
+    "wardens_crypt": {
+      "id": "wardens_crypt",
+      "name": "The Warden's Crypt",
+      "description": "The stair comes out into a small vaulted chamber cut directly into the limestone under the watch-house. Cold. Lit by a thin greenish glow whose source the player cannot immediately locate. Against the far wall: a single stone sarcophagus on a raised platform, its lid askew. Carved into the platform's face, the Watch's laurel crest and the name ORICK HAVEL · LT · CROW'S HOLLOW · FELL IN THE FALLING WINTER. Standing between the platform and the stair, patient as a man waiting for a meeting, is the Lieutenant himself — or what is left of him. Tall. Grey. In the ruined half of a Warden's grey-blue coat. His eyes are the color of frozen water and he is looking directly at you. He has been looking at you for the entire time you have been descending the stair.",
+      "tags": ["boss", "encounter", "lore", "undead", "climax"],
+      "connections": {
+        "to_lantern_room": {
+          "label": "back up to the lantern room",
+          "to": "lantern_room",
+          "state": "open"
+        }
+      },
+      "environment": {
+        "name": "Necrotic Cold",
+        "description": "The air here draws warmth out of living things. The greenish light seems to come from nowhere — no torch, no lantern, no visible source — and falls most strongly on the sarcophagus.",
+        "effects": [
+          "Living creatures in the crypt take a small continuous chill; see the Crypt Chill hazard for mechanics.",
+          "Lanternblade's runes burn visibly brighter here. A player holding the blade will cast dim light regardless of any effort to cover it."
+        ]
+      },
+      "features": [
+        {
+          "id": "havel_sarcophagus",
+          "type": "lore",
+          "name": "Lt. Orick Havel's Sarcophagus",
+          "description": "A plain stone sarcophagus on a raised limestone platform, the lid pushed halfway off. Carved into the platform in the Watch's neat column-hand: ORICK HAVEL · LT · CROW'S HOLLOW · FELL IN THE FALLING WINTER. Beneath the name, in smaller script, the Watch's closing formula: MAY HE KEEP THE LIGHT AS HE KEPT US.",
+          "on_examine": "Inside the sarcophagus, what remains: a ruined grey-blue Warden's coat, a dried-up wreath of laurels, and — pressed against the inside of the stone lid where the Lieutenant clawed at it — the long thin mark of fingernails worn down to nothing. He was put in here alive. Someone sealed him before he was dead, and ran. The journal says his company was lost at the Blackfall; the sarcophagus says his company failed him one more time after that.",
+          "gm_notes": "The tragic beat of the module. The Lieutenant was sealed while still alive by panicking subordinates. This is what the closing phrase was supposed to have done — finish him properly. His rising as a wight is the result of the incomplete ritual. A player who grasps this before the fight may offer to speak the phrase over the sarcophagus after burning the body — allow a narrative alternative to pure combat, with the same completion effect."
+        }
+      ],
+      "encounters": [
+        {
+          "id": "warden_lieutenants_last_stand",
+          "name": "Lt. Orick Havel, of the Watch",
+          "groups": [
+            { "monster_ref": "warden_lieutenant_havel", "quantity": 1 }
+          ],
+          "trigger": { "type": "on_enter", "condition": null },
+          "placement": "Havel stands between the stair and the sarcophagus. He does not advance immediately — he waits until the player sets foot on the crypt floor. When he speaks, his voice still carries the authority of an officer. 'You wear the Light,' he may say to a player holding Warden gear. 'Then finish what my own would not.'",
+          "behavior": "Havel opens with the sword. He reserves Life Drain for a clearly-wounded target. If reduced below half HP, he retreats toward the sarcophagus and begins reciting the closing formula under his breath — narrate this; players who recognize the ritual may intervene by speaking the phrase with him, which counts as defeating the encounter without killing him narratively. If killed through normal combat, his body collapses and the greenish light fails as if a candle had been pinched out.",
+          "gm_notes": "This is the module's climax. The fight is deliberately tuned for a level-3 character with the Lanternblade: tough but winnable. Without the Lanternblade (or equivalent magic damage), the fight is unfair — the GM should telegraph the Lanternblade's significance throughout the module. Narrative-resolution (speaking the closing phrase with Havel) is a first-class alternative to pure combat and triggers the same rewards and completion.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": "4d6" },
+              { "type": "item", "item_id": "amulet_of_the_salamander", "quantity": 1 },
+              { "type": "item", "item_id": "rubbing_of_the_lantern_tree", "quantity": 1 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": [
+        {
+          "id": "crypt_chill",
+          "name": "Crypt Chill",
+          "description": "The greenish light in the crypt is not light. It is the absence of warmth, made visible by whatever keeps Havel standing. Living creatures in the chamber feel it draw heat out of their chest.",
+          "gm_notes": "Pure-avoidance hazard: no detection block. Triggers on entry, once per visit. Mechanically small but narratively important — it's a signal that the crypt itself is the problem, not only its occupant.",
+          "trigger": {
+            "type": "on_enter",
+            "target": null
+          },
+          "avoidance": {
+            "check": { "skill": null, "ability": "con", "dc_tier": "medium" },
+            "on_success": "You set your breath against the cold and cross the threshold; the chill passes over you like a shadow.",
+            "on_failure": {
+              "narration": "The cold reaches in behind your breastbone and takes a small slow handful. It does not feel like damage, exactly. It feels like forgetting something.",
+              "damage": { "amount": "1d4", "type": "necrotic" },
+              "conditions": []
+            }
+          },
+          "persists": false,
+          "resolved_by_detection": false
+        }
+      ]
+    }
+  },
+
+  "module_bestiary": {
+    "id": "crows_hollow_module_bestiary",
+    "name": "Crow's Hollow — Module Foes",
+    "description": "Unique foes specific to The Watch at Crow's Hollow. Module-scoped entries are resolved before the shared bestiary.",
+    "monsters": {
+      "warden_lieutenant_havel": {
+        "id": "warden_lieutenant_havel",
+        "name": "Lt. Orick Havel, of the Watch",
+        "description": "Tall, grey-skinned, still in the ruined half of a Warden-Lieutenant's grey-blue coat. The coat is buttoned correctly. The boots are polished — not recently, but once, properly, and no one has walked in them since. His eyes are the pale blue of ice in a drinking trough. When he speaks it is in the plain officer's column-voice of a Warden giving an order, and it is an uncomfortable thing to hear a voice be that alive coming from a face that is not.",
+        "type": "undead",
+        "hp": 55,
+        "ac": 15,
+        "attacks": [
+          {
+            "name": "Warden's Longsword",
+            "bonus": 5,
+            "damage": "1d8+3",
+            "damage_type": "slashing",
+            "range": "melee",
+            "on_hit": "On a critical hit, Havel narrates aloud the name of the soldier whose blow it was in imitation of — 'that's Velen's', or 'that's how Corporal Mooring did it' — GM prose. No mechanical effect beyond the crit itself."
+          },
+          {
+            "name": "Life Drain",
+            "bonus": 5,
+            "damage": "1d6+3",
+            "damage_type": "necrotic",
+            "range": "melee",
+            "on_hit": "Target makes a Constitution save (DC 13) or has their hit point maximum reduced by the damage dealt. The reduction lasts until the target finishes a long rest; if this reduces a target's maximum to 0, the target dies. Havel uses this only against a clearly wounded target — he prefers not to, and the narration should reflect the reluctance."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "sunlight_sensitivity",
+            "name": "Sunlight Sensitivity",
+            "description": "In direct sunlight, Havel has disadvantage on attack rolls and on Perception checks that rely on sight. The crypt is windowless; this almost never comes up.",
+            "type": "passive"
+          },
+          {
+            "id": "wardens_habit",
+            "name": "Warden's Habit",
+            "description": "Havel fights with the tactical discipline of an officer. He never targets a creature who has not attacked him; he prioritizes foes who handle the sarcophagus or desecrate Warden gear. When reduced to half HP or less, he retreats to the sarcophagus platform and begins reciting the Watch's closing formula under his breath. A player who recognizes the formula and speaks it aloud with him resolves the encounter without killing him narratively — his body returns to the sarcophagus, the light of the crypt fails, and the encounter counts as defeated for all purposes (XP, treasure, completion).",
+            "type": "triggered"
+          },
+          {
+            "id": "closing_phrase_vulnerability",
+            "name": "Unfinished",
+            "description": "Havel's undeath is caused specifically by an incomplete ritual. Any attempt by a player to speak the phrase 'WE KEEP THE LIGHT, AND THE LIGHT KEEPS US' at Havel directly, during combat, is treated as a standard action that provokes a Wisdom save from Havel (DC 12) — on a failure, he takes 2d8 radiant damage and loses his next turn; on a success, he shrugs it off but looks briefly more tired. GM narrates.",
+            "type": "active"
+          }
+        ],
+        "damage_resistance": ["necrotic", "slashing", "piercing", "bludgeoning"],
+        "damage_immunity": ["poison"],
+        "damage_vulnerability": ["radiant"],
+        "xp_value": 800,
+        "behavior": "Havel does not advance first. He waits, he speaks, and if the player attacks he fights with a sad competence. He does not pursue a fleeing target out of the crypt — he cannot leave the sarcophagus's orbit, and he knows it.",
+        "tactics": "Lanternblade-equipped players have a decisive advantage (radiant vulnerability + magical damage bypasses his physical resistances). Without the Lanternblade, wands, spells, or silvered weapons are essential — pure mundane steel will take a level-3 party apart. GM should telegraph the Lanternblade's relevance throughout the module so the player either carries it into the crypt or has time to go back for it. If the fight is clearly going wrong, soften: Havel may retreat early, giving the player a chance to regroup and return."
+      }
+    }
+  },
+
+  "completion_condition": {
+    "type": "defeat_encounter",
+    "target": "warden_lieutenants_last_stand"
+  }
+}

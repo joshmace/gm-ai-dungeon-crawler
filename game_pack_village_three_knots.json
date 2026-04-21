@@ -1,10 +1,14 @@
 {
-  "id": "village_three_knots",
+  "id": "three_knots_osr_v1",
   "name": "The Haunting of Three Knots",
-  "version": "1.0",
-  "setting": "./setting_shattered_realms.json",
-  "rules": "./rules.json",
-  "bestiary": "./monster_manual.json",
-  "adventure_module": "./module_village_three_knots.json",
-  "character": "./character_village_three_knots.json"
+  "version": "2.0",
+  "author": "Three Knots Project",
+  "description": "A B/X-flavored OSR starter pack for the AI Dungeon Crawler, set in the Shattered Realms a century after the Sundering. Clear a seven-room tomb, end the haunting, and lift the curse of the Dead King. A level-3 Fighter pregen (Valen Cross) is included.",
+
+  "rules":             "./rules_three_knots.json",
+  "setting":           "./setting_shattered_realms.json",
+  "bestiary":          "./bestiary_three_knots.json",
+  "items":             "./items_three_knots.json",
+  "adventure_module":  "./module_village_three_knots.json",
+  "character":         "./character_village_three_knots.json"
 }

@@ -229,6 +229,8 @@ These 16 features are prioritized so you can run and test longer adventures. Ord
 
 ## Ideas Pending Categorization
 
+- **Caster pregen for the Gauntlet test hub.** The Gauntlet ships with a Fighter pregen (Aldric) to exercise combat, hazards, and equipment flows. A second pregen — a Cleric or Magic-User — is needed to cover spellcasting, spell slots, per-rest recharge, and save-or-suffer rider adjudication. Add after task #4 (rules-engine refactor), once spell resolution is stable.
+
 *(New ideas will be added here, then sorted into categories above)*
 
 ---

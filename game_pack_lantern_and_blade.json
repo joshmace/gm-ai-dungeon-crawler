@@ -1,0 +1,14 @@
+{
+  "id": "lantern_and_blade_starter_v1",
+  "name": "Lantern & Blade: The Watch at Crow's Hollow",
+  "version": "1.0",
+  "author": "Lantern & Blade Project",
+  "description": "A starter Game Pack for Lantern & Blade — a 5e-shaped d20 ruleset for heroic dungeon play, set in The Hollowmarch a century after the Wardens of the Watch were broken. Includes a six-room undead-haunted dungeon (The Watch at Crow's Hollow) and a level-3 pregen Fighter (Ren Callory) tuned to play it solo in 75–90 minutes.",
+
+  "rules":             "./rules_lantern_and_blade.json",
+  "setting":           "./setting_hollowmarch.json",
+  "bestiary":          "./bestiary_lantern_and_blade.json",
+  "items":             "./items_lantern_and_blade.json",
+  "adventure_module":  "./module_crows_hollow.json",
+  "character":         "./character_ren_callory.json"
+}

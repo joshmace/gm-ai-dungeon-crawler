@@ -1,153 +1,1592 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>JSON Validator</title>
+    <meta charset="UTF-8">
+    <title>Game Pack Validator</title>
     <style>
         body {
             font-family: monospace;
             padding: 20px;
             background: #1a1410;
             color: #e8dcc4;
-        }
-        .test {
-            margin: 10px 0;
-            padding: 15px;
-            background: #2a1f15;
-            border-left: 3px solid #5a4a3a;
-            border-radius: 4px;
-        }
-        .success {
-            border-left-color: #50c050;
-        }
-        .error {
-            border-left-color: #c85050;
-        }
-        .warning {
-            border-left-color: #f0a000;
-        }
-        pre {
-            background: #0a0a0a;
-            padding: 10px;
-            overflow-x: auto;
-            max-height: 300px;
-            border-radius: 3px;
+            max-width: 1100px;
+            margin: 0 auto;
         }
         h1 {
             color: #d4af37;
+            margin: 0 0 4px 0;
         }
-        .summary {
-            background: #3d2f1f;
+        .subtitle {
+            color: #a0907a;
+            margin: 0 0 20px 0;
+        }
+        code {
+            color: #d4af37;
+        }
+        .picker {
+            background: #2a1f15;
+            border-left: 3px solid #5a4a3a;
             padding: 15px;
             border-radius: 4px;
-            margin: 20px 0;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .picker label {
+            color: #a0907a;
+        }
+        .picker select,
+        .picker input {
+            font-family: monospace;
+            background: #1a1410;
+            color: #e8dcc4;
+            border: 1px solid #5a4a3a;
+            padding: 6px 8px;
+            border-radius: 3px;
+        }
+        .picker input {
+            flex: 1;
+            min-width: 280px;
+        }
+        .picker button {
+            font-family: monospace;
+            background: #d4af37;
+            color: #1a1410;
+            border: 0;
+            padding: 6px 16px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .picker button:hover:not(:disabled) {
+            background: #e8c04a;
+        }
+        .picker button:disabled {
+            background: #5a4a3a;
+            color: #a0907a;
+            cursor: not-allowed;
+        }
+        .summary {
+            background: #2a1f15;
+            border-left: 3px solid #d4af37;
+            border-radius: 4px;
+            padding: 12px 15px;
+            margin-bottom: 12px;
+        }
+        .summary .summary-line {
+            font-weight: bold;
+            font-size: 1.05em;
+        }
+        .summary .summary-counts {
+            color: #a0907a;
+            margin-top: 4px;
+        }
+        .summary .muted {
+            color: #a0907a;
+            font-weight: normal;
+        }
+        .summary .status-ok   { color: #50c050; }
+        .summary .status-err  { color: #c85050; }
+        .summary .status-warn { color: #f0a000; }
+        .section {
+            background: #2a1f15;
+            border-left: 3px solid #5a4a3a;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+        .section.errors { border-left-color: #c85050; }
+        .section.warnings { border-left-color: #f0a000; }
+        .section.info { border-left-color: #50a0c0; }
+        .section-header {
+            padding: 10px 15px;
+            cursor: pointer;
+            user-select: none;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-header .count {
+            color: #a0907a;
+            font-weight: normal;
+        }
+        .section.errors .section-header .count { color: #c85050; }
+        .section.warnings .section-header .count { color: #f0a000; }
+        .section-body {
+            padding: 0 15px 12px 15px;
+            display: none;
+        }
+        .section.open .section-body {
+            display: block;
+        }
+        .finding {
+            padding: 8px 0;
+            border-bottom: 1px solid #3d2f1f;
+            line-height: 1.5;
+        }
+        .finding:last-child { border-bottom: 0; }
+        .finding .loc {
+            color: #a0907a;
+            font-size: 0.9em;
+        }
+        .finding .msg {
+            color: #e8dcc4;
+        }
+        .placeholder {
+            color: #a0907a;
+            padding: 20px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <h1>🔍 JSON Validator</h1>
-    <p>Checking all JSON files for syntax errors...</p>
-    <div id="results"></div>
-    <div id="summary"></div>
+    <h1>Game Pack Validator</h1>
+    <p class="subtitle">Loads a pack manifest and validates it against the v1 schema (see <code>JSON_SCHEMAS.md</code>).</p>
+
+    <div class="picker">
+        <label for="pack-select">Pack:</label>
+        <select id="pack-select">
+            <option value="game_pack_lantern_and_blade.json">Lantern &amp; Blade</option>
+            <option value="game_pack_village_three_knots.json">Three Knots</option>
+            <option value="game_pack.json">Rules Test Hub</option>
+            <option value="">&mdash; custom &mdash;</option>
+        </select>
+        <input type="text" id="pack-path" value="game_pack_lantern_and_blade.json" placeholder="manifest path">
+        <button id="validate-btn">Validate</button>
+    </div>
+
+    <div id="results">
+        <div class="placeholder">Pick a pack and click Validate.</div>
+    </div>
 
     <script>
-        const files = [
-            'character_aldric.json',
-            'test_module_arena.json',
-            'monster_manual.json',
-            'rules.json'
-        ];
+        // Archetype keys on the manifest, in display order.
+        const ARCHETYPES = ['rules', 'setting', 'bestiary', 'items', 'adventure_module', 'character'];
 
-        let totalTests = 0;
-        let passedTests = 0;
-        let failedTests = 0;
+        const packSelect = document.getElementById('pack-select');
+        const packPath = document.getElementById('pack-path');
+        const validateBtn = document.getElementById('validate-btn');
 
-        async function validateFile(filename) {
-            totalTests++;
-            const resultsDiv = document.getElementById('results');
-            const testDiv = document.createElement('div');
-            testDiv.className = 'test';
-            testDiv.innerHTML = `<strong>📄 ${filename}</strong><br>`;
-            resultsDiv.appendChild(testDiv);
+        // Keep the dropdown and text box in sync. Picking a preset fills the box;
+        // typing a non-preset value flips the dropdown to "custom".
+        packSelect.addEventListener('change', () => {
+            if (packSelect.value) packPath.value = packSelect.value;
+        });
+        packPath.addEventListener('input', () => {
+            const match = Array.from(packSelect.options).find(o => o.value === packPath.value);
+            packSelect.value = match ? packPath.value : '';
+        });
 
+        validateBtn.addEventListener('click', runValidation);
+
+        async function runValidation() {
+            const path = packPath.value.trim();
+            if (!path) {
+                render({ errors: [{ msg: 'Manifest path is empty.' }], warnings: [], info: [] });
+                return;
+            }
+            validateBtn.disabled = true;
+            validateBtn.textContent = 'Validating...';
             try {
-                // Step 1: Fetch the file
-                testDiv.innerHTML += `⏳ Fetching...<br>`;
-                const response = await fetch(`./${filename}`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                // Step 2: Get as text first to see raw content
-                const rawText = await response.text();
-                testDiv.innerHTML += `✓ Fetched (${rawText.length} bytes)<br>`;
-
-                // Show first 200 chars
-                testDiv.innerHTML += `<pre>First 200 chars:\n${rawText.substring(0, 200)}...</pre>`;
-
-                // Step 3: Try to parse as JSON
-                testDiv.innerHTML += `⏳ Parsing JSON...<br>`;
-                const data = JSON.parse(rawText);
-                
-                // Step 4: Validate structure
-                testDiv.className = 'test success';
-                testDiv.innerHTML += `✅ <strong>VALID JSON</strong><br>`;
-                testDiv.innerHTML += `Structure: ${Object.keys(data).join(', ')}<br>`;
-                
-                // Show preview
-                const preview = JSON.stringify(data, null, 2).substring(0, 500);
-                testDiv.innerHTML += `<pre>Preview:\n${preview}...\n</pre>`;
-                
-                passedTests++;
-                
-            } catch (error) {
-                failedTests++;
-                testDiv.className = 'test error';
-                testDiv.innerHTML += `❌ <strong>FAILED</strong><br>`;
-                testDiv.innerHTML += `<strong>Error Type:</strong> ${error.name}<br>`;
-                testDiv.innerHTML += `<strong>Error Message:</strong> ${error.message}<br>`;
-                
-                // Try to show where the error is
-                if (error instanceof SyntaxError) {
-                    testDiv.innerHTML += `<br><strong>This is a JSON syntax error!</strong><br>`;
-                    testDiv.innerHTML += `The file contains invalid JSON syntax.<br>`;
-                    testDiv.innerHTML += `<br><strong>Common causes:</strong><br>`;
-                    testDiv.innerHTML += `• Trailing comma in array or object<br>`;
-                    testDiv.innerHTML += `• Missing quote marks<br>`;
-                    testDiv.innerHTML += `• Unescaped special characters<br>`;
-                    testDiv.innerHTML += `• Comments (JSON doesn't allow comments)<br>`;
-                }
-                
-                testDiv.innerHTML += `<pre>${error.stack}</pre>`;
+                const result = await validate(path);
+                render(result);
+            } finally {
+                validateBtn.disabled = false;
+                validateBtn.textContent = 'Validate';
             }
         }
 
-        async function runTests() {
-            for (const file of files) {
-                await validateFile(file);
+        // Manifests use "./foo.json" — strip the leading "./" for fetch.
+        function resolvePath(ref) {
+            if (typeof ref !== 'string') return null;
+            return ref.replace(/^\.\//, '');
+        }
+
+        // Returns { ok, data?, raw?, error? }.
+        async function fetchJson(path) {
+            let response;
+            try {
+                response = await fetch('./' + path);
+            } catch (e) {
+                return { ok: false, error: `network error — ${e.message}` };
             }
-            
-            // Summary
-            const summaryDiv = document.getElementById('summary');
-            summaryDiv.className = 'summary';
-            
-            if (failedTests === 0) {
-                summaryDiv.innerHTML = `
-                    <h2 style="color: #50c050;">✅ All JSON Files Valid!</h2>
-                    <p>All ${totalTests} files passed validation.</p>
-                    <p><strong>Next step:</strong> The error must be in how the data is being loaded. Check the browser console for more details.</p>
-                `;
+            if (!response.ok) {
+                return { ok: false, error: `HTTP ${response.status} ${response.statusText}` };
+            }
+            const raw = await response.text();
+            try {
+                return { ok: true, data: JSON.parse(raw), raw };
+            } catch (e) {
+                return { ok: false, raw, error: `parse error — ${e.message}` };
+            }
+        }
+
+        // Orchestrates the load + parse passes. Later chunks add semantic passes.
+        async function validate(manifestPath) {
+            const errors = [];
+            const warnings = [];
+            const info = [];
+
+            // Load pass: manifest.
+            const manifestRes = await fetchJson(manifestPath);
+            if (!manifestRes.ok) {
+                errors.push({
+                    file: manifestPath,
+                    loc: '(manifest)',
+                    msg: `Could not load manifest — ${manifestRes.error}`
+                });
+                return { errors, warnings, info };
+            }
+            const manifest = manifestRes.data;
+            info.push({
+                file: manifestPath,
+                loc: 'manifest',
+                msg: `loaded — id="${manifest.id || '(missing)'}" · ${manifestRes.raw.length} bytes`
+            });
+
+            // Load pass: archetype files.
+            const files = {};
+            for (const key of ARCHETYPES) {
+                const ref = manifest[key];
+                if (!ref) {
+                    files[key] = { path: null, ok: false, error: 'not referenced in manifest' };
+                    errors.push({
+                        file: manifestPath,
+                        loc: key,
+                        msg: `Manifest is missing the "${key}" reference.`
+                    });
+                    continue;
+                }
+                const resolved = resolvePath(ref);
+                const res = await fetchJson(resolved);
+                files[key] = { path: resolved, ...res };
+
+                if (!res.ok) {
+                    errors.push({
+                        file: resolved,
+                        loc: key,
+                        msg: res.error
+                    });
+                    continue;
+                }
+                info.push({
+                    file: resolved,
+                    loc: key,
+                    msg: `loaded — ${res.raw.length} bytes · top-level: ${topLevelSummary(res.data)}`
+                });
+            }
+
+            // Required-field pass.
+            checkManifestRequired(manifest, manifestPath, errors);
+            if (files.setting          && files.setting.ok)          checkSettingRequired(files.setting, errors);
+            if (files.rules            && files.rules.ok)            checkRulesRequired(files.rules, errors);
+            if (files.bestiary         && files.bestiary.ok)         checkBestiaryRequired(files.bestiary, errors);
+            if (files.items            && files.items.ok)            checkItemsRequired(files.items, errors);
+            if (files.adventure_module && files.adventure_module.ok) checkModuleRequired(files.adventure_module, errors);
+            if (files.character        && files.character.ok)        checkCharacterRequired(files.character, errors);
+
+            // Archetype-specific rules pass.
+            if (files.items            && files.items.ok)            checkItemsArchetype(files.items, errors);
+            if (files.adventure_module && files.adventure_module.ok) checkModuleArchetype(files.adventure_module, errors, warnings);
+
+            // Reference-integrity pass (cross-file).
+            checkReferenceIntegrity(files, manifest, manifestPath, errors);
+
+            // Warnings pass (non-fatal authoring hints).
+            checkWarnings(files, warnings);
+
+            return { manifest, manifestPath, files, errors, warnings, info };
+        }
+
+        // --- Warnings pass --------------------------------------------------
+
+        // v1 controlled vocabularies — see JSON_SCHEMAS.md §"Controlled vocabularies".
+        const CONDITION_ICON_IDS = new Set([
+            'skull', 'drop', 'fire', 'eye', 'chains', 'heart', 'lightning', 'moon',
+            'falling', 'snowflake', 'sun', 'shield', 'sword', 'hand', 'swirl', 'ear', 'stone'
+        ]);
+        const ON_USE_KEYWORDS = new Set([
+            'heal_player', 'cure_condition', 'gm_adjudicate'
+        ]);
+
+        function checkWarnings(files, warnings) {
+            const rulesF    = files.rules            && files.rules.ok            ? files.rules            : null;
+            const itemsF    = files.items            && files.items.ok            ? files.items            : null;
+            const bestiaryF = files.bestiary         && files.bestiary.ok         ? files.bestiary         : null;
+            const moduleF   = files.adventure_module && files.adventure_module.ok ? files.adventure_module : null;
+            const rules     = rulesF    ? rulesF.data.rules             : null;
+            const items     = itemsF    ? itemsF.data.items_library     : null;
+            const bestiary  = bestiaryF ? bestiaryF.data.bestiary       : null;
+            const module_   = moduleF   ? moduleF.data                  : null;
+
+            // Condition icon ids: warn on unrecognized values (runtime falls back to skull).
+            if (rules && Array.isArray(rules.conditions)) {
+                rules.conditions.forEach((c, i) => {
+                    if (c && c.icon && !CONDITION_ICON_IDS.has(c.icon)) {
+                        warnings.push({ file: rulesF.path,
+                            loc: `rules.conditions[${i}]${c.id ? ` (${c.id})` : ''}.icon`,
+                            msg: `icon "${c.icon}" is not in the v1 library — runtime will fall back to "skull"` });
+                    }
+                });
+            }
+
+            // Consumable on_use keywords: warn on unrecognized values (runtime falls back to gm_adjudicate).
+            const checkOnUse = (itemsObj, file, locPrefix) => {
+                if (!itemsObj) return;
+                for (const [key, item] of Object.entries(itemsObj)) {
+                    if (item && item.type === 'consumable' && item.consumable && item.consumable.on_use
+                        && !ON_USE_KEYWORDS.has(item.consumable.on_use)) {
+                        warnings.push({ file, loc: `${locPrefix}.${key}.consumable.on_use`,
+                            msg: `on_use "${item.consumable.on_use}" is not in the v1 keyword set — runtime will fall back to "gm_adjudicate"` });
+                    }
+                }
+            };
+            if (items) checkOnUse(items.items, itemsF.path, 'items_library.items');
+            if (module_ && module_.module_items) {
+                checkOnUse(module_.module_items.items, moduleF.path, 'module_items.items');
+            }
+
+            // Reachability from starting_room via the connection graph.
+            // Structural only — locked and hidden connections count as traversable
+            // for topology purposes (the player can unlock or reveal them).
+            if (module_ && module_.rooms && module_.module && module_.module.starting_room) {
+                const start = module_.module.starting_room;
+                if (module_.rooms[start]) {
+                    const reachable = new Set([start]);
+                    const queue = [start];
+                    while (queue.length > 0) {
+                        const rid = queue.shift();
+                        const room = module_.rooms[rid];
+                        if (!room || !room.connections) continue;
+                        for (const conn of Object.values(room.connections)) {
+                            const target = typeof conn === 'string' ? conn : conn && conn.to;
+                            if (target && module_.rooms[target] && !reachable.has(target)) {
+                                reachable.add(target);
+                                queue.push(target);
+                            }
+                        }
+                    }
+                    for (const rid of Object.keys(module_.rooms)) {
+                        if (!reachable.has(rid)) {
+                            warnings.push({ file: moduleF.path, loc: `rooms.${rid}`,
+                                msg: `room is not reachable from starting_room "${start}" via any connection chain` });
+                        }
+                    }
+                }
+            }
+
+            // Monsters with empty attacks[] — technically valid, usually an oversight.
+            const walkMonsters = (monsters, file, locPrefix) => {
+                if (!monsters) return;
+                for (const [key, m] of Object.entries(monsters)) {
+                    if (Array.isArray(m.attacks) && m.attacks.length === 0) {
+                        warnings.push({ file, loc: `${locPrefix}.${key}.attacks`,
+                            msg: `empty — valid but usually an oversight; environmental foes can omit this intentionally` });
+                    }
+                }
+            };
+            if (bestiary) walkMonsters(bestiary.monsters, bestiaryF.path, 'bestiary.monsters');
+            if (module_ && module_.module_bestiary) {
+                walkMonsters(module_.module_bestiary.monsters, moduleF.path, 'module_bestiary.monsters');
+            }
+
+            // Per-room content walk for hazard + encounter warnings.
+            if (module_ && module_.rooms) {
+                for (const [roomKey, room] of Object.entries(module_.rooms)) {
+                    // Hazards with neither detection nor avoidance.
+                    if (Array.isArray(room.hazards)) {
+                        room.hazards.forEach((h, i) => {
+                            if (!h.detection && !h.avoidance) {
+                                const loc = `rooms.${roomKey}.hazards[${i}]${h.id ? ` (${h.id})` : ''}`;
+                                warnings.push({ file: moduleF.path, loc,
+                                    msg: `no detection or avoidance block — hazard will auto-fire; intentional "automatic" shape or missing block?` });
+                            }
+                        });
+                    }
+
+                    // Encounter groups carrying inline stat data alongside monster_ref.
+                    if (Array.isArray(room.encounters)) {
+                        room.encounters.forEach((enc, i) => {
+                            if (!Array.isArray(enc.groups)) return;
+                            enc.groups.forEach((g, gi) => {
+                                if (!g || typeof g !== 'object') return;
+                                const extras = Object.keys(g).filter(k => k !== 'monster_ref' && k !== 'quantity');
+                                if (extras.length > 0) {
+                                    const loc = `rooms.${roomKey}.encounters[${i}]${enc.id ? ` (${enc.id})` : ''}.groups[${gi}]`;
+                                    warnings.push({ file: moduleF.path, loc,
+                                        msg: `inline stat fields (${extras.join(', ')}) — move to module_bestiary and keep only monster_ref + quantity on the group` });
+                                }
+                            });
+                        });
+                    }
+                }
+            }
+        }
+
+        // --- Reference-integrity pass ---------------------------------------
+
+        // Walks every cross-file reference in the pack and pushes an error for
+        // any unresolved id. Indexes are built once and reused across checks.
+        function checkReferenceIntegrity(files, manifest, manifestPath, errors) {
+            const rulesF     = files.rules            && files.rules.ok            ? files.rules            : null;
+            const bestiaryF  = files.bestiary         && files.bestiary.ok         ? files.bestiary         : null;
+            const itemsF     = files.items            && files.items.ok            ? files.items            : null;
+            const moduleF    = files.adventure_module && files.adventure_module.ok ? files.adventure_module : null;
+            const characterF = files.character        && files.character.ok        ? files.character        : null;
+
+            const rules     = rulesF     ? rulesF.data.rules             : null;
+            const bestiary  = bestiaryF  ? bestiaryF.data.bestiary       : null;
+            const items     = itemsF     ? itemsF.data.items_library     : null;
+            const module_   = moduleF    ? moduleF.data                  : null;
+            const character = characterF ? characterF.data.character     : null;
+
+            // --- Build indexes ---
+            const conditionIds = rules && Array.isArray(rules.conditions)
+                ? new Set(rules.conditions.map(c => c.id).filter(Boolean))
+                : new Set();
+
+            // null when the pack declares no damage types (typeless system).
+            const damageTypeIds = rules && rules.resources && Array.isArray(rules.resources.damage_types)
+                ? new Set(rules.resources.damage_types.map(d => d.id).filter(Boolean))
+                : null;
+
+            const abilityIds = rules && rules.character_model && Array.isArray(rules.character_model.abilities)
+                ? new Set(rules.character_model.abilities.map(a => a.id).filter(Boolean))
+                : new Set();
+
+            const skillIds = rules && rules.character_model && Array.isArray(rules.character_model.skills)
+                ? new Set(rules.character_model.skills.map(s => s.id).filter(Boolean))
+                : new Set();
+
+            // "all" is a reserved shortcut in save_bonus — counts as valid.
+            const saveIds = (() => {
+                if (!rules || !rules.character_model || !rules.character_model.saves) return abilityIds;
+                const type = rules.character_model.saves.type;
+                if (type === 'per_ability') return abilityIds;
+                if (type === 'categorical' && Array.isArray(rules.character_model.saves.categories)) {
+                    return new Set(rules.character_model.saves.categories.map(c => c.id).filter(Boolean));
+                }
+                return abilityIds;
+            })();
+
+            const dcTierIds = rules && rules.difficulty && Array.isArray(rules.difficulty.scale)
+                ? new Set(rules.difficulty.scale.map(s => s.id).filter(Boolean))
+                : new Set();
+
+            const classIds = rules && rules.character_model && rules.character_model.classes
+                ? new Set(Object.keys(rules.character_model.classes))
+                : new Set();
+
+            const roomIds = module_ && module_.rooms ? new Set(Object.keys(module_.rooms)) : new Set();
+
+            // Connection ids indexed by owning room (since effects scope to their room).
+            const connectionsByRoom = {};
+            if (module_ && module_.rooms) {
+                for (const [rid, room] of Object.entries(module_.rooms)) {
+                    connectionsByRoom[rid] = new Set(room.connections ? Object.keys(room.connections) : []);
+                }
+            }
+
+            // Feature + encounter ids (global across the module).
+            const featureIds = new Set();
+            const encounterIds = new Set();
+            const featureTypeById = {}; // id → type; used later for prereq validation
+            if (module_ && module_.rooms) {
+                for (const room of Object.values(module_.rooms)) {
+                    if (Array.isArray(room.features)) {
+                        for (const f of room.features) {
+                            if (f && f.id) { featureIds.add(f.id); featureTypeById[f.id] = f.type; }
+                        }
+                    }
+                    if (Array.isArray(room.encounters)) {
+                        for (const e of room.encounters) if (e && e.id) encounterIds.add(e.id);
+                    }
+                }
+            }
+
+            // Monster ids: union of module_bestiary (first) + shared bestiary.
+            const monsterIds = new Set();
+            if (module_ && module_.module_bestiary && module_.module_bestiary.monsters) {
+                for (const id of Object.keys(module_.module_bestiary.monsters)) monsterIds.add(id);
+            }
+            if (bestiary && bestiary.monsters) {
+                for (const id of Object.keys(bestiary.monsters)) monsterIds.add(id);
+            }
+
+            // Item ids: union of module_items (first) + shared items_library.
+            const itemIdsIndex = new Set();
+            if (module_ && module_.module_items && module_.module_items.items) {
+                for (const id of Object.keys(module_.module_items.items)) itemIdsIndex.add(id);
+            }
+            if (items && items.items) {
+                for (const id of Object.keys(items.items)) itemIdsIndex.add(id);
+            }
+
+            // Item-type index — needed for slot validation on character.equipment.
+            const itemTypeById = {};
+            if (module_ && module_.module_items && module_.module_items.items) {
+                for (const [id, it] of Object.entries(module_.module_items.items)) itemTypeById[id] = it.type;
+            }
+            if (items && items.items) {
+                for (const [id, it] of Object.entries(items.items)) {
+                    if (itemTypeById[id] === undefined) itemTypeById[id] = it.type;
+                }
+            }
+
+            const SLOT_ENUM = {
+                weapon: new Set(['main_hand', 'off_hand', 'two_handed', 'ranged']),
+                armor:  new Set(['body', 'shield', 'head', 'hands', 'feet', 'neck', 'ring', 'cloak', 'belt'])
+            };
+
+            // --- Character refs ---
+            if (character) {
+                const file = characterF.path;
+
+                // game_pack_id must match manifest.id.
+                if (manifest && manifest.id && character.game_pack_id && character.game_pack_id !== manifest.id) {
+                    errors.push({ file, loc: 'character.game_pack_id',
+                        msg: `value "${character.game_pack_id}" does not match manifest id "${manifest.id}"` });
+                }
+
+                // Class id must resolve (when the rules pack uses classes).
+                if (rules && rules.character_model && rules.character_model.uses_classes
+                    && character.basic_info && character.basic_info.class
+                    && classIds.size > 0 && !classIds.has(character.basic_info.class)) {
+                    errors.push({ file, loc: 'character.basic_info.class',
+                        msg: `class "${character.basic_info.class}" not declared in rules.character_model.classes` });
+                }
+
+                // Ability-score keys must resolve.
+                if (character.ability_scores && abilityIds.size > 0) {
+                    for (const key of Object.keys(character.ability_scores)) {
+                        if (!abilityIds.has(key)) {
+                            errors.push({ file, loc: `character.ability_scores.${key}`,
+                                msg: `ability id "${key}" not declared in rules.character_model.abilities` });
+                        }
+                    }
+                }
+
+                // Saves: shape depends on rules.saves.type.
+                const rulesSavesType = rules && rules.character_model && rules.character_model.saves
+                    ? rules.character_model.saves.type
+                    : null;
+
+                if (character.saves && rulesSavesType === 'categorical') {
+                    // "values" required; "proficient" must not be present.
+                    if (!character.saves.values || typeof character.saves.values !== 'object'
+                        || Array.isArray(character.saves.values)) {
+                        errors.push({ file, loc: 'character.saves.values',
+                            msg: `required object (keyed by category id) when rules.saves.type is "categorical"` });
+                    } else {
+                        // Every declared category must have a numeric value; every key must resolve.
+                        const declared = saveIds;
+                        const present  = new Set(Object.keys(character.saves.values));
+                        declared.forEach(cid => {
+                            if (!present.has(cid)) {
+                                errors.push({ file, loc: `character.saves.values.${cid}`,
+                                    msg: `missing save target for category "${cid}" declared in rules.character_model.saves.categories` });
+                            }
+                        });
+                        for (const [k, v] of Object.entries(character.saves.values)) {
+                            if (!declared.has(k)) {
+                                errors.push({ file, loc: `character.saves.values.${k}`,
+                                    msg: `save category "${k}" not declared in rules.character_model.saves.categories` });
+                            }
+                            if (typeof v !== 'number' || !Number.isInteger(v)) {
+                                errors.push({ file, loc: `character.saves.values.${k}`,
+                                    msg: `save target must be an integer; got ${JSON.stringify(v)}` });
+                            }
+                        }
+                    }
+                    if (Array.isArray(character.saves.proficient)) {
+                        errors.push({ file, loc: 'character.saves.proficient',
+                            msg: `"proficient" is only valid when rules.saves.type is "per_ability"; use "values" for categorical saves` });
+                    }
+                } else if (character.saves && rulesSavesType === 'per_ability') {
+                    // "proficient" required; "values" must not be present.
+                    if (!Array.isArray(character.saves.proficient)) {
+                        errors.push({ file, loc: 'character.saves.proficient',
+                            msg: `required array (of ability ids) when rules.saves.type is "per_ability"` });
+                    } else if (saveIds.size > 0) {
+                        character.saves.proficient.forEach((sid, i) => {
+                            if (!saveIds.has(sid)) {
+                                errors.push({ file, loc: `character.saves.proficient[${i}]`,
+                                    msg: `save id "${sid}" not declared in rules.character_model` });
+                            }
+                        });
+                    }
+                    if (character.saves.values !== undefined) {
+                        errors.push({ file, loc: 'character.saves.values',
+                            msg: `"values" is only valid when rules.saves.type is "categorical"; use "proficient" for per-ability saves` });
+                    }
+                } else if (character.saves && Array.isArray(character.saves.proficient) && saveIds.size > 0) {
+                    // Rules type not declared — fall back to the existing proficient-id check.
+                    character.saves.proficient.forEach((sid, i) => {
+                        if (!saveIds.has(sid)) {
+                            errors.push({ file, loc: `character.saves.proficient[${i}]`,
+                                msg: `save id "${sid}" not declared in rules.character_model` });
+                        }
+                    });
+                }
+
+                // Skills.proficient ids must resolve.
+                if (character.skills && Array.isArray(character.skills.proficient) && skillIds.size > 0) {
+                    character.skills.proficient.forEach((sid, i) => {
+                        if (!skillIds.has(sid)) {
+                            errors.push({ file, loc: `character.skills.proficient[${i}]`,
+                                msg: `skill id "${sid}" not declared in rules.character_model.skills` });
+                        }
+                    });
+                }
+
+                // Equipment: item_ids resolve, slots are valid for their types.
+                if (Array.isArray(character.equipment)) {
+                    character.equipment.forEach((eq, i) => {
+                        const loc = `character.equipment[${i}]`;
+                        if (eq.item_id && !itemIdsIndex.has(eq.item_id)) {
+                            errors.push({ file, loc: `${loc}.item_id`,
+                                msg: `item_id "${eq.item_id}" not found in items_library or module_items` });
+                        } else if (eq.item_id && eq.slot) {
+                            const type = itemTypeById[eq.item_id];
+                            if (type && SLOT_ENUM[type] && !SLOT_ENUM[type].has(eq.slot)) {
+                                errors.push({ file, loc: `${loc}.slot`,
+                                    msg: `slot "${eq.slot}" is not valid for item "${eq.item_id}" (type "${type}")` });
+                            } else if (type && !SLOT_ENUM[type] && eq.slot) {
+                                errors.push({ file, loc: `${loc}.slot`,
+                                    msg: `item "${eq.item_id}" (type "${type}") should not be equipped to a slot` });
+                            }
+                        }
+                    });
+                }
+
+                // Pack: item_ids resolve.
+                if (Array.isArray(character.pack)) {
+                    character.pack.forEach((p, i) => {
+                        if (p.item_id && !itemIdsIndex.has(p.item_id)) {
+                            errors.push({ file, loc: `character.pack[${i}].item_id`,
+                                msg: `item_id "${p.item_id}" not found in items_library or module_items` });
+                        }
+                    });
+                }
+
+                // Charged items keys resolve.
+                if (character.charged_items && typeof character.charged_items === 'object') {
+                    for (const id of Object.keys(character.charged_items)) {
+                        if (!itemIdsIndex.has(id)) {
+                            errors.push({ file, loc: `character.charged_items.${id}`,
+                                msg: `item_id "${id}" not found in items_library or module_items` });
+                        }
+                    }
+                }
+
+                // Active condition ids resolve.
+                if (Array.isArray(character.conditions) && conditionIds.size > 0) {
+                    character.conditions.forEach((cid, i) => {
+                        if (!conditionIds.has(cid)) {
+                            errors.push({ file, loc: `character.conditions[${i}]`,
+                                msg: `condition id "${cid}" not declared in rules.conditions` });
+                        }
+                    });
+                }
+            }
+
+            // --- Module refs ---
+            if (module_) {
+                const file = moduleF.path;
+
+                // starting_room resolves.
+                if (module_.module && module_.module.starting_room
+                    && !roomIds.has(module_.module.starting_room)) {
+                    errors.push({ file, loc: 'module.starting_room',
+                        msg: `room id "${module_.module.starting_room}" is not declared in rooms{}` });
+                }
+
+                // completion_condition.target resolves per type.
+                const cc = module_.completion_condition;
+                if (cc && cc.target) {
+                    if (cc.type === 'defeat_encounter' && !encounterIds.has(cc.target)) {
+                        errors.push({ file, loc: 'completion_condition.target',
+                            msg: `encounter id "${cc.target}" is not declared in any room's encounters[]` });
+                    }
+                    if (cc.type === 'reach_room' && !roomIds.has(cc.target)) {
+                        errors.push({ file, loc: 'completion_condition.target',
+                            msg: `room id "${cc.target}" is not declared in rooms{}` });
+                    }
+                }
+
+                // Per-room walks.
+                for (const [roomKey, room] of Object.entries(module_.rooms || {})) {
+                    const roomConnIds = connectionsByRoom[roomKey] || new Set();
+
+                    // Connection `to` targets resolve.
+                    if (room.connections && typeof room.connections === 'object') {
+                        for (const [connKey, conn] of Object.entries(room.connections)) {
+                            const target = typeof conn === 'string' ? conn : conn && conn.to;
+                            if (target && !roomIds.has(target)) {
+                                errors.push({ file, loc: `rooms.${roomKey}.connections.${connKey}`,
+                                    msg: `target room id "${target}" is not declared in rooms{}` });
+                            }
+                        }
+                    }
+
+                    // Features: dc_tier, prereqs, effects, rewards.
+                    if (Array.isArray(room.features)) {
+                        room.features.forEach((feat, i) => {
+                            const loc = `rooms.${roomKey}.features[${i}]${feat && feat.id ? ` (${feat.id})` : ''}`;
+                            checkDcTiersIn(feat, file, loc, dcTierIds, errors);
+                            checkFeaturePrereqs(feat, file, loc, featureIds, featureTypeById, encounterIds, errors);
+                            // Effects and rewards live across sub-types; walk generically.
+                            collectEffects(feat).forEach(({ node, path }) =>
+                                checkEffect(node, file, `${loc}.${path}`, roomConnIds, featureIds, errors));
+                            collectRewards(feat).forEach(({ node, path }) =>
+                                checkReward(node, file, `${loc}.${path}`, itemIdsIndex, errors));
+                        });
+                    }
+
+                    // Encounters: monster_refs, rewards, on_defeat_effects, trigger.
+                    if (Array.isArray(room.encounters)) {
+                        room.encounters.forEach((enc, i) => {
+                            const loc = `rooms.${roomKey}.encounters[${i}]${enc && enc.id ? ` (${enc.id})` : ''}`;
+                            if (Array.isArray(enc.groups)) {
+                                enc.groups.forEach((g, gi) => {
+                                    if (g && g.monster_ref && !monsterIds.has(g.monster_ref)) {
+                                        errors.push({ file, loc: `${loc}.groups[${gi}].monster_ref`,
+                                            msg: `monster_ref "${g.monster_ref}" not found in bestiary or module_bestiary` });
+                                    }
+                                });
+                            }
+                            if (enc.rewards && Array.isArray(enc.rewards.treasure)) {
+                                enc.rewards.treasure.forEach((rw, ri) =>
+                                    checkReward(rw, file, `${loc}.rewards.treasure[${ri}]`, itemIdsIndex, errors));
+                            }
+                            if (Array.isArray(enc.on_defeat_effects)) {
+                                enc.on_defeat_effects.forEach((ef, ei) =>
+                                    checkEffect(ef, file, `${loc}.on_defeat_effects[${ei}]`,
+                                        roomConnIds, featureIds, errors));
+                            }
+                        });
+                    }
+
+                    // Hazards: dc_tier, damage_type, condition ids.
+                    if (Array.isArray(room.hazards)) {
+                        room.hazards.forEach((h, i) => {
+                            const loc = `rooms.${roomKey}.hazards[${i}]${h && h.id ? ` (${h.id})` : ''}`;
+                            checkDcTiersIn(h, file, loc, dcTierIds, errors);
+                            // Damage on avoidance.on_failure.
+                            const onFail = h.avoidance && h.avoidance.on_failure;
+                            if (onFail && onFail.damage && onFail.damage.type && damageTypeIds !== null
+                                && !damageTypeIds.has(onFail.damage.type)) {
+                                errors.push({ file, loc: `${loc}.avoidance.on_failure.damage.type`,
+                                    msg: `damage type "${onFail.damage.type}" not declared in rules.resources.damage_types` });
+                            }
+                            if (onFail && Array.isArray(onFail.conditions) && conditionIds.size > 0) {
+                                onFail.conditions.forEach((cid, ci) => {
+                                    if (!conditionIds.has(cid)) {
+                                        errors.push({ file, loc: `${loc}.avoidance.on_failure.conditions[${ci}]`,
+                                            msg: `condition id "${cid}" not declared in rules.conditions` });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+
+            // --- Bestiary refs (damage types) ---
+            if (bestiary && damageTypeIds !== null) {
+                const file = bestiaryF.path;
+                for (const [key, monster] of Object.entries(bestiary.monsters || {})) {
+                    checkMonsterDamageTypes(monster, file, `bestiary.monsters.${key}`, damageTypeIds, errors);
+                }
+            }
+            if (module_ && module_.module_bestiary && module_.module_bestiary.monsters && damageTypeIds !== null) {
+                const file = moduleF.path;
+                for (const [key, monster] of Object.entries(module_.module_bestiary.monsters)) {
+                    checkMonsterDamageTypes(monster, file, `module_bestiary.monsters.${key}`, damageTypeIds, errors);
+                }
+            }
+
+            // --- Items refs (damage types, magic bonus keys) ---
+            if (items) {
+                const file = itemsF.path;
+                for (const [key, item] of Object.entries(items.items || {})) {
+                    checkItemRefs(item, file, `items_library.items.${key}`,
+                        damageTypeIds, abilityIds, saveIds, skillIds, errors);
+                }
+            }
+            if (module_ && module_.module_items && module_.module_items.items) {
+                const file = moduleF.path;
+                for (const [key, item] of Object.entries(module_.module_items.items)) {
+                    checkItemRefs(item, file, `module_items.items.${key}`,
+                        damageTypeIds, abilityIds, saveIds, skillIds, errors);
+                }
+            }
+        }
+
+        // --- Reference-integrity helpers ------------------------------------
+
+        function checkDcTiersIn(node, file, loc, dcTierIds, errors) {
+            if (dcTierIds.size === 0) return;
+            const visit = (n, path) => {
+                if (n == null || typeof n !== 'object') return;
+                if (Array.isArray(n)) { n.forEach((v, i) => visit(v, `${path}[${i}]`)); return; }
+                for (const [k, v] of Object.entries(n)) {
+                    if (k === 'dc_tier' && typeof v === 'string' && !dcTierIds.has(v)) {
+                        errors.push({ file, loc: `${loc}.${path ? path + '.' : ''}dc_tier`,
+                            msg: `dc_tier "${v}" not declared in rules.difficulty.scale` });
+                    }
+                    visit(v, path ? `${path}.${k}` : k);
+                }
+            };
+            visit(node, '');
+        }
+
+        function checkFeaturePrereqs(feat, file, loc, featureIds, featureTypeById, encounterIds, errors) {
+            if (!feat || !feat.prerequisites) return;
+            const p = feat.prerequisites;
+            if (p.feature_state && typeof p.feature_state === 'object') {
+                for (const [fid, state] of Object.entries(p.feature_state)) {
+                    if (!featureIds.has(fid)) {
+                        errors.push({ file, loc: `${loc}.prerequisites.feature_state.${fid}`,
+                            msg: `feature id "${fid}" is not declared in any room's features[]` });
+                        continue;
+                    }
+                    // Lore features are stateless and cannot be prereq targets.
+                    if (featureTypeById[fid] === 'lore') {
+                        errors.push({ file, loc: `${loc}.prerequisites.feature_state.${fid}`,
+                            msg: `cannot depend on lore feature "${fid}" (stateless)` });
+                    }
+                }
+            }
+            if (Array.isArray(p.encounter_defeated)) {
+                p.encounter_defeated.forEach((eid, i) => {
+                    if (!encounterIds.has(eid)) {
+                        errors.push({ file, loc: `${loc}.prerequisites.encounter_defeated[${i}]`,
+                            msg: `encounter id "${eid}" is not declared in any room's encounters[]` });
+                    }
+                });
+            }
+        }
+
+        function checkEffect(ef, file, loc, roomConnIds, featureIds, errors) {
+            if (!ef || typeof ef !== 'object' || !ef.type) return;
+            if (ef.type === 'unlock_connection' || ef.type === 'reveal_connection') {
+                if (ef.target && !roomConnIds.has(ef.target)) {
+                    errors.push({ file, loc: `${loc}.target`,
+                        msg: `connection id "${ef.target}" is not declared in this room's connections{}` });
+                }
+            } else if (ef.type === 'activate_feature') {
+                if (ef.target && !featureIds.has(ef.target)) {
+                    errors.push({ file, loc: `${loc}.target`,
+                        msg: `feature id "${ef.target}" is not declared in any room's features[]` });
+                }
+            }
+        }
+
+        function checkReward(rw, file, loc, itemIdsIndex, errors) {
+            if (!rw || rw.type !== 'item') return;
+            if (rw.item_id && !itemIdsIndex.has(rw.item_id)) {
+                errors.push({ file, loc: `${loc}.item_id`,
+                    msg: `item_id "${rw.item_id}" not found in items_library or module_items` });
+            }
+        }
+
+        function checkMonsterDamageTypes(monster, file, loc, damageTypeIds, errors) {
+            const arrCheck = (arr, field) => {
+                if (!Array.isArray(arr)) return;
+                arr.forEach((dt, i) => {
+                    if (dt && !damageTypeIds.has(dt)) {
+                        errors.push({ file, loc: `${loc}.${field}[${i}]`,
+                            msg: `damage type "${dt}" not declared in rules.resources.damage_types` });
+                    }
+                });
+            };
+            arrCheck(monster.damage_resistance, 'damage_resistance');
+            arrCheck(monster.damage_immunity, 'damage_immunity');
+            arrCheck(monster.damage_vulnerability, 'damage_vulnerability');
+            if (Array.isArray(monster.attacks)) {
+                monster.attacks.forEach((atk, i) => {
+                    if (atk && atk.damage_type && !damageTypeIds.has(atk.damage_type)) {
+                        errors.push({ file, loc: `${loc}.attacks[${i}].damage_type`,
+                            msg: `damage type "${atk.damage_type}" not declared in rules.resources.damage_types` });
+                    }
+                });
+            }
+        }
+
+        function checkItemRefs(item, file, loc, damageTypeIds, abilityIds, saveIds, skillIds, errors) {
+            // Weapon damage type.
+            if (damageTypeIds !== null && item.weapon && item.weapon.damage_type
+                && !damageTypeIds.has(item.weapon.damage_type)) {
+                errors.push({ file, loc: `${loc}.weapon.damage_type`,
+                    msg: `damage type "${item.weapon.damage_type}" not declared in rules.resources.damage_types` });
+            }
+            const m = item.magic;
+            if (!m) return;
+
+            if (damageTypeIds !== null && m.bonus_damage && m.bonus_damage.type
+                && !damageTypeIds.has(m.bonus_damage.type)) {
+                errors.push({ file, loc: `${loc}.magic.bonus_damage.type`,
+                    msg: `damage type "${m.bonus_damage.type}" not declared in rules.resources.damage_types` });
+            }
+            if (damageTypeIds !== null) {
+                const arrCheck = (arr, field) => {
+                    if (!Array.isArray(arr)) return;
+                    arr.forEach((dt, i) => {
+                        if (dt && !damageTypeIds.has(dt)) {
+                            errors.push({ file, loc: `${loc}.magic.${field}[${i}]`,
+                                msg: `damage type "${dt}" not declared in rules.resources.damage_types` });
+                        }
+                    });
+                };
+                arrCheck(m.damage_resistance, 'damage_resistance');
+                arrCheck(m.damage_immunity, 'damage_immunity');
+            }
+            if (m.ability_bonus && typeof m.ability_bonus === 'object' && abilityIds.size > 0) {
+                for (const key of Object.keys(m.ability_bonus)) {
+                    if (!abilityIds.has(key)) {
+                        errors.push({ file, loc: `${loc}.magic.ability_bonus.${key}`,
+                            msg: `ability id "${key}" not declared in rules.character_model.abilities` });
+                    }
+                }
+            }
+            if (m.save_bonus && typeof m.save_bonus === 'object' && saveIds.size > 0) {
+                for (const key of Object.keys(m.save_bonus)) {
+                    // "all" is the reserved shortcut.
+                    if (key === 'all') continue;
+                    if (!saveIds.has(key)) {
+                        errors.push({ file, loc: `${loc}.magic.save_bonus.${key}`,
+                            msg: `save id "${key}" not declared in rules.character_model` });
+                    }
+                }
+            }
+            if (m.skill_bonus && typeof m.skill_bonus === 'object' && skillIds.size > 0) {
+                for (const key of Object.keys(m.skill_bonus)) {
+                    if (!skillIds.has(key)) {
+                        errors.push({ file, loc: `${loc}.magic.skill_bonus.${key}`,
+                            msg: `skill id "${key}" not declared in rules.character_model.skills` });
+                    }
+                }
+            }
+        }
+
+        // Gather every effect object appearing anywhere on a feature, with a
+        // readable path. Handles interactive actions, puzzle on_success.effects.
+        function collectEffects(feat) {
+            const out = [];
+            if (!feat) return out;
+            if (feat.type === 'interactive' && feat.actions && typeof feat.actions === 'object') {
+                for (const [state, action] of Object.entries(feat.actions)) {
+                    if (action && Array.isArray(action.effects)) {
+                        action.effects.forEach((ef, i) =>
+                            out.push({ node: ef, path: `actions.${state}.effects[${i}]` }));
+                    }
+                }
+            }
+            if (feat.type === 'puzzle' && feat.on_success && Array.isArray(feat.on_success.effects)) {
+                feat.on_success.effects.forEach((ef, i) =>
+                    out.push({ node: ef, path: `on_success.effects[${i}]` }));
+            }
+            return out;
+        }
+
+        // Gather every reward object on a feature. Searchable has a top-level
+        // reward[]; interactive has per-action reward[]; puzzle has on_success.reward[].
+        function collectRewards(feat) {
+            const out = [];
+            if (!feat) return out;
+            if (feat.type === 'searchable' && Array.isArray(feat.reward)) {
+                feat.reward.forEach((rw, i) => out.push({ node: rw, path: `reward[${i}]` }));
+            }
+            if (feat.type === 'interactive' && feat.actions && typeof feat.actions === 'object') {
+                for (const [state, action] of Object.entries(feat.actions)) {
+                    if (action && Array.isArray(action.reward)) {
+                        action.reward.forEach((rw, i) =>
+                            out.push({ node: rw, path: `actions.${state}.reward[${i}]` }));
+                    }
+                }
+            }
+            if (feat.type === 'puzzle' && feat.on_success && Array.isArray(feat.on_success.reward)) {
+                feat.on_success.reward.forEach((rw, i) =>
+                    out.push({ node: rw, path: `on_success.reward[${i}]` }));
+            }
+            return out;
+        }
+
+        // --- Required-field helpers -----------------------------------------
+
+        // Push an error on every missing field.
+        function requireFields(obj, fields, file, locPrefix, errors) {
+            if (obj == null || typeof obj !== 'object' || Array.isArray(obj)) {
+                errors.push({ file, loc: locPrefix, msg: `expected object` });
+                return;
+            }
+            for (const f of fields) {
+                if (obj[f] === undefined) {
+                    errors.push({ file, loc: locPrefix, msg: `missing required field "${f}"` });
+                }
+            }
+        }
+
+        function requireArray(obj, field, file, locPrefix, errors) {
+            if (obj == null || obj[field] === undefined) {
+                errors.push({ file, loc: locPrefix, msg: `missing required field "${field}"` });
+            } else if (!Array.isArray(obj[field])) {
+                errors.push({ file, loc: `${locPrefix}.${field}`, msg: `expected array` });
+            }
+        }
+
+        // --- Required-field pass: per archetype ----------------------------
+
+        function checkManifestRequired(manifest, file, errors) {
+            // Archetype file refs were checked in the load pass; only core metadata left.
+            requireFields(manifest, ['id', 'name'], file, 'manifest', errors);
+        }
+
+        function checkSettingRequired(f, errors) {
+            const file = f.path;
+            if (!f.data.setting) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "setting" wrapper` });
+                return;
+            }
+            requireFields(f.data.setting, ['id', 'name', 'content'], file, 'setting', errors);
+        }
+
+        function checkRulesRequired(f, errors) {
+            const file = f.path;
+            const rules = f.data.rules;
+            if (!rules) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "rules" wrapper` });
+                return;
+            }
+            requireFields(rules, [
+                'id', 'name',
+                'character_model', 'resolution', 'resources', 'combat',
+                'progression', 'difficulty', 'encumbrance'
+            ], file, 'rules', errors);
+
+            // character_model
+            const cm = rules.character_model;
+            if (cm) {
+                requireArray(cm, 'abilities', file, 'rules.character_model', errors);
+                requireFields(cm, ['modifier_formula', 'saves', 'uses_classes'], file, 'rules.character_model', errors);
+                if (cm.saves) {
+                    requireFields(cm.saves, ['type'], file, 'rules.character_model.saves', errors);
+                    if (cm.saves.type && !['per_ability', 'categorical'].includes(cm.saves.type)) {
+                        errors.push({ file, loc: 'rules.character_model.saves.type',
+                            msg: `value "${cm.saves.type}" is not one of "per_ability" / "categorical"` });
+                    }
+                    if (cm.saves.type === 'categorical') {
+                        requireArray(cm.saves, 'categories', file, 'rules.character_model.saves', errors);
+                        if (Array.isArray(cm.saves.categories)) {
+                            cm.saves.categories.forEach((cat, i) => {
+                                requireFields(cat, ['id', 'name'], file,
+                                    `rules.character_model.saves.categories[${i}]`, errors);
+                            });
+                        }
+                    }
+                }
+                if (cm.uses_classes === true && (cm.classes == null || typeof cm.classes !== 'object')) {
+                    errors.push({ file, loc: 'rules.character_model.classes',
+                        msg: `required when uses_classes: true, but missing or not an object` });
+                }
+                if (cm.classes && typeof cm.classes === 'object') {
+                    for (const [key, cls] of Object.entries(cm.classes)) {
+                        requireFields(cls, ['id', 'name', 'hit_die'], file,
+                            `rules.character_model.classes.${key}`, errors);
+                    }
+                }
+            }
+
+            // resolution
+            const res = rules.resolution;
+            if (res) {
+                if (res.checks) {
+                    requireFields(res.checks,
+                        ['method', 'dice', 'crit_success', 'crit_failure', 'advantage_disadvantage'],
+                        file, 'rules.resolution.checks', errors);
+                    if (res.checks.method && !['roll_high_vs_dc', 'roll_under_score'].includes(res.checks.method)) {
+                        errors.push({ file, loc: 'rules.resolution.checks.method',
+                            msg: `value "${res.checks.method}" is not one of "roll_high_vs_dc" / "roll_under_score"` });
+                    }
+                } else {
+                    errors.push({ file, loc: 'rules.resolution', msg: `missing required field "checks"` });
+                }
+                if (res.auxiliary) {
+                    requireFields(res.auxiliary, ['x_in_6', 'reaction_roll', 'morale_roll'],
+                        file, 'rules.resolution.auxiliary', errors);
+                } else {
+                    errors.push({ file, loc: 'rules.resolution', msg: `missing required field "auxiliary"` });
+                }
+            }
+
+            // resources
+            const rs = rules.resources;
+            if (rs) {
+                if (rs.hit_points) {
+                    requireFields(rs.hit_points, ['max_formula', 'at_zero', 'overflow'],
+                        file, 'rules.resources.hit_points', errors);
+                    if (rs.hit_points.at_zero && !['dead', 'unconscious'].includes(rs.hit_points.at_zero)) {
+                        errors.push({ file, loc: 'rules.resources.hit_points.at_zero',
+                            msg: `value "${rs.hit_points.at_zero}" is not one of "dead" / "unconscious"` });
+                    }
+                } else {
+                    errors.push({ file, loc: 'rules.resources', msg: `missing required field "hit_points"` });
+                }
+                if (rs.healing) {
+                    requireFields(rs.healing, ['natural_rest'], file, 'rules.resources.healing', errors);
+                } else {
+                    errors.push({ file, loc: 'rules.resources', msg: `missing required field "healing"` });
+                }
+            }
+
+            // combat
+            const cb = rules.combat;
+            if (cb) {
+                if (cb.attack) requireFields(cb.attack, ['resolution'], file, 'rules.combat.attack', errors);
+                else errors.push({ file, loc: 'rules.combat', msg: `missing required field "attack"` });
+                if (cb.damage) requireFields(cb.damage, ['formula'], file, 'rules.combat.damage', errors);
+                else errors.push({ file, loc: 'rules.combat', msg: `missing required field "damage"` });
+                if (cb.critical_hit) requireFields(cb.critical_hit, ['trigger', 'effect'], file, 'rules.combat.critical_hit', errors);
+                else errors.push({ file, loc: 'rules.combat', msg: `missing required field "critical_hit"` });
+                if (cb.initiative) requireFields(cb.initiative, ['type'], file, 'rules.combat.initiative', errors);
+                else errors.push({ file, loc: 'rules.combat', msg: `missing required field "initiative"` });
+            }
+
+            // progression
+            const pg = rules.progression;
+            if (pg) {
+                requireFields(pg, ['type', 'max_level', 'hp_gain_per_level'], file, 'rules.progression', errors);
+                if (pg.type === 'xp_and_level') {
+                    requireArray(pg, 'xp_sources', file, 'rules.progression', errors);
+                    requireArray(pg, 'level_table', file, 'rules.progression', errors);
+                }
+            }
+
+            // difficulty
+            const df = rules.difficulty;
+            if (df) {
+                requireArray(df, 'scale', file, 'rules.difficulty', errors);
+                requireFields(df, ['auto_success', 'auto_failure'], file, 'rules.difficulty', errors);
+            }
+
+            // encumbrance
+            const en = rules.encumbrance;
+            if (en) {
+                requireFields(en, ['method'], file, 'rules.encumbrance', errors);
+                if (en.method && !['slots', 'weight', 'none'].includes(en.method)) {
+                    errors.push({ file, loc: 'rules.encumbrance.method',
+                        msg: `value "${en.method}" is not one of "slots" / "weight" / "none"` });
+                }
+                if (en.method === 'slots' && en.slot_capacity === undefined) {
+                    errors.push({ file, loc: 'rules.encumbrance',
+                        msg: `"slot_capacity" is required when method is "slots"` });
+                }
+                if (en.method === 'weight' && !en.weight_formula) {
+                    errors.push({ file, loc: 'rules.encumbrance',
+                        msg: `"weight_formula" is required when method is "weight"` });
+                }
+            }
+        }
+
+        function checkBestiaryRequired(f, errors) {
+            const file = f.path;
+            const b = f.data.bestiary;
+            if (!b) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "bestiary" wrapper` });
+                return;
+            }
+            requireFields(b, ['id', 'name', 'monsters'], file, 'bestiary', errors);
+            if (b.monsters && typeof b.monsters === 'object' && !Array.isArray(b.monsters)) {
+                for (const [key, monster] of Object.entries(b.monsters)) {
+                    const loc = `bestiary.monsters.${key}`;
+                    requireFields(monster, ['id', 'name', 'hp', 'ac', 'attacks', 'xp_value'], file, loc, errors);
+                    if (Array.isArray(monster.attacks)) {
+                        monster.attacks.forEach((atk, i) => {
+                            requireFields(atk, ['name', 'bonus', 'range'], file, `${loc}.attacks[${i}]`, errors);
+                            if (atk.range && !['melee', 'ranged'].includes(atk.range)) {
+                                errors.push({ file, loc: `${loc}.attacks[${i}].range`,
+                                    msg: `value "${atk.range}" is not one of "melee" / "ranged"` });
+                            }
+                        });
+                    }
+                    if (Array.isArray(monster.special_abilities)) {
+                        monster.special_abilities.forEach((sa, i) => {
+                            requireFields(sa, ['id', 'name', 'description', 'type'], file,
+                                `${loc}.special_abilities[${i}]`, errors);
+                        });
+                    }
+                }
+            }
+        }
+
+        function checkItemsRequired(f, errors) {
+            const file = f.path;
+            const lib = f.data.items_library;
+            if (!lib) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "items_library" wrapper` });
+                return;
+            }
+            requireFields(lib, ['id', 'name', 'items'], file, 'items_library', errors);
+        }
+
+        function checkModuleRequired(f, errors) {
+            const file = f.path;
+            const d = f.data;
+            requireFields(d, ['module', 'rooms'], file, 'root', errors);
+            if (d.module) {
+                requireFields(d.module, ['id', 'title', 'starting_room'], file, 'module', errors);
+            }
+            if (d.rooms && typeof d.rooms === 'object' && !Array.isArray(d.rooms)) {
+                for (const [key, room] of Object.entries(d.rooms)) {
+                    const loc = `rooms.${key}`;
+                    requireFields(room, ['id', 'name', 'description', 'connections'], file, loc, errors);
+                    for (const arrName of ['features', 'encounters', 'hazards']) {
+                        if (room[arrName] === undefined) {
+                            errors.push({ file, loc, msg: `missing required field "${arrName}" (must be present as an array, even if empty)` });
+                        } else if (!Array.isArray(room[arrName])) {
+                            errors.push({ file, loc: `${loc}.${arrName}`, msg: `expected array` });
+                        }
+                    }
+                }
+            }
+        }
+
+        function checkCharacterRequired(f, errors) {
+            const file = f.path;
+            const c = f.data.character;
+            if (!c) {
+                errors.push({ file, loc: 'root', msg: `missing required top-level "character" wrapper` });
+                return;
+            }
+            requireFields(c, [
+                'id', 'game_pack_id', 'schema_version',
+                'basic_info', 'ability_scores', 'saves', 'skills',
+                'hp_current', 'equipment', 'pack', 'charged_items',
+                'conditions', 'gold', 'xp', 'class_features'
+            ], file, 'character', errors);
+            if (c.basic_info) {
+                requireFields(c.basic_info, ['name', 'class', 'level'], file, 'character.basic_info', errors);
+            }
+            // saves sub-shape is rules-pack-dependent; the reference pass enforces the right one.
+            if (c.skills) requireFields(c.skills, ['proficient'], file, 'character.skills', errors);
+        }
+
+        // --- Archetype-specific rules pass ---------------------------------
+
+        function checkItemsArchetype(f, errors) {
+            const file = f.path;
+            const items = f.data.items_library && f.data.items_library.items;
+            if (!items || typeof items !== 'object') return;
+
+            const TYPE_ENUM  = ['weapon', 'armor', 'consumable', 'lore', 'misc'];
+            const ARMOR_ENUM = ['light', 'medium', 'heavy', 'shield'];
+            const SLOT_ENUM = {
+                weapon: ['main_hand', 'off_hand', 'two_handed', 'ranged'],
+                armor:  ['body', 'shield', 'head', 'hands', 'feet', 'neck', 'ring', 'cloak', 'belt']
+            };
+
+            for (const [key, item] of Object.entries(items)) {
+                const loc = `items_library.items.${key}`;
+                requireFields(item, ['id', 'name', 'type', 'description', 'weight_slots'], file, loc, errors);
+                if (item.type && !TYPE_ENUM.includes(item.type)) {
+                    errors.push({ file, loc: `${loc}.type`,
+                        msg: `value "${item.type}" is not one of ${TYPE_ENUM.map(v => `"${v}"`).join(' / ')}` });
+                }
+
+                // Slot rules per type.
+                if (item.type === 'weapon' || item.type === 'armor') {
+                    if (item.slot === undefined) {
+                        errors.push({ file, loc, msg: `"slot" is required when type is "${item.type}"` });
+                    } else if (SLOT_ENUM[item.type] && !SLOT_ENUM[item.type].includes(item.slot)) {
+                        errors.push({ file, loc: `${loc}.slot`,
+                            msg: `value "${item.slot}" is not a valid slot for type "${item.type}"` });
+                    }
+                } else if (['consumable', 'lore', 'misc'].includes(item.type) && item.slot !== undefined) {
+                    errors.push({ file, loc: `${loc}.slot`,
+                        msg: `"slot" must be omitted when type is "${item.type}"` });
+                }
+
+                // Per-type blocks.
+                if (item.type === 'weapon') {
+                    if (!item.weapon) {
+                        errors.push({ file, loc, msg: `"weapon" block is required when type is "weapon"` });
+                    } else {
+                        requireFields(item.weapon, ['damage', 'damage_type', 'melee', 'ranged'],
+                            file, `${loc}.weapon`, errors);
+                    }
+                }
+                if (item.type === 'armor' && item.armor) {
+                    requireFields(item.armor, ['ac_bonus', 'type'], file, `${loc}.armor`, errors);
+                    if (item.armor.type && !ARMOR_ENUM.includes(item.armor.type)) {
+                        errors.push({ file, loc: `${loc}.armor.type`,
+                            msg: `value "${item.armor.type}" is not one of ${ARMOR_ENUM.map(v => `"${v}"`).join(' / ')}` });
+                    }
+                }
+                if (item.type === 'consumable') {
+                    if (!item.consumable) {
+                        errors.push({ file, loc, msg: `"consumable" block is required when type is "consumable"` });
+                    } else {
+                        requireFields(item.consumable, ['on_use'], file, `${loc}.consumable`, errors);
+                    }
+                }
+
+                // Magic charges — both fields required together.
+                if (item.magic && item.magic.charges) {
+                    requireFields(item.magic.charges, ['max', 'recharge'], file, `${loc}.magic.charges`, errors);
+                }
+            }
+        }
+
+        function checkModuleArchetype(f, errors, warnings) {
+            const file = f.path;
+            const d = f.data;
+            if (!d.rooms || typeof d.rooms !== 'object') return;
+
+            const FEATURE_TYPES   = ['lore', 'searchable', 'interactive', 'puzzle'];
+            const CONNECTION_STATES = ['open', 'locked', 'hidden'];
+
+            for (const [roomKey, room] of Object.entries(d.rooms)) {
+                // Connections (structured form).
+                if (room.connections && typeof room.connections === 'object') {
+                    for (const [connKey, conn] of Object.entries(room.connections)) {
+                        // Simple form is a string; nothing to check beyond reference integrity (chunk 3).
+                        if (typeof conn === 'string') continue;
+                        const loc = `rooms.${roomKey}.connections.${connKey}`;
+                        requireFields(conn, ['to', 'state'], file, loc, errors);
+                        if (conn.state && !CONNECTION_STATES.includes(conn.state)) {
+                            errors.push({ file, loc: `${loc}.state`,
+                                msg: `value "${conn.state}" is not one of "open" / "locked" / "hidden"` });
+                        }
+                    }
+                }
+
+                // Features.
+                if (Array.isArray(room.features)) {
+                    room.features.forEach((feat, i) => {
+                        const loc = `rooms.${roomKey}.features[${i}]${feat && feat.id ? ` (${feat.id})` : ''}`;
+                        requireFields(feat, ['id', 'type', 'name', 'description'], file, loc, errors);
+                        if (feat.type && !FEATURE_TYPES.includes(feat.type)) {
+                            errors.push({ file, loc: `${loc}.type`,
+                                msg: `value "${feat.type}" is not one of ${FEATURE_TYPES.map(v => `"${v}"`).join(' / ')}` });
+                        }
+                        checkFeatureNoDamage(feat, file, loc, errors);
+                        checkFeatureSubtype(feat, file, loc, errors);
+                    });
+                }
+
+                // Encounters.
+                if (Array.isArray(room.encounters)) {
+                    room.encounters.forEach((enc, i) => {
+                        const loc = `rooms.${roomKey}.encounters[${i}]${enc && enc.id ? ` (${enc.id})` : ''}`;
+                        requireFields(enc, ['id', 'name', 'groups', 'trigger'], file, loc, errors);
+                        if (!Array.isArray(enc.groups) || enc.groups.length === 0) {
+                            errors.push({ file, loc: `${loc}.groups`,
+                                msg: `must be a non-empty array` });
+                        } else {
+                            const hasMonster = enc.groups.some(g => g && g.monster_ref);
+                            if (!hasMonster) {
+                                errors.push({ file, loc: `${loc}.groups`,
+                                    msg: `at least one group must carry a "monster_ref"` });
+                            }
+                            enc.groups.forEach((g, gi) => {
+                                requireFields(g, ['monster_ref', 'quantity'], file,
+                                    `${loc}.groups[${gi}]`, errors);
+                            });
+                        }
+                        if (enc.trigger) {
+                            requireFields(enc.trigger, ['type'], file, `${loc}.trigger`, errors);
+                            if (enc.trigger.type === 'on_condition' && !enc.trigger.condition) {
+                                errors.push({ file, loc: `${loc}.trigger`,
+                                    msg: `"condition" is required when trigger.type is "on_condition"` });
+                            }
+                        }
+                    });
+                }
+
+                // Hazards.
+                if (Array.isArray(room.hazards)) {
+                    room.hazards.forEach((h, i) => {
+                        const loc = `rooms.${roomKey}.hazards[${i}]${h && h.id ? ` (${h.id})` : ''}`;
+                        requireFields(h, ['id', 'name', 'description', 'trigger', 'persists', 'resolved_by_detection'],
+                            file, loc, errors);
+                        if (h.trigger) requireFields(h.trigger, ['type'], file, `${loc}.trigger`, errors);
+                        // No monster_ref allowed anywhere in a hazard.
+                        if (containsKey(h, 'monster_ref')) {
+                            errors.push({ file, loc,
+                                msg: `hazards must not contain "monster_ref" — if the threat is a creature, move it to encounters` });
+                        }
+                        if (h.detection) {
+                            requireFields(h.detection, ['check', 'on_success'], file, `${loc}.detection`, errors);
+                        }
+                        if (h.avoidance) {
+                            requireFields(h.avoidance, ['check', 'on_success', 'on_failure'], file, `${loc}.avoidance`, errors);
+                            if (h.avoidance.on_failure && typeof h.avoidance.on_failure === 'object') {
+                                requireFields(h.avoidance.on_failure, ['narration'], file,
+                                    `${loc}.avoidance.on_failure`, errors);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        // Features never deal damage. Walk the feature and flag any nested `damage` key.
+        function checkFeatureNoDamage(feat, file, loc, errors) {
+            const visit = (node, path) => {
+                if (node == null || typeof node !== 'object') return;
+                if (Array.isArray(node)) {
+                    node.forEach((v, i) => visit(v, `${path}[${i}]`));
+                    return;
+                }
+                for (const [k, v] of Object.entries(node)) {
+                    if (k === 'damage') {
+                        errors.push({ file, loc: `${loc}.${path ? path + '.' : ''}${k}`,
+                            msg: `features cannot declare damage — move to a hazard` });
+                    }
+                    visit(v, path ? `${path}.${k}` : k);
+                }
+            };
+            visit(feat, '');
+        }
+
+        function checkFeatureSubtype(feat, file, loc, errors) {
+            if (!feat || !feat.type) return;
+            switch (feat.type) {
+                case 'lore':
+                    for (const forbidden of ['reward', 'check', 'states', 'solution']) {
+                        if (feat[forbidden] !== undefined) {
+                            errors.push({ file, loc: `${loc}.${forbidden}`,
+                                msg: `lore features cannot carry "${forbidden}"` });
+                        }
+                    }
+                    break;
+                case 'searchable':
+                    requireFields(feat, ['check', 'on_success', 'on_failure', 'persists'], file, loc, errors);
+                    break;
+                case 'interactive':
+                    requireFields(feat, ['states', 'initial_state', 'actions'], file, loc, errors);
+                    if (Array.isArray(feat.states) && feat.initial_state !== undefined
+                        && !feat.states.includes(feat.initial_state)) {
+                        errors.push({ file, loc: `${loc}.initial_state`,
+                            msg: `value "${feat.initial_state}" is not in states[]` });
+                    }
+                    if (Array.isArray(feat.states) && feat.actions && typeof feat.actions === 'object') {
+                        for (const key of Object.keys(feat.actions)) {
+                            if (!feat.states.includes(key)) {
+                                errors.push({ file, loc: `${loc}.actions.${key}`,
+                                    msg: `action key "${key}" is not in states[]` });
+                            }
+                        }
+                    }
+                    break;
+                case 'puzzle':
+                    requireFields(feat, ['solution', 'on_success', 'on_failure'], file, loc, errors);
+                    if (feat.solution) {
+                        requireFields(feat.solution, ['description', 'check'], file, `${loc}.solution`, errors);
+                    }
+                    if (feat.on_success && typeof feat.on_success === 'object') {
+                        requireFields(feat.on_success, ['narration'], file, `${loc}.on_success`, errors);
+                    }
+                    if (feat.on_failure && typeof feat.on_failure === 'object') {
+                        requireFields(feat.on_failure, ['narration'], file, `${loc}.on_failure`, errors);
+                    }
+                    break;
+            }
+        }
+
+        // Recursively scan for a key anywhere in an object tree.
+        function containsKey(node, target) {
+            if (node == null || typeof node !== 'object') return false;
+            if (Array.isArray(node)) return node.some(v => containsKey(v, target));
+            for (const [k, v] of Object.entries(node)) {
+                if (k === target) return true;
+                if (containsKey(v, target)) return true;
+            }
+            return false;
+        }
+
+        function topLevelSummary(data) {
+            if (data == null || typeof data !== 'object') return String(typeof data);
+            if (Array.isArray(data)) return `array[${data.length}]`;
+            const keys = Object.keys(data);
+            return keys.length <= 6
+                ? keys.join(', ')
+                : keys.slice(0, 6).join(', ') + `, …(+${keys.length - 6})`;
+        }
+
+        function render(result) {
+            const { errors = [], warnings = [], info = [], manifest, manifestPath } = result;
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            // Summary line: pack id + error/warning/info counts.
+            const summary = document.createElement('div');
+            summary.className = 'summary';
+            const packLabel = manifest && manifest.id
+                ? `${escapeHtml(manifest.name || manifest.id)} <span class="muted">(${escapeHtml(manifest.id)})</span>`
+                : `<span class="muted">${escapeHtml(manifestPath || '(unknown)')}</span>`;
+            const status = errors.length === 0 && warnings.length === 0
+                ? '<span class="status-ok">clean</span>'
+                : errors.length > 0
+                    ? '<span class="status-err">failed</span>'
+                    : '<span class="status-warn">warnings only</span>';
+            summary.innerHTML = `
+                <div class="summary-line">${packLabel} &mdash; ${status}</div>
+                <div class="summary-counts">
+                    ${errors.length} error${errors.length === 1 ? '' : 's'} ·
+                    ${warnings.length} warning${warnings.length === 1 ? '' : 's'} ·
+                    ${info.length} info
+                </div>`;
+            resultsDiv.appendChild(summary);
+
+            // Section open-by-default: whichever tier has the highest-severity content.
+            resultsDiv.appendChild(renderSection('errors',   'Errors',   errors,   errors.length > 0));
+            resultsDiv.appendChild(renderSection('warnings', 'Warnings', warnings, errors.length === 0 && warnings.length > 0));
+            resultsDiv.appendChild(renderSection('info',     'Info',     info,     errors.length === 0 && warnings.length === 0));
+        }
+
+        function renderSection(kind, label, findings, openByDefault) {
+            const section = document.createElement('div');
+            section.className = 'section ' + kind + (openByDefault ? ' open' : '');
+
+            const header = document.createElement('div');
+            header.className = 'section-header';
+            header.innerHTML = `<span>${label}</span><span class="count">${findings.length}</span>`;
+            header.addEventListener('click', () => section.classList.toggle('open'));
+            section.appendChild(header);
+
+            const body = document.createElement('div');
+            body.className = 'section-body';
+            if (findings.length === 0) {
+                body.innerHTML = '<div class="placeholder" style="padding:10px;">none</div>';
             } else {
-                summaryDiv.innerHTML = `
-                    <h2 style="color: #c85050;">❌ Found ${failedTests} Invalid File(s)</h2>
-                    <p>Passed: ${passedTests}/${totalTests}</p>
-                    <p><strong>Fix the files marked with ❌ above.</strong></p>
-                    <p>Use a JSON validator like <a href="https://jsonlint.com/" target="_blank" style="color: #d4af37;">JSONLint</a> to fix syntax errors.</p>
-                `;
+                for (const f of findings) {
+                    const row = document.createElement('div');
+                    row.className = 'finding';
+                    const locBits = [];
+                    if (f.file) locBits.push(escapeHtml(f.file));
+                    if (f.loc)  locBits.push(escapeHtml(f.loc));
+                    const locLine = locBits.length ? `<span class="loc">${locBits.join(' · ')}</span><br>` : '';
+                    row.innerHTML = `${locLine}<span class="msg">${escapeHtml(f.msg)}</span>`;
+                    body.appendChild(row);
+                }
             }
+            section.appendChild(body);
+            return section;
         }
 
-        runTests();
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        // Auto-run on page load with the default pack.
+        runValidation();
     </script>
 </body>
 </html>

@@ -1,0 +1,277 @@
+{
+  "rules": {
+    "id": "lantern_and_blade_v1",
+    "name": "Lantern & Blade",
+    "version": "1.0",
+    "author": "Lantern & Blade Project",
+    "description": "A d20 ruleset for heroic dungeon play: six ability scores, five classes, scaling proficiency, ascending AC, advantage and disadvantage, and the full palette of damage types. Tuned for solo text-first sessions where the GM does most of the lifting and the dice pick up the rest.",
+    "design_philosophy": "Heroes with a real chance — but not a guaranteed one. Classes matter, choices matter, and the dice decide the middle ground. The GM is patient, concrete, and fair. Combat is tense but survivable; attrition across a dungeon is where the real risk lives.",
+    "guidance": "lantern_and_blade_guidance.md",
+
+    "character_model": {
+      "abilities": [
+        { "id": "str", "name": "Strength",     "abbr": "STR", "range": [1, 20] },
+        { "id": "dex", "name": "Dexterity",    "abbr": "DEX", "range": [1, 20] },
+        { "id": "con", "name": "Constitution", "abbr": "CON", "range": [1, 20] },
+        { "id": "int", "name": "Intelligence", "abbr": "INT", "range": [1, 20] },
+        { "id": "wis", "name": "Wisdom",       "abbr": "WIS", "range": [1, 20] },
+        { "id": "cha", "name": "Charisma",     "abbr": "CHA", "range": [1, 20] }
+      ],
+      "modifier_formula": "table_5e",
+
+      "saves": { "type": "per_ability" },
+
+      "skills": [
+        { "id": "acrobatics",      "name": "Acrobatics",      "ability": "dex" },
+        { "id": "animal_handling", "name": "Animal Handling", "ability": "wis" },
+        { "id": "arcana",          "name": "Arcana",          "ability": "int" },
+        { "id": "athletics",       "name": "Athletics",       "ability": "str" },
+        { "id": "deception",       "name": "Deception",       "ability": "cha" },
+        { "id": "history",         "name": "History",         "ability": "int" },
+        { "id": "insight",         "name": "Insight",         "ability": "wis" },
+        { "id": "intimidation",    "name": "Intimidation",    "ability": "cha" },
+        { "id": "investigation",   "name": "Investigation",   "ability": "int" },
+        { "id": "medicine",        "name": "Medicine",        "ability": "wis" },
+        { "id": "nature",          "name": "Nature",          "ability": "int" },
+        { "id": "perception",      "name": "Perception",      "ability": "wis" },
+        { "id": "performance",     "name": "Performance",     "ability": "cha" },
+        { "id": "persuasion",      "name": "Persuasion",      "ability": "cha" },
+        { "id": "religion",        "name": "Religion",        "ability": "int" },
+        { "id": "sleight_of_hand", "name": "Sleight of Hand", "ability": "dex" },
+        { "id": "stealth",         "name": "Stealth",         "ability": "dex" },
+        { "id": "survival",        "name": "Survival",        "ability": "wis" }
+      ],
+
+      "uses_classes": true,
+      "classes": {
+        "fighter": {
+          "id": "fighter",
+          "name": "Fighter",
+          "hit_die": "1d10",
+          "description": "Disciplined martial, trained across arms and armor. Fighters hold lines, open doors, and finish what lighter classes start."
+        },
+        "rogue": {
+          "id": "rogue",
+          "name": "Rogue",
+          "hit_die": "1d8",
+          "description": "Scout, cutpurse, trap-hunter. Rogues win fights by not being where the blow lands, and by knowing exactly where theirs should."
+        },
+        "wizard": {
+          "id": "wizard",
+          "name": "Wizard",
+          "hit_die": "1d6",
+          "description": "Scholar of written magic. Wizards prepare a handful of spells from a grimoire each day, spend them carefully, and rest to prepare anew."
+        },
+        "cleric": {
+          "id": "cleric",
+          "name": "Cleric",
+          "hit_die": "1d8",
+          "description": "Sworn servant of a power. Clerics channel borrowed strength — light, warding, healing — and pay for it with patience, ritual, and obligation."
+        },
+        "ranger": {
+          "id": "ranger",
+          "name": "Ranger",
+          "hit_die": "1d10",
+          "description": "Border-walker. Rangers read terrain and quarry the way others read faces, and they carry minor wilderness magics inherited from older traditions."
+        }
+      },
+
+      "slot_limits": {
+        "main_hand": 1,
+        "off_hand":  1,
+        "ranged":    1,
+        "body":      1,
+        "shield":    1,
+        "head":      1,
+        "hands":     1,
+        "feet":      1,
+        "neck":      1,
+        "ring":      2,
+        "cloak":     1,
+        "belt":      1
+      }
+    },
+
+    "resolution": {
+      "checks": {
+        "method": "roll_high_vs_dc",
+        "dice": "1d20",
+        "crit_success": "nat_20",
+        "crit_failure": "nat_1",
+        "advantage_disadvantage": true
+      },
+      "auxiliary": {
+        "x_in_6": false,
+        "reaction_roll": false,
+        "morale_roll": false
+      }
+    },
+
+    "resources": {
+      "hit_points": {
+        "max_formula": "class_hd_plus_con",
+        "at_zero": "unconscious",
+        "overflow": null
+      },
+      "healing": {
+        "natural_rest": "full_overnight"
+      },
+      "damage_types": [
+        { "id": "slashing",    "name": "Slashing",    "narrative_cue": "blades parting flesh, long clean lines and deep bleeding cuts" },
+        { "id": "piercing",    "name": "Piercing",    "narrative_cue": "narrow punctures, arrows buried, fangs driven in" },
+        { "id": "bludgeoning", "name": "Bludgeoning", "narrative_cue": "crushing impact, broken bone, the dull ringing of a well-landed mace" },
+        { "id": "fire",        "name": "Fire",        "narrative_cue": "searing heat, smoke and charred cloth, flesh that hisses" },
+        { "id": "cold",        "name": "Cold",        "narrative_cue": "deep frost, numb limbs, breath crystallizing" },
+        { "id": "lightning",   "name": "Lightning",   "narrative_cue": "a white crack, hair standing, the smell of ozone" },
+        { "id": "thunder",     "name": "Thunder",     "narrative_cue": "concussive air, ringing ears, footing lost" },
+        { "id": "acid",        "name": "Acid",        "narrative_cue": "pitting, dissolving, the reek of eaten metal and cloth" },
+        { "id": "poison",      "name": "Poison",      "narrative_cue": "cold sweat, weakness, the slow climb of something wrong through the body" },
+        { "id": "necrotic",    "name": "Necrotic",    "narrative_cue": "graying flesh, the draining of warmth and will, wounds that refuse to close" },
+        { "id": "radiant",     "name": "Radiant",     "narrative_cue": "unbearable light, the burn of something holy on something it was not meant to touch" },
+        { "id": "psychic",     "name": "Psychic",     "narrative_cue": "pressure behind the eyes, thoughts breaking like thin ice, nosebleeds" },
+        { "id": "force",       "name": "Force",       "narrative_cue": "raw pushing magic, bones shaken, unseen strikes leaving bruises in perfect shapes" }
+      ]
+    },
+
+    "combat": {
+      "attack": {
+        "resolution": "roll_high_vs_ac"
+      },
+      "damage": {
+        "formula": "weapon_die_plus_ability_mod",
+        "melee_ability": "str",
+        "ranged_ability": "dex"
+      },
+      "critical_hit": {
+        "trigger": "nat_20",
+        "effect": "double_dice"
+      },
+      "initiative": {
+        "type": "player_first"
+      }
+    },
+
+    "conditions": [
+      {
+        "id": "blinded",
+        "name": "Blinded",
+        "icon": "eye",
+        "description": "Sight is gone — darkness, smoke, spell, or wound.",
+        "effect": "Automatic failure on checks that require sight. Attack rolls against you have advantage; your attack rolls have disadvantage.",
+        "removal": "Until the cause ends (smoke clears, spell expires, wound treated)."
+      },
+      {
+        "id": "charmed",
+        "name": "Charmed",
+        "icon": "heart",
+        "description": "You regard another creature as a friendly acquaintance, even against your better judgment.",
+        "effect": "Cannot attack the charmer or target them with harmful effects. The charmer has advantage on social checks against you.",
+        "removal": "The effect's duration ends, the charmer harms you, or the source is destroyed."
+      },
+      {
+        "id": "frightened",
+        "name": "Frightened",
+        "icon": "skull",
+        "description": "Something has your nerve.",
+        "effect": "Disadvantage on attack rolls and ability checks while the source is in sight. You cannot willingly move closer to the source.",
+        "removal": "Source leaves sight for a full round, effect expires, or a successful Wisdom save at the end of each of your turns."
+      },
+      {
+        "id": "grappled",
+        "name": "Grappled",
+        "icon": "chains",
+        "description": "Seized — by hands, jaws, or magic.",
+        "effect": "Speed becomes 0. Ends if the grappler is incapacitated or removed from reach.",
+        "removal": "Successful Strength (Athletics) or Dexterity (Acrobatics) check vs. the grappler's check."
+      },
+      {
+        "id": "poisoned",
+        "name": "Poisoned",
+        "icon": "drop",
+        "description": "A toxin is working through you.",
+        "effect": "Disadvantage on attack rolls and ability checks.",
+        "removal": "Until the duration ends, antitoxin is administered, or the poison is neutralized by magic or long rest."
+      },
+      {
+        "id": "prone",
+        "name": "Prone",
+        "icon": "falling",
+        "description": "On the ground — knocked, tripped, or dropped.",
+        "effect": "Disadvantage on your attack rolls. Melee attacks against you have advantage; ranged attacks against you have disadvantage.",
+        "removal": "Spend half your movement to stand up."
+      },
+      {
+        "id": "restrained",
+        "name": "Restrained",
+        "icon": "chains",
+        "description": "Movement bound — by web, rope, root, or spell.",
+        "effect": "Speed becomes 0. Disadvantage on attack rolls and Dexterity saves. Attacks against you have advantage.",
+        "removal": "Escape via the same check that broke the binding (Athletics/Acrobatics), or the source is removed."
+      },
+      {
+        "id": "stunned",
+        "name": "Stunned",
+        "icon": "lightning",
+        "description": "Senses overloaded — a blow too clean, a spell too sharp.",
+        "effect": "Incapacitated. Cannot move. Speaks only falteringly. Automatically fails Strength and Dexterity saves. Attacks against you have advantage.",
+        "removal": "Constitution save at end of each of your turns, or until effect duration ends."
+      },
+      {
+        "id": "unconscious",
+        "name": "Unconscious",
+        "icon": "moon",
+        "description": "Down — at zero hit points, or asleep, or worse.",
+        "effect": "Incapacitated, prone, and unaware. Fails Strength and Dexterity saves. Attacks against you have advantage; melee hits within 5 feet are automatically critical.",
+        "removal": "Healing (even 1 HP), a successful Medicine check to stabilize, or the GM's narrative rescue."
+      },
+      {
+        "id": "wounded",
+        "name": "Wounded",
+        "icon": "drop",
+        "description": "A lingering injury that has not yet been treated — below half hit points, or carrying a nasty wound from a previous fight.",
+        "effect": "Narrative only — the character moves stiffly, bleeds at inconvenient moments, sleeps poorly. GM may call for occasional Constitution checks during exertion.",
+        "removal": "Full long rest, a Medicine check with proper supplies, or healing magic."
+      }
+    ],
+
+    "progression": {
+      "type": "xp_and_level",
+      "xp_sources": [
+        "monsters_defeated",
+        "milestones"
+      ],
+      "level_table": [
+        { "level": 1,  "xp_required": 0,      "proficiency_bonus": 2 },
+        { "level": 2,  "xp_required": 300,    "proficiency_bonus": 2 },
+        { "level": 3,  "xp_required": 900,    "proficiency_bonus": 2 },
+        { "level": 4,  "xp_required": 2700,   "proficiency_bonus": 2 },
+        { "level": 5,  "xp_required": 6500,   "proficiency_bonus": 3 },
+        { "level": 6,  "xp_required": 14000,  "proficiency_bonus": 3 },
+        { "level": 7,  "xp_required": 23000,  "proficiency_bonus": 3 },
+        { "level": 8,  "xp_required": 34000,  "proficiency_bonus": 3 },
+        { "level": 9,  "xp_required": 48000,  "proficiency_bonus": 4 },
+        { "level": 10, "xp_required": 64000,  "proficiency_bonus": 4 }
+      ],
+      "max_level": 10,
+      "hp_gain_per_level": "average_class_hd_plus_con"
+    },
+
+    "difficulty": {
+      "scale": [
+        { "id": "very_easy",         "name": "Very Easy",         "dc": 5  },
+        { "id": "easy",              "name": "Easy",              "dc": 10 },
+        { "id": "medium",            "name": "Medium",            "dc": 15 },
+        { "id": "hard",              "name": "Hard",              "dc": 20 },
+        { "id": "very_hard",         "name": "Very Hard",         "dc": 25 },
+        { "id": "nearly_impossible", "name": "Nearly Impossible", "dc": 30 }
+      ],
+      "auto_success": "Trivial tasks with no consequence, or tasks the character is plainly trained for under calm conditions.",
+      "auto_failure": "Genuinely impossible tasks, or tasks the character cannot attempt without a resource they lack (no torches to search darkness, no tools to disarm)."
+    },
+
+    "encumbrance": {
+      "method": "weight",
+      "weight_formula": { "multiplier": 15, "ability": "str" }
+    }
+  }
+}

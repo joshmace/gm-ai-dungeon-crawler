@@ -1,0 +1,11 @@
+{
+  "setting": {
+    "id": "hollowmarch_v1",
+    "name": "The Hollowmarch",
+    "version": "1.0",
+    "author": "Lantern & Blade Project",
+    "description": "A century after the Dawnlight Empire broke, its northernmost border — the Hollowmarch — is a quiet country of small villages, abandoned watch-houses, and ruins that are slowly waking. The Wardens of the Watch who once held the line are a memory; their lantern-work gathers dust in attics and underground; and the dark is patient.",
+    "tags": ["low-fantasy", "post-imperial", "ruins", "cozy-horror", "undead", "dungeon-focused"],
+    "content": "hollowmarch_lore.md"
+  }
+}

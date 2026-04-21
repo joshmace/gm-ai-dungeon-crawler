@@ -282,14 +282,19 @@ Cleanup pass over the existing `rules.json` flavor-heavy fields. Three live topi
 ```jsonc
 {
   "encumbrance": {
-    "method": "none",              // "slots" | "weight" | "none"
-    "slot_capacity": "str",        // only if method is "slots"; ability id OR fixed number
-    "weight_formula": "15_times_str"  // only if method is "weight"
+    "method": "none",                                           // "slots" | "weight" | "none"
+    "slot_capacity": "str",                                     // only if method is "slots"; ability id OR fixed number
+    "weight_formula": { "multiplier": 15, "ability": "str" }    // only if method is "weight"; capacity = multiplier × ability score
   }
 }
 ```
 
 Declared in all packs; `"none"` is an acceptable value. Inventory UI for slot/weight tracking gets built when we build the first pack that uses it (Shadowdark/Knave-style).
+
+**Weight formula shape (structured):**
+- `multiplier`: positive integer coefficient.
+- `ability`: ability id from `character_model.abilities`.
+- Structured form chosen over a string enum (`"15_times_str"`, ...) because the space of useful formulas is small-but-open. Packs targeting gritty play might use `{ "multiplier": 10, "ability": "str" }`; a CON-based carry fantasy can use `{ "multiplier": 15, "ability": "con" }`. Adding formulas no longer requires a schema change.
 
 **GM guidance prose — move to a sidecar markdown file.**
 
@@ -428,8 +433,9 @@ No structured genre taxonomy (prose description covers tone). Compatible rules/b
       "tags": ["empty", "lore"],                    // optional pacing tags
 
       "connections": {
-        "out": "village_square",                    // simple: label → room_id
-        "secret_door": {                            // or structured: label → { to, state, reveal_hint }
+        "out": "village_square",                    // simple: machine_id → room_id (key is also fallback display label)
+        "secret_door": {                            // structured: machine_id → { label, to, state, reveal_hint }
+          "label": "the secret door",               // optional UI string; falls back to title-cased key when omitted
           "to": "hidden_crypt",
           "state": "hidden",                        // "open" | "locked" | "hidden"
           "reveal_hint": "Perception DC tier: easy"
@@ -447,7 +453,7 @@ No structured genre taxonomy (prose description covers tone). Compatible rules/b
 }
 ```
 
-**Connections** are label → id (simple) or label → object (locked/hidden state).
+**Connections** are machine_id → room_id (simple) or machine_id → object (structured: label, locked/hidden state, reveal hint). The map key is the stable machine id used by `unlock_connection` / `reveal_connection` effects. The structured form's optional `label` carries the player-facing UI string; in the simple form, the app falls back to the title-cased key.
 **Tags** are optional pacing hints: `"encounter"`, `"puzzle"`, `"empty"`, `"treasure"`, `"boss"`, `"lore"`.
 **First-visit vs. revisit narration** — handled by GM naturally, not structured.
 
@@ -536,6 +542,11 @@ All three arrays always present (possibly empty).
 - Four hazard shapes (detect-then-avoid / pure-avoidance / automatic / interaction-gated) emerge from which blocks are present — no type enum needed.
 - Hazards can grant XP rewards for detection or avoidance (opt-in, classic OSR flavor).
 - `gm_notes` per hazard is optional prose guidance.
+
+**Check shape — raw saves vs. skilled checks:**
+- Standard skilled check: `{ "skill": "perception", "ability": "wis", "dc_tier": "easy" }` — proficiency in the named skill applies if the character has it.
+- Raw save (no skill): `{ "skill": null, "ability": "con", "dc_tier": "medium" }` — the app rolls a save against the named ability without applying skill proficiency. Save proficiency from `character.saves.proficient[]` does apply.
+- Same shape used for hazards (`detection.check`, `avoidance.check`) and for puzzle fallback checks (`solution.check`).
 
 ## MQ4.5 — Counter groundwork
 
@@ -691,6 +702,7 @@ Puzzles as gates use `on_success.effects` with `unlock_connection` or `reveal_co
 - **Strict typing** — mixed-type features are split into multiple features (painting-as-lore + hidden-compartment-as-searchable discovered via `on_examine`).
 - **Feature chaining** via `activate_feature` effect is supported and encouraged.
 - **Features cannot:** deal damage, host creatures, grant XP directly. Rewards are items only.
+- **`reward[]` is universal across non-lore feature sub-types** — searchable, interactive, and puzzle may all carry a `reward[]` array using the standard reward shape (`{ "type": "item", "item_id", "quantity" }`). Lore features have no `reward[]` (they're stateless and informational). When present on an interactive or puzzle feature, rewards are granted on the action / solution that triggers them.
 
 ## MQ7 — Rewards, treasure, and loot (introduces the Items archetype)
 
@@ -741,6 +753,8 @@ Weapons include staves/wands (weapon type, appropriate slot). Armor includes all
     "damage_bonus": 0,
     "ac_bonus": 0,
     "ability_bonus": { "str": 0, "dex": 0 },    // per rules-pack ability id
+    "save_bonus": { "all": 1 },                 // per save id; reserved "all" shortcut stacks with specific keys
+    "skill_bonus": { "stealth": 2 },            // per rules-pack skill id; flat numbers only
     "bonus_damage": { "amount": "1d4", "type": "fire" },   // extra dice on weapon hit
     "damage_resistance": [],                    // damage type ids taken at half
     "damage_immunity": [],                      // damage type ids ignored
@@ -758,9 +772,19 @@ Weapons include staves/wands (weapon type, appropriate slot). Armor includes all
 
 **Structured fields for common mechanical effects; prose for everything else.**
 
-**Enforced by app:** attack_bonus, damage_bonus, ac_bonus, ability_bonus, bonus_damage, damage_resistance, damage_immunity, charge count.
+**Enforced by app:** attack_bonus, damage_bonus, ac_bonus, ability_bonus, save_bonus, skill_bonus, bonus_damage, damage_resistance, damage_immunity, charge count.
 
 **Handled by GM (narrative):** charge_effect prose, special_effects prose.
+
+**`save_bonus` shape:**
+- Keyed by save id (matches ability ids when `saves.type: "per_ability"`; matches category ids when `saves.type: "categorical"`).
+- Reserved key `"all"` applies the bonus to every save. Specific keys stack on top (`{ "all": 1, "wis": 2 }` = +1 to all, +3 to wis).
+- Flat numbers only. Advantage/disadvantage on saves is a categorically different mechanical effect; author it in `special_effects` prose.
+
+**`skill_bonus` shape:**
+- Keyed by skill id from `character_model.skills`.
+- Flat numbers only. No `"all"` shortcut (universal skill bonuses are rare enough that the use case doesn't justify the convention).
+- Advantage/disadvantage on skills → `special_effects` prose.
 
 This contains the "magic item can of worms" — we handle the 80% case structurally and let the GM adjudicate the weird bits.
 
@@ -780,6 +804,8 @@ The `armor` block is optional — a ring that only provides a stat bonus has no 
 - Multi-currency (cp/sp/gp/pp) — v1 is just `gold`
 - Scroll as its own type (v1: consumable with magic block)
 - Full magic-item effect scripting (v1 has structured common fields + prose)
+- **Shops / appraisal / item valuation.** v1 items do not carry a `cost_gold` field. Treasure is module-owned (gold + item refs). If and when shops are authored, a `cost_gold` (or per-currency) field gets added to the item schema.
+- **Advantage/disadvantage as a structured magic-block effect.** v1 captures adv/disadv in `special_effects` prose. If common enough to justify structuring, v2 adds a `grants_advantage` / `grants_disadvantage` block.
 
 ## MQ8 — Module state & flow
 
@@ -844,7 +870,11 @@ Lightweight prereqs on features to support formal state-machine puzzles:
 ```jsonc
 {
   "prerequisites": {
-    "feature_state": { "crown_button": "pressed" },
+    "feature_state": {
+      "crown_button": "pressed",        // interactive: matches current_state value
+      "wardens_journal": "succeeded",   // searchable: "succeeded" (true) or "searched" (true regardless of outcome)
+      "time_riddle": "solved"           // puzzle: "solved" (true)
+    },
     "encounter_defeated": ["guardian"]
   },
   "prereq_hint": "The sceptre rune glows faintly, but something about the crown still needs attention."
@@ -852,6 +882,12 @@ Lightweight prereqs on features to support formal state-machine puzzles:
 ```
 
 AND logic only. If not met, feature is **hidden** from the UI; optional `prereq_hint` gives the GM a breadcrumb.
+
+**`feature_state` string convention** (per feature sub-type):
+- **Interactive features** — the value must match the feature's tracked `current_state`. Example: `"crown_button": "pressed"` is satisfied when the button's `current_state == "pressed"`.
+- **Searchable features** — `"succeeded"` is satisfied when the tracked `succeeded == true`. `"searched"` is satisfied when `searched == true` (regardless of success). Anything else is undefined.
+- **Puzzle features** — `"solved"` is satisfied when the tracked `solved == true`. Anything else is undefined.
+- **Lore features** are stateless and cannot be referenced in `feature_state` prereqs.
 
 **Unlocks:** multi-step puzzles via feature chaining, staged reveals, gated progression.
 
@@ -866,12 +902,17 @@ AND logic only. If not met, feature is **hidden** from the UI; optional `prereq_
 ### Module guidance sidecar (optional)
 
 ```jsonc
-// Manifest
+// Inside the module file's top-level module block
 {
-  "adventure_module": "village_three_knots.json",
-  "module_guidance": "village_three_knots_guidance.md"   // optional
+  "module": {
+    "id": "village_three_knots",
+    "title": "...",
+    "guidance": "village_three_knots_guidance.md"   // optional
+  }
 }
 ```
+
+Module guidance lives inside the module file, consistent with how rules, setting, and character each carry their own guidance/lore sidecar reference inside their primary JSON. The pack manifest does not carry a `module_guidance` field.
 
 Prompt builder injects alongside rules-pack guidance. Used for author's running-notes, tone essays, rules-pack-specific adjustments, design intent, spoiler/reveal guidance.
 
@@ -1032,9 +1073,10 @@ Minimum-viable monster shape; everything mechanically tuneable is pre-computed (
           {
             "name": "Scimitar",
             "bonus": 2,                    // pre-computed total to-hit; not derived
-            "damage": "1d6+2",             // pre-computed
+            "damage": "1d6+2",             // optional — omit for non-damaging attacks (web, grapple, shove)
             "damage_type": "slashing",     // optional; ignored if rules pack has no damage_types
-            "range": "melee"               // "melee" | "ranged"
+            "range": "melee",              // "melee" | "ranged"
+            "on_hit": "..."                // optional prose rider — save-or-suffer, condition application, resource drain, etc. GM adjudicates.
           }
         ],
 
@@ -1064,6 +1106,13 @@ Minimum-viable monster shape; everything mechanically tuneable is pre-computed (
 ## Required fields (minimum viable monster)
 
 `id`, `name`, `hp`, `ac`, `attacks`, `xp_value`. Everything else optional.
+
+## Attack shape notes
+
+- `damage` and `damage_type` are optional. Omit both for non-damaging attacks (web, grapple, shove, disarm).
+- `on_hit` is optional prose describing any rider — save-or-suffer effects, conditions applied on hit, max-HP drains, position changes, etc. GM adjudicates; no structured rider schema in v1.
+- Design line: consistent with magic items (structured common fields + prose escape hatch). Riders are too varied to structure exhaustively, and the v1 app doesn't mechanically process them — the GM does, and prose is what the GM needs.
+- Deferred to v2: structured `rider` block (save ability + DC + on_failure damage/conditions) for when the rules engine starts adjudicating monster turns programmatically.
 
 ## Deletions from current `monster_manual.json`
 
@@ -1125,6 +1174,7 @@ Variants are handled via duplication or `module_bestiary` (a one-off Greater Gob
 - Active condition ids
 - Gold
 - Charged-item state
+- Feature-resource pools (spell slots, per-rest class feature uses)
 - Proficient saves and skills (id lists only)
 - Class features (prose descriptions)
 
@@ -1183,6 +1233,21 @@ Variants are handled via duplication or `module_bestiary` (a one-off Greater Gob
       "wand_of_fireball": { "current_charges": 2 }
     },
 
+    "feature_resources": {                            // spell slots, per-rest class feature uses, etc.
+      "spell_slots_1": {
+        "name": "1st-level spell slots",
+        "current": 4,
+        "max": 4,
+        "recharge": "long_rest"                       // "long_rest" | "short_rest" | "daily" | "none"
+      },
+      "second_wind": {
+        "name": "Second Wind",
+        "current": 1,
+        "max": 1,
+        "recharge": "short_rest"
+      }
+    },
+
     "conditions": ["wounded"],                        // active condition ids from rules pack
 
     "gold": 47,
@@ -1208,6 +1273,34 @@ Variants are handled via duplication or `module_bestiary` (a one-off Greater Gob
 - GM adjudicates class features narratively; no structured feature tree.
 - Level-ups add features to the array (GM or designer authored).
 - Full structured class systems (spells, subclass trees, per-level feature lists) deferred to v2 — worthy of its own walkthrough once we have play data.
+
+## Feature resources (spell slots, per-rest uses)
+
+Character-side resource pools for class features that expend and recharge — spell slots, `Second Wind`-style once-per-rest abilities, channel-divinity pools, ki points, anything a 5e-shaped pack needs to track beyond items.
+
+**Stored shape:**
+```jsonc
+"feature_resources": {
+  "<pool_id>": {
+    "name": "Display label",
+    "current": 4,
+    "max": 4,
+    "recharge": "long_rest"        // "long_rest" | "short_rest" | "daily" | "none"
+  }
+}
+```
+
+**Runtime behavior:**
+- App surfaces each pool in the character panel with a `current / max` counter.
+- Player may decrement directly via UI; GM may signal use with an inline tag `[RESOURCE_USE: <pool_id>]` when adjudicating a spell or feature mid-narration. App decrements on the tag.
+- `recharge` values restore `current` → `max` when the corresponding rest event fires. `"none"` is for pools that only refill via specific in-fiction conditions (GM narrates the refill).
+
+**Authoring notes:**
+- Pools are character-owned (not rules-pack-owned). A Wizard player of one pack looks different from a Wizard of another — that's fine for v1.
+- Prose in `class_features[]` should reference the pool by id so the GM knows which to decrement ("Casting *magic missile* spends one `spell_slots_1`.").
+- Pool ids are free-form strings scoped to the character; no validation against a rules-pack feature registry in v1.
+
+**Deferred to v2:** rules-pack-declared feature templates, per-class progression tables that auto-populate pools on level up, structured spell catalogs.
 
 ## Flavor moves to an optional markdown sidecar
 
@@ -1251,3 +1344,5 @@ All six archetypes fully specified for v1:
 4. **App-side refactor** (`playable-dungeon-crawler-v2.html` and `server.js`) — consume the new schemas; the full list of downstream impacts was captured earlier in this doc.
 5. **Pack migration** — the two existing packs (`game_pack.json` test hub and `game_pack_village_three_knots.json`) need to be rewritten against the new schemas.
 6. **Starter pack templates** — at least two: an OSR-classless example (B/X-like) and a 5e-like example. These become the on-ramp for new pack authors.
+7. **Enumerate the fixed condition-icon library** (~20 generic icons). Until the list is authoritative, packs should stick to the known-safe set (`skull`, `fire`, `drop`, `eye`, `chains`) and fall back to `skull` for anything unrecognized. Candidate additions surfaced by the 5e-shape starter pack: `heart`, `lightning`, `moon`, `falling`, `snowflake`, `sun`, `shield`, `sword`, `hand`, `swirl`. Final list to be decided and published in `JSON_SCHEMAS.md`.
+8. **Enumerate `consumable.on_use` keywords.** Schema shows `"heal_player"` as an app-parsed keyword but does not enumerate the full set. Candidate keywords surfaced: `heal_player`, `cure_condition`, `buff_ability`, `buff_save`, `gm_adjudicate` (the catch-all for prose-defined effects). Final list to be decided and published in `JSON_SCHEMAS.md`; any non-keyword value should default to `gm_adjudicate` with the item's `amount` field treated as prose.

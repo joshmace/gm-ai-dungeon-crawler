@@ -1,0 +1,205 @@
+{
+  "rules": {
+    "id":                "rules_three_knots_v1",
+    "name":              "Three Knots — Old-School Rules",
+    "version":           "1.0",
+    "author":            "Three Knots Project",
+    "description":       "A B/X-flavored OSR ruleset for The Haunting of Three Knots. 3d6 abilities, categorical saves, no skills, no damage types, morale and reaction rolls, gold-as-XP. Designed for short dungeon crawls — lethal and atmospheric.",
+    "design_philosophy": "Classic dungeon crawl: death is a real outcome, treasure is the point, and the dungeon decides.",
+    "guidance":          "three_knots_guidance.md",
+
+    "character_model": {
+      "abilities": [
+        { "id": "str", "name": "Strength",     "abbr": "STR", "range": [3, 18] },
+        { "id": "dex", "name": "Dexterity",    "abbr": "DEX", "range": [3, 18] },
+        { "id": "con", "name": "Constitution", "abbr": "CON", "range": [3, 18] },
+        { "id": "int", "name": "Intelligence", "abbr": "INT", "range": [3, 18] },
+        { "id": "wis", "name": "Wisdom",       "abbr": "WIS", "range": [3, 18] },
+        { "id": "cha", "name": "Charisma",     "abbr": "CHA", "range": [3, 18] }
+      ],
+
+      "modifier_formula": "table_bx",
+
+      "saves": {
+        "type": "categorical",
+        "categories": [
+          { "id": "death",     "name": "Death Ray or Poison" },
+          { "id": "wands",     "name": "Magic Wands" },
+          { "id": "paralysis", "name": "Paralysis or Turn to Stone" },
+          { "id": "breath",    "name": "Dragon Breath" },
+          { "id": "spells",    "name": "Rods, Staves, or Spells" }
+        ]
+      },
+
+      "skills": [],
+
+      "uses_classes": true,
+      "classes": {
+        "fighter": {
+          "id":          "fighter",
+          "name":        "Fighter",
+          "hit_die":     "1d8",
+          "description": "Front-line warrior. Best hit die, all armor and all weapons. No special abilities — the sword is the point."
+        },
+        "cleric": {
+          "id":          "cleric",
+          "name":        "Cleric",
+          "hit_die":     "1d6",
+          "description": "Armored holy warrior. Any armor, no edged weapons. Turns undead; learns divine spells from level 2."
+        },
+        "magic_user": {
+          "id":          "magic_user",
+          "name":        "Magic-User",
+          "hit_die":     "1d4",
+          "description": "Frail scholar of the arcane. No armor, dagger or staff only. Memorizes spells daily; one spell at level 1."
+        },
+        "thief": {
+          "id":          "thief",
+          "name":        "Thief",
+          "hit_die":     "1d4",
+          "description": "Light-fingered survivor. Leather armor, simple weapons. Backstab, stealth, and the usual x-in-6 thief skills."
+        }
+      },
+
+      "slot_limits": {
+        "main_hand": 1, "off_hand": 1, "two_handed": 1, "ranged": 1,
+        "body": 1, "shield": 1,
+        "head": 1, "hands": 1, "feet": 1,
+        "neck": 1, "ring": 2,
+        "cloak": 1, "belt": 1
+      }
+    },
+
+    "resolution": {
+      "checks": {
+        "method":                 "roll_high_vs_dc",
+        "dice":                   "1d20",
+        "crit_success":           "nat_20",
+        "crit_failure":           "nat_1",
+        "advantage_disadvantage": false
+      },
+      "auxiliary": {
+        "x_in_6":        true,
+        "reaction_roll": true,
+        "morale_roll":   true
+      }
+    },
+
+    "resources": {
+      "hit_points": {
+        "max_formula": "class_hd_plus_con",
+        "at_zero":     "dead",
+        "overflow":    null
+      },
+      "healing": {
+        "natural_rest": "minimal"
+      }
+    },
+
+    "combat": {
+      "attack": {
+        "resolution": "roll_high_vs_ac"
+      },
+      "damage": {
+        "formula":        "weapon_die_plus_ability_mod",
+        "melee_ability":  "str",
+        "ranged_ability": "dex"
+      },
+      "critical_hit": {
+        "trigger": "nat_20",
+        "effect":  "double_dice"
+      },
+      "initiative": {
+        "type": "side_based"
+      }
+    },
+
+    "conditions": [
+      {
+        "id":          "charmed",
+        "name":        "Charmed",
+        "icon":        "heart",
+        "description": "You regard the charmer as a trusted friend. You will not attack them or knowingly act against them.",
+        "effect":      "The character cannot attack or harm the charmer; they obey reasonable requests short of self-destruction. They are not charmed against their will once the charmer acts against them.",
+        "removal":     "Until the charmer attacks you, the spell is dispelled, or the spell's duration ends."
+      },
+      {
+        "id":          "held",
+        "name":        "Held",
+        "icon":        "chains",
+        "description": "A spell or effect has locked your body. You cannot move or act.",
+        "effect":      "No movement, no actions, no speech. Attacks against the held character hit automatically.",
+        "removal":     "When the spell ends, is dispelled, or a save against Spells at the end of each turn succeeds (if the effect allows)."
+      },
+      {
+        "id":          "sleeping",
+        "name":        "Sleeping",
+        "icon":        "moon",
+        "description": "Unnaturally asleep. You will not wake to noise, but a hard shake or an attack rouses you.",
+        "effect":      "Unconscious; helpless. Attacks hit automatically. Sleep ends immediately if the sleeper takes damage; a combatant can be shaken or slapped awake as an action.",
+        "removal":     "On taking damage, being shaken awake, or at the end of the effect's duration."
+      },
+      {
+        "id":          "paralyzed",
+        "name":        "Paralyzed",
+        "icon":        "lightning",
+        "description": "Frozen. Conscious but cannot act.",
+        "effect":      "No movement, no actions, no speech. Attacks against paralyzed targets hit automatically.",
+        "removal":     "When the spell or effect ends; commonly 2d4 turns."
+      },
+      {
+        "id":          "cursed",
+        "name":        "Cursed",
+        "icon":        "skull",
+        "description": "Something ancient has fastened on you. Your luck has turned.",
+        "effect":      "−1 on all attack rolls, saves, and checks for the duration of the curse. The effect may worsen over time at the GM's discretion.",
+        "removal":     "Remove curse spell, destruction of the cursed object, or fulfillment of the curse's terms."
+      },
+      {
+        "id":          "poisoned",
+        "name":        "Poisoned",
+        "icon":        "drop",
+        "description": "A toxin is working through you.",
+        "effect":      "−2 on attack rolls and on all ability checks until the poison passes or is cured.",
+        "removal":     "Cure poison spell, antitoxin, or natural recovery after 1d6 turns for mild poisons."
+      }
+    ],
+
+    "progression": {
+      "type": "xp_and_level",
+      "xp_sources": [
+        "monsters_defeated",
+        "treasure_recovered"
+      ],
+      "level_table": [
+        { "level": 1,  "xp_required": 0 },
+        { "level": 2,  "xp_required": 2000 },
+        { "level": 3,  "xp_required": 4000 },
+        { "level": 4,  "xp_required": 8000 },
+        { "level": 5,  "xp_required": 16000 },
+        { "level": 6,  "xp_required": 32000 },
+        { "level": 7,  "xp_required": 64000 },
+        { "level": 8,  "xp_required": 120000 },
+        { "level": 9,  "xp_required": 240000 },
+        { "level": 10, "xp_required": 360000 }
+      ],
+      "max_level":          10,
+      "hp_gain_per_level":  "roll_class_hd_plus_con"
+    },
+
+    "difficulty": {
+      "scale": [
+        { "id": "easy",   "name": "Easy",   "dc": 10 },
+        { "id": "medium", "name": "Medium", "dc": 12 },
+        { "id": "hard",   "name": "Hard",   "dc": 15 }
+      ],
+      "auto_success": "Tasks a competent adventurer does without thinking: walking a safe road, lighting a torch, reading a familiar language.",
+      "auto_failure": "Tasks physically or mentally impossible with the resources at hand. Describe why, then move on."
+    },
+
+    "encumbrance": {
+      "method":         "slots",
+      "slot_capacity":  "str"
+    }
+  }
+}

@@ -1,0 +1,389 @@
+{
+  "bestiary": {
+    "id": "lantern_and_blade_bestiary_v1",
+    "name": "Lantern & Blade — Starter Bestiary",
+    "version": "1.0",
+    "author": "Lantern & Blade Project",
+    "description": "A starter catalog of twelve foes calibrated for low-level play: vermin and small beasts, wasteland humanoids, restless dead, and one true horror. Every entry is self-contained; module authors may add one-off bosses via module_bestiary.",
+
+    "monsters": {
+
+      "giant_rat": {
+        "id": "giant_rat",
+        "name": "Giant Rat",
+        "description": "A filthy rodent the size of a small dog. Fearless in numbers, cowardly alone, and always, always hungry.",
+        "type": "beast",
+        "hp": 7,
+        "ac": 12,
+        "attacks": [
+          { "name": "Bite", "bonus": 3, "damage": "1d4+1", "damage_type": "piercing", "range": "melee" }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "keen_smell",
+            "name": "Keen Smell",
+            "description": "Advantage on checks to smell out food, blood, or hidden creatures.",
+            "type": "passive"
+          }
+        ],
+        "xp_value": 25,
+        "behavior": "Swarms from burrows and garbage-heaps. Flees if reduced below half HP unless cornered.",
+        "tactics": "Runs for ankles and the edges of cloaks; bites, releases, reengages. Rarely fights to the death."
+      },
+
+      "fire_beetle": {
+        "id": "fire_beetle",
+        "name": "Fire Beetle",
+        "description": "A fist-sized iridescent beetle with two soft luminous glands on its thorax. The light is steady and blue-green; the beetles themselves are sluggish but bite surprisingly hard.",
+        "type": "beast",
+        "hp": 4,
+        "ac": 13,
+        "attacks": [
+          { "name": "Bite", "bonus": 1, "damage": "1d6", "damage_type": "piercing", "range": "melee" }
+        ],
+        "special_abilities": [
+          {
+            "id": "illumination",
+            "name": "Illumination",
+            "description": "The beetle's thorax glands shed dim light in a short radius. The glands continue to glow for 1d6 days after the beetle is killed; dungeoneers harvest them as short-duration lanterns.",
+            "type": "passive"
+          },
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          }
+        ],
+        "xp_value": 10,
+        "behavior": "Docile unless disturbed; defends its nesting chamber to the death."
+      },
+
+      "bandit": {
+        "id": "bandit",
+        "name": "Bandit",
+        "description": "A desperate person with a weapon and a threat. Usually a farmer or a broken soldier. Usually more frightened than they seem.",
+        "type": "humanoid",
+        "hp": 11,
+        "ac": 12,
+        "attacks": [
+          { "name": "Scimitar",         "bonus": 3, "damage": "1d6+1", "damage_type": "slashing",  "range": "melee"  },
+          { "name": "Light Crossbow",   "bonus": 3, "damage": "1d8+1", "damage_type": "piercing", "range": "ranged" }
+        ],
+        "xp_value": 25,
+        "behavior": "Demands goods before violence. Breaks morale if half the group is down; runs rather than dies for coin.",
+        "tactics": "Opens with crossbows from ambush, closes with scimitars if their side has numbers."
+      },
+
+      "cultist": {
+        "id": "cultist",
+        "name": "Cultist",
+        "description": "A hooded figure in a dyed-black robe, face painted with a dull grey sigil. Fervent, under-fed, and harder to talk to than reason suggests.",
+        "type": "humanoid",
+        "hp": 9,
+        "ac": 12,
+        "attacks": [
+          { "name": "Ritual Dagger", "bonus": 3, "damage": "1d4+1", "damage_type": "piercing", "range": "melee" }
+        ],
+        "special_abilities": [
+          {
+            "id": "dark_whisper",
+            "name": "Dark Whisper",
+            "description": "Once per combat, the cultist may mutter a rote invocation toward a single ally within sight. That ally's next attack before the cultist's next turn has a +2 bonus to hit. Prose-adjudicated; the GM narrates the whisper.",
+            "type": "active"
+          }
+        ],
+        "xp_value": 25,
+        "behavior": "Will not parley. Accepts death over capture if the ritual is threatened."
+      },
+
+      "goblin_scout": {
+        "id": "goblin_scout",
+        "name": "Goblin Scout",
+        "description": "A knee-high creature with mottled green skin and eyes too big for its face. Quick, mean, and enormously fond of its own cleverness.",
+        "type": "humanoid",
+        "hp": 7,
+        "ac": 13,
+        "attacks": [
+          { "name": "Scimitar", "bonus": 4, "damage": "1d6+2", "damage_type": "slashing",  "range": "melee"  },
+          { "name": "Shortbow", "bonus": 4, "damage": "1d6+2", "damage_type": "piercing", "range": "ranged" }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "nimble_escape",
+            "name": "Nimble Escape",
+            "description": "The goblin can disengage or hide as a bonus action on each of its turns. Do not trigger attacks-of-opportunity narration against a goblin scout leaving melee.",
+            "type": "passive"
+          }
+        ],
+        "xp_value": 50,
+        "behavior": "Never fights fair. Opens with arrows from cover, disengages if pressed, returns when flanked.",
+        "tactics": "Keep the scout on the margins of the fight. Concentrate arrows on casters and light-armored targets."
+      },
+
+      "skeleton_warrior": {
+        "id": "skeleton_warrior",
+        "name": "Skeleton Warrior",
+        "description": "A knight's bones lashed back into rough human shape by a cord of grey-black binding. It wears what's left of its old kit — a pitted sword, a scrap of tabard, the memory of a helm. Moves with the patience of something that has forgotten how to be in a hurry.",
+        "type": "undead",
+        "hp": 13,
+        "ac": 13,
+        "attacks": [
+          { "name": "Rust-Pitted Longsword", "bonus": 4, "damage": "1d8+2", "damage_type": "slashing",  "range": "melee"  },
+          { "name": "Warped Shortbow",       "bonus": 4, "damage": "1d6+2", "damage_type": "piercing", "range": "ranged" }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "undying_silence",
+            "name": "Undying Silence",
+            "description": "The skeleton makes no sound — no breathing, no grunt of effort, no cry when struck. The only noise it produces is the clatter of its own bones.",
+            "type": "passive"
+          }
+        ],
+        "damage_immunity": ["poison"],
+        "damage_vulnerability": ["bludgeoning"],
+        "xp_value": 50,
+        "behavior": "Attacks the nearest living thing without hesitation and without pursuit beyond its bound territory. Falls apart permanently on a killing bludgeon blow.",
+        "tactics": "Favor hammers, maces, and quarterstaves. Edge weapons chip off chips; weight breaks it properly."
+      },
+
+      "hobgoblin_legionary": {
+        "id": "hobgoblin_legionary",
+        "name": "Hobgoblin Legionary",
+        "description": "Taller than a goblin, broader in the shoulder, red-skinned and helmeted. A hobgoblin legionary was once a soldier in a real army, and still behaves like one — polished gear, straight posture, an uncomfortable amount of discipline.",
+        "type": "humanoid",
+        "hp": 11,
+        "ac": 18,
+        "attacks": [
+          { "name": "Longsword", "bonus": 3, "damage": "1d8+1", "damage_type": "slashing",  "range": "melee"  },
+          { "name": "Longbow",   "bonus": 3, "damage": "1d8+1", "damage_type": "piercing", "range": "ranged" }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "martial_advantage",
+            "name": "Martial Advantage",
+            "description": "Once per turn, the legionary deals an extra 2d6 damage on a successful attack against a target that has at least one of the legionary's allies within reach and not incapacitated.",
+            "type": "triggered"
+          }
+        ],
+        "xp_value": 100,
+        "behavior": "Fights in formation. Holds a line rather than chasing stragglers. Respects a surrender offered in good faith.",
+        "tactics": "Pair legionaries with any ally for the Martial Advantage trigger. Longbow from range when no ally is in melee."
+      },
+
+      "goblin_brute": {
+        "id": "goblin_brute",
+        "name": "Goblin Brute",
+        "description": "A goblin who has grown — half a head taller than its fellows, broader, uglier, with a permanent squint and a warhammer it cannot really afford to lose. The others defer to it, mostly.",
+        "type": "humanoid",
+        "hp": 12,
+        "ac": 14,
+        "attacks": [
+          { "name": "Warhammer", "bonus": 4, "damage": "1d8+2", "damage_type": "bludgeoning", "range": "melee" }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "savage_rush",
+            "name": "Savage Rush",
+            "description": "Once per combat, the brute may charge a target it can see within a short dash. The charge grants advantage on the attack roll and, on a hit, knocks a medium or smaller target prone.",
+            "type": "active"
+          }
+        ],
+        "xp_value": 100,
+        "behavior": "Leads from the front. Breaks morale only if its smaller followers have already run.",
+        "tactics": "Opens with Savage Rush on whoever looks most dangerous; stays in melee after."
+      },
+
+      "giant_spider": {
+        "id": "giant_spider",
+        "name": "Giant Spider",
+        "description": "A spider the size of a large dog, black-bodied with pale grey leg-joints. It moves with a horrid economy — no step is wasted. Where giant spiders live, their silk always gets there first.",
+        "type": "beast",
+        "hp": 26,
+        "ac": 14,
+        "attacks": [
+          {
+            "name": "Bite",
+            "bonus": 5,
+            "damage": "1d8+3",
+            "damage_type": "piercing",
+            "range": "melee",
+            "on_hit": "Target makes a Constitution save (DC 11) or takes an additional 2d8 poison damage (half on a successful save) and is poisoned until the end of their next turn."
+          },
+          {
+            "name": "Web",
+            "bonus": 4,
+            "range": "ranged",
+            "on_hit": "Target is restrained by sticky webbing. Target may escape with a successful Strength (Athletics) check (DC 12) on their turn; the webbing burns away quickly to fire."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "spider_climb",
+            "name": "Spider Climb",
+            "description": "Climbs any surface, including ceilings, as easily as a human walks on a floor.",
+            "type": "passive"
+          }
+        ],
+        "xp_value": 200,
+        "behavior": "Ambushes from ceilings and dark corners. Prefers to web a target first, then bite at leisure.",
+        "tactics": "Lead with Web on a ranged attacker; Bite on whoever's closest next turn."
+      },
+
+      "dire_wolf": {
+        "id": "dire_wolf",
+        "name": "Dire Wolf",
+        "description": "A wolf twice again the size it ought to be, shoulder-height at a grown man's hip. Coarse-furred, yellow-eyed, heavy-jawed. Hunts in pairs and threes.",
+        "type": "beast",
+        "hp": 22,
+        "ac": 14,
+        "attacks": [
+          {
+            "name": "Bite",
+            "bonus": 5,
+            "damage": "2d6+3",
+            "damage_type": "piercing",
+            "range": "melee",
+            "on_hit": "Target makes a Strength save (DC 13) or is knocked prone."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id": "keen_smell",
+            "name": "Keen Smell",
+            "description": "Advantage on Perception checks that rely on smell.",
+            "type": "passive"
+          },
+          {
+            "id": "pack_tactics",
+            "name": "Pack Tactics",
+            "description": "The wolf has advantage on attack rolls against any target that has at least one of its allies within reach and not incapacitated.",
+            "type": "passive"
+          }
+        ],
+        "xp_value": 200,
+        "behavior": "Works the flanks with a mate or kin. Circles a wounded target rather than committing; commits fully when the target is prone.",
+        "tactics": "If the party is a group, separate one and keep them prone. Solo players: favor the bite-then-back-off pattern, trust Pack Tactics to do the math when an ally engages."
+      },
+
+      "restless_spirit": {
+        "id": "restless_spirit",
+        "name": "Restless Spirit",
+        "description": "A half-seen human figure in the shape of whoever it was before — stooped, hooded, walking a loop it cannot finish. The edges of the shape smoke. The cold around it is the specific cold of a room that should not be this cold.",
+        "type": "undead",
+        "hp": 15,
+        "ac": 13,
+        "attacks": [
+          { "name": "Chilling Touch", "bonus": 4, "damage": "2d6+2", "damage_type": "necrotic", "range": "melee" }
+        ],
+        "special_abilities": [
+          {
+            "id": "incorporeal",
+            "name": "Incorporeal Movement",
+            "description": "The spirit can move through walls, doors, and other solid objects as if they were difficult terrain. It takes 1d10 force damage if it ends its turn inside a solid object.",
+            "type": "passive"
+          },
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "bound_to_purpose",
+            "name": "Bound to Purpose",
+            "description": "The spirit cannot leave the room or small area that anchors it. If driven out, it vanishes and reforms at the anchor at the next nightfall — unless its unfinished task is completed, in which case it does not return.",
+            "type": "passive"
+          }
+        ],
+        "damage_resistance": ["acid", "cold", "fire", "lightning", "thunder", "slashing", "piercing", "bludgeoning"],
+        "damage_immunity": ["necrotic", "poison"],
+        "xp_value": 450,
+        "behavior": "Acts out the last minutes of its death, over and over. Attacks anything that enters its anchor area once triggered.",
+        "tactics": "Resistant to non-magical weapons — the party should lean on magical damage (Lanternblade, wand, spells). A clever party may resolve the spirit's unfinished task instead of fighting."
+      },
+
+      "wight": {
+        "id": "wight",
+        "name": "Wight",
+        "description": "A body preserved past its proper end — skin drawn tight over bone, eyes the color and clarity of frozen water, a voice that still has the tone of whoever it used to be. It remembers things. It has preferences. It is worse than a mindless undead in every way that matters.",
+        "type": "undead",
+        "hp": 45,
+        "ac": 14,
+        "attacks": [
+          {
+            "name": "Ancient Longsword",
+            "bonus": 4,
+            "damage": "1d8+2",
+            "damage_type": "slashing",
+            "range": "melee"
+          },
+          {
+            "name": "Life Drain",
+            "bonus": 4,
+            "damage": "1d6+2",
+            "damage_type": "necrotic",
+            "range": "melee",
+            "on_hit": "Target makes a Constitution save (DC 13) or has their hit point maximum reduced by the damage dealt. The reduction lasts until the target finishes a long rest; if this reduces a target's maximum to 0, the target dies."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id": "darkvision",
+            "name": "Darkvision",
+            "description": "Sees in total darkness as if it were dim light.",
+            "type": "passive"
+          },
+          {
+            "id": "sunlight_sensitivity",
+            "name": "Sunlight Sensitivity",
+            "description": "In direct sunlight, the wight has disadvantage on attack rolls and on Perception checks that rely on sight.",
+            "type": "passive"
+          }
+        ],
+        "damage_resistance": ["necrotic", "slashing", "piercing", "bludgeoning"],
+        "damage_immunity": ["poison"],
+        "xp_value": 700,
+        "behavior": "Taunts. Remembers names. Strikes at whichever target would most hurt the party to lose. Retreats to sacred ground if injured, never surrenders.",
+        "tactics": "Open with the sword against a tough target to soften them, then switch to Life Drain on the most wounded. Reserve Life Drain for a late-fight killing blow — max-HP reductions matter much more when the fight's decided."
+      }
+
+    }
+  }
+}

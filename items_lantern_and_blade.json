@@ -1,0 +1,347 @@
+{
+  "items_library": {
+    "id": "lantern_and_blade_items_v1",
+    "name": "Lantern & Blade — Starter Items",
+    "version": "1.0",
+    "author": "Lantern & Blade Project",
+    "description": "A spare but well-tuned starter library: mundane arms and armor, a handful of consumables, and a small set of old magics. Weighted for a party of one at low levels.",
+
+    "items": {
+
+      "steel_longsword": {
+        "id": "steel_longsword",
+        "name": "Steel Longsword",
+        "type": "weapon",
+        "slot": "main_hand",
+        "description": "A plain soldier's blade, the kind a small-town armorer turns out by the pair. The grip is leather over wood; the crossguard is honest iron. No provenance, no runes, nothing to steal.",
+        "weight_slots": 3,
+        "tags": ["common", "mundane"],
+        "weapon": {
+          "damage": "1d8",
+          "damage_type": "slashing",
+          "melee": true,
+          "ranged": false
+        }
+      },
+
+      "shortbow": {
+        "id": "shortbow",
+        "name": "Shortbow",
+        "type": "weapon",
+        "slot": "ranged",
+        "description": "A plain hunter's bow of layered yew, string waxed against damp. Accurate out to the length of a corridor; unkind at close quarters.",
+        "weight_slots": 2,
+        "tags": ["common", "mundane"],
+        "weapon": {
+          "damage": "1d6",
+          "damage_type": "piercing",
+          "melee": false,
+          "ranged": true
+        }
+      },
+
+      "silver_dagger": {
+        "id": "silver_dagger",
+        "name": "Silver-Edged Dagger",
+        "type": "weapon",
+        "slot": "main_hand",
+        "description": "A stout fighting knife, the leading edge and point fitted with a thin ribbon of silver along the steel. The silver is soft and dulls quickly, but it bites things that honest steel will not.",
+        "weight_slots": 1,
+        "tags": ["common", "silvered"],
+        "weapon": {
+          "damage": "1d4",
+          "damage_type": "piercing",
+          "melee": true,
+          "ranged": false
+        },
+        "magic": {
+          "special_effects": "The silvered edge cuts through resistances that spare ordinary steel — lycanthropes, lesser undead, fey flesh. GM may waive damage resistance to non-magical weapons for these kinds of foes."
+        }
+      },
+
+      "warhammer": {
+        "id": "warhammer",
+        "name": "Warhammer",
+        "type": "weapon",
+        "slot": "main_hand",
+        "description": "A square-headed smith's hammer reshaped for less patient work. Heavy enough to break a helmet, small enough to swing in a crypt.",
+        "weight_slots": 2,
+        "tags": ["common", "mundane"],
+        "weapon": {
+          "damage": "1d8",
+          "damage_type": "bludgeoning",
+          "melee": true,
+          "ranged": false
+        }
+      },
+
+      "quarterstaff": {
+        "id": "quarterstaff",
+        "name": "Iron-Shod Quarterstaff",
+        "type": "weapon",
+        "slot": "two_handed",
+        "description": "Six feet of seasoned oak, capped at either end with a band of dull iron. Reach, balance, and the quiet assumption that it will outlast several of its wielder's weapons.",
+        "weight_slots": 4,
+        "tags": ["common", "mundane"],
+        "weapon": {
+          "damage": "1d8",
+          "damage_type": "bludgeoning",
+          "melee": true,
+          "ranged": false
+        }
+      },
+
+      "lanternblade": {
+        "id": "lanternblade",
+        "name": "Lanternblade",
+        "type": "weapon",
+        "slot": "main_hand",
+        "description": "A longsword whose fuller is inlaid with a single unbroken line of pale runes. In low light the runes warm visibly; in true dark the blade sheds a steady lantern-glow as far as a thrown stone. Old Warden work, from before the Watch broke.",
+        "weight_slots": 3,
+        "tags": ["magical", "heirloom", "lantern-work"],
+        "weapon": {
+          "damage": "1d8",
+          "damage_type": "slashing",
+          "melee": true,
+          "ranged": false
+        },
+        "magic": {
+          "attack_bonus": 1,
+          "damage_bonus": 1,
+          "bonus_damage": { "amount": "1d4", "type": "radiant" },
+          "special_effects": "Sheds dim lantern-light in a short radius whenever drawn. The light cannot be extinguished while the blade is bare. Undead struck by the blade flinch visibly, even on a glancing hit."
+        }
+      },
+
+      "wardens_oathblade": {
+        "id": "wardens_oathblade",
+        "name": "Warden's Oathblade",
+        "type": "weapon",
+        "slot": "main_hand",
+        "description": "A plain longsword of clean silvered steel, its crossguard stamped with a single laurel. Older than it looks. The Wardens forged these by the dozen for their recruits, and an initiate kept the blade they were given on the day they took the oath. Weight-wise, a training sword; in function, not. The silvering alone is worth more than most recruits carried in coin.",
+        "weight_slots": 3,
+        "tags": ["magical", "warden", "silvered", "quest-reward"],
+        "weapon": {
+          "damage": "1d8",
+          "damage_type": "slashing",
+          "melee": true,
+          "ranged": false
+        },
+        "magic": {
+          "attack_bonus": 1,
+          "damage_bonus": 0,
+          "bonus_damage": { "amount": "1d4", "type": "radiant" },
+          "special_effects": "The blade's silvering counts as silvered for any rider that cares. Against undead and unhallowed creatures, the oath worked into the steel flares briefly on a hit — an additional 1d4 radiant damage. A recruit-blade; not as old or as deep as the Lanternblade, but the same order of work, and enough to teach a hand what the Lanternblade is asking of it."
+        }
+      },
+
+      "leather_armor": {
+        "id": "leather_armor",
+        "name": "Boiled Leather",
+        "type": "armor",
+        "slot": "body",
+        "description": "Hardened leather over a quilted undergarment. Quiet, flexible, and a great deal lighter than its owner usually wishes it were when something hits them.",
+        "weight_slots": 10,
+        "tags": ["common", "mundane", "light"],
+        "armor": {
+          "ac_bonus": 1,
+          "type": "light"
+        }
+      },
+
+      "chain_mail": {
+        "id": "chain_mail",
+        "name": "Chain Mail",
+        "type": "armor",
+        "slot": "body",
+        "description": "Thousands of small riveted rings over a padded gambeson. Heavy, patient, and noisy — chain mail is the sound of a soldier who has made up their mind.",
+        "weight_slots": 55,
+        "tags": ["common", "mundane", "heavy"],
+        "armor": {
+          "ac_bonus": 4,
+          "type": "heavy"
+        },
+        "magic": {
+          "special_effects": "Stealth attempts while wearing chain mail are made with disadvantage. The rings rattle at every movement."
+        }
+      },
+
+      "iron_shield": {
+        "id": "iron_shield",
+        "name": "Iron-Banded Shield",
+        "type": "armor",
+        "slot": "shield",
+        "description": "A round shield of planked oak bound with iron. Scarred, dented, and still shield-shaped. That's the test.",
+        "weight_slots": 6,
+        "tags": ["common", "mundane"],
+        "armor": {
+          "ac_bonus": 2,
+          "type": "shield"
+        }
+      },
+
+      "ring_of_protection": {
+        "id": "ring_of_protection",
+        "name": "Ring of the Warding Hand",
+        "type": "armor",
+        "slot": "ring",
+        "description": "A band of twisted silver wire set with a cloudy moonstone. The stone cools against the wearer's skin when harm is near — a small, useful warning.",
+        "weight_slots": 0,
+        "tags": ["magical", "warding"],
+        "magic": {
+          "ac_bonus": 1,
+          "save_bonus": { "all": 1 }
+        }
+      },
+
+      "cloak_of_quiet_tread": {
+        "id": "cloak_of_quiet_tread",
+        "name": "Cloak of Quiet Tread",
+        "type": "armor",
+        "slot": "cloak",
+        "description": "A long traveler's cloak of soft grey wool. Its hem never quite catches on doorframes; its folds never quite make the sound they should. Hard to notice. That is the point.",
+        "weight_slots": 1,
+        "tags": ["magical", "subtle"],
+        "magic": {
+          "skill_bonus": { "stealth": 2 },
+          "special_effects": "The bonus applies only against detection by sound — the cloak does nothing against sight or magical senses."
+        }
+      },
+
+      "amulet_of_the_salamander": {
+        "id": "amulet_of_the_salamander",
+        "name": "Amulet of the Salamander",
+        "type": "armor",
+        "slot": "neck",
+        "description": "A small lozenge of black glass on a braided leather cord, veined with a single thread of red that seems to pulse in firelight. Warm to the touch, always.",
+        "weight_slots": 0,
+        "tags": ["magical", "elemental"],
+        "magic": {
+          "damage_resistance": ["fire"],
+          "special_effects": "The wearer is unburned by ordinary flame — torches, campfires, a thrown oil flask — and takes half damage from magical fire."
+        }
+      },
+
+      "gauntlets_of_the_quarryman": {
+        "id": "gauntlets_of_the_quarryman",
+        "name": "Gauntlets of the Quarryman",
+        "type": "armor",
+        "slot": "hands",
+        "description": "Thick leather gauntlets stitched with flat iron plates across the back of each hand. The leather has the pale dust of old limestone worked deep into the grain — the smell of stonecutting never quite comes out.",
+        "weight_slots": 2,
+        "tags": ["magical", "old-dwarven"],
+        "magic": {
+          "ability_bonus": { "str": 1 },
+          "special_effects": "The wearer's grip is unnaturally sure. They have advantage on Athletics checks to lift, shove, or grapple, and their hands do not slip on wet or bloody hafts."
+        }
+      },
+
+      "healing_potion": {
+        "id": "healing_potion",
+        "name": "Healing Draught",
+        "type": "consumable",
+        "description": "A thumb-sized glass vial of something dark red and honey-thick. It tastes unapologetically of iron and pine resin and heals what it can reach.",
+        "weight_slots": 1,
+        "tags": ["magical", "common"],
+        "consumable": {
+          "on_use": "heal_player",
+          "amount": "2d4+2"
+        }
+      },
+
+      "antitoxin": {
+        "id": "antitoxin",
+        "name": "Flask of Antitoxin",
+        "type": "consumable",
+        "description": "A narrow flask of cloudy grey-green liquid stoppered with wax. Bitter beyond description. Worth every wince.",
+        "weight_slots": 1,
+        "tags": ["common", "alchemy"],
+        "consumable": {
+          "on_use": "cure_condition",
+          "amount": "poisoned"
+        }
+      },
+
+      "holy_water": {
+        "id": "holy_water",
+        "name": "Vial of Hallowed Water",
+        "type": "consumable",
+        "description": "A small glass vial of still, clear water, stoppered with a fitted wooden plug. Held against a lantern, it casts a faint pale light on whatever stands behind it. Warden work, blessed at a chapter-house chapel and sealed for use against the unquiet dead.",
+        "weight_slots": 1,
+        "tags": ["magical", "holy", "warden"],
+        "consumable": {
+          "on_use": "gm_adjudicate",
+          "amount": "Thrown as a ranged attack at an undead or unhallowed creature: 1d8 radiant damage on a hit. Poured on an unconscious or bound undead: 1d8 radiant damage, no roll. Has no effect on the living; on a hallowed vessel it leaves a faint cool glow for a few minutes. The GM adjudicates edge cases — the water is blessed, not smart."
+        }
+      },
+
+      "scroll_of_mending": {
+        "id": "scroll_of_mending",
+        "name": "Scroll of Mending",
+        "type": "consumable",
+        "description": "A palm-sized parchment roll sealed with a bead of green wax. The sigil is a chain's closed link.",
+        "weight_slots": 0,
+        "tags": ["magical", "scroll", "single-use"],
+        "consumable": {
+          "on_use": "gm_adjudicate",
+          "amount": "On use, the scroll repairs one small break — a snapped chain, a cracked shield-boss, a torn map, a shattered vial. The scroll is consumed regardless of the size of the target; oversized objects remain unmended."
+        },
+        "magic": {
+          "special_effects": "The repair is physically perfect but not magical restoration — a mended magical item that was broken beyond its enchantment remains mundane."
+        }
+      },
+
+      "wand_of_sparks": {
+        "id": "wand_of_sparks",
+        "name": "Wand of Sparks",
+        "type": "weapon",
+        "slot": "main_hand",
+        "description": "A finger-length rod of polished bone, bound at both ends with fine copper wire. When gripped, the wire tingles faintly. In dark places it smells very softly of ozone.",
+        "weight_slots": 1,
+        "tags": ["magical", "wand", "charged"],
+        "weapon": {
+          "damage": "1d4",
+          "damage_type": "bludgeoning",
+          "melee": true,
+          "ranged": false
+        },
+        "magic": {
+          "charges": {
+            "max": 3,
+            "recharge": "long_rest"
+          },
+          "charge_effect": "Spend 1 charge to unleash a crackling arc at a target within short range: ranged spell attack, 2d6 lightning damage on a hit, half on a miss due to splash. On a natural 1 on the attack roll, the wand sparks wildly and the wielder takes 1d4 lightning damage.",
+          "special_effects": "The wand can be used as a plain short club when out of charges; the bone is hard and the copper bites."
+        }
+      },
+
+      "torch": {
+        "id": "torch",
+        "name": "Pitch-Soaked Torch",
+        "type": "misc",
+        "description": "A length of oak wrapped at one end with rags and pitch. Burns bright for about an hour; the grip gets warm, the smell gets into everything.",
+        "weight_slots": 1,
+        "tags": ["common", "light-source"]
+      },
+
+      "rope_50ft": {
+        "id": "rope_50ft",
+        "name": "Hempen Rope (50 ft)",
+        "type": "misc",
+        "description": "Fifty feet of tarred hemp rope, coiled and slung. Heavier than you remember. Useful more often than you expect.",
+        "weight_slots": 10,
+        "tags": ["common", "gear"]
+      },
+
+      "rubbing_of_the_lantern_tree": {
+        "id": "rubbing_of_the_lantern_tree",
+        "name": "Charcoal Rubbing of the Lantern Tree",
+        "type": "lore",
+        "description": "A folded sheet of soft paper, roughly the size of a tabard, carrying a charcoal rubbing taken from the base of some very old standing stone. The image is of a branching tree whose fruits are hanging lanterns, and beneath it a line of worn script: 'WE KEEP THE LIGHT SO THE LIGHT KEEPS US.' The motto of the Wardens of the Watch — and the mark that, whatever else a Lanternblade is, it is theirs.",
+        "weight_slots": 0,
+        "tags": ["lore", "quest-adjacent"]
+      }
+
+    }
+  }
+}

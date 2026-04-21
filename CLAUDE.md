@@ -111,6 +111,7 @@ project/
 4. Play
 
 ## Working With This Project
+- **User background:** the project owner is a designer/PM, not a developer. Don't assume familiarity with git, npm, node, or related CLI tools. When an action requires them to run commands, spell out the exact commands and what to expect. When an action is git-related and can be done from Claude's side (commits, pushes, branch work), just do it — don't ask them to run git commands unless they're pulling Claude's changes to their local machine.
 - When modifying the AI-GM behavior, edit `ai-gm-system-prompt.md`. The template uses `{{PLACEHOLDER}}` tokens that are filled by `buildSystemPrompt()` in the HTML.
 - When adding new rooms or modules, follow the JSON structure in `module_village_three_knots.json`; validate with `json-validator.html`.
 - When touching the UI, the layout uses CSS Grid with fixed regions. The narrative panel scrolls; everything else is pinned.

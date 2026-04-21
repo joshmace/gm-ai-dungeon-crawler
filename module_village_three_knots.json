@@ -1,214 +1,475 @@
 {
   "module": {
-    "title": "The Haunting of Three Knots",
-    "author": "GM-AI",
-    "version": "1.0",
-    "type": "one_shot",
-    "level_range": [1, 4],
-    "setting": "Village of Three Knots and the disturbed tomb of an ancient king",
-    "theme": "Haunting, curse, investigation, dungeon crawl",
-    "tone": "Atmospheric horror-fantasy; village in peril; one-shot with clear goal and reward",
-    "estimated_time": "60–90 minutes",
-    "starting_room": "inn_three_knots",
-    "description": "The Village of Three Knots is plagued by a haunting that began when a nearby tomb was disturbed. The adventure begins at the inn, where the player is asked to investigate. The tomb is a linear 5–6 room dungeon: one enemy at a time, a puzzle, a trap, and the final boss (The Dead King). On return to the inn, the mayor gifts a powerful weapon and 100 GP. Progression is strictly linear; no optional paths."
+    "id":                 "haunting_of_three_knots",
+    "title":              "The Haunting of Three Knots",
+    "version":            "1.0",
+    "author":             "Three Knots Project",
+    "description":        "A B/X-flavored tomb crawl for a starting character. Three Knots is a small hill village troubled by a haunting that began when a crew of would-be treasure-seekers broke the seal on the old tomb north of town. The module is a short linear dungeon — one enemy at a time, one puzzle, one trap, and the Dead King on his throne. Returning to the inn delivers the mayor's reward. Designed for a level-1 fighter solo; survivable with care, lethal with carelessness.",
+    "starting_room":      "inn_three_knots",
+    "level_range":        { "min": 1, "max": 3 },
+    "estimated_rooms":    8,
+    "estimated_playtime": "60–90 min",
+    "tags":               ["undead", "tomb", "village", "investigation", "short", "solo"],
+    "guidance":           "three_knots_module_guidance.md"
   },
+
   "rooms": {
     "inn_three_knots": {
-      "id": "inn_three_knots",
-      "name": "The Knotted Rope Inn",
-      "description": "A warm, timber-framed inn in the Village of Three Knots. Fire crackles in the hearth; a few villagers sit in the common room, speaking in hushed tones. The innkeeper, Mara Thornwood, tends the bar. Tension hangs in the air—the village has been troubled by nightmares, cold spots, and sightings of a pale figure near the old tomb road. Recently, a group of treasure-seekers broke into the tomb north of the village; within days the haunting began.",
+      "id":          "inn_three_knots",
+      "name":        "The Knotted Rope",
+      "description": "A timber-framed common room under a low beamed ceiling, warm with hearth-light and wet wool. A dozen villagers are here tonight, most of them not drinking, which is the first thing you notice. The innkeeper, Mara Thornwood, stands behind the bar with the rag she has been wiping the same cup with for some minutes. Against the shutter at the north wall the wind is doing something the wind should not — not howling, exactly; pressing. Mayor Corbin is at the long table by the fire, and he has been watching the door since you walked in.",
+      "tags":        ["lore", "hub", "village"],
       "connections": {
-        "Head for the tomb": "path_to_tomb",
-        "Leave the inn": "path_to_tomb"
+        "north_road": {
+          "label": "out the north door, to the tomb road",
+          "to":    "path_to_tomb",
+          "state": "open"
+        }
+      },
+      "environment": {
+        "name":        "Uneasy Hearth",
+        "description": "The fire is built higher than the room needs. Every time the front door is opened, the villagers stop talking and wait until it is shut again before they resume.",
+        "effects":     []
       },
       "features": [
         {
-          "name": "Mara Thornwood",
-          "description": "Innkeeper, middle-aged, worried. She knows the village needs help and will direct the player to someone who can formally ask for aid.",
-          "interaction": "talk",
-          "text": "Mara says the mayor has been asking for someone brave enough to go to the tomb. She points you to Mayor Corbin or to a hooded stranger at the corner table—Brenna, a villager whose child has been having fits since the haunting began. Either can give the quest."
+          "id":          "mara_thornwood",
+          "type":        "lore",
+          "name":        "Mara Thornwood, Innkeeper",
+          "description": "A broad-shouldered woman in her fifties, grey-braided, sleeves rolled. She runs the Knotted Rope and, by the way the village defers to her, most of the rest of Three Knots as well. She is glad to see someone who looks capable of carrying a sword, and unwilling to say so out loud.",
+          "on_examine":  "Mara will tell a paying customer what she knows: three weeks ago a party of four came through — two men, two women, one with a city accent — asking after the king's tomb up the north road. The village warned them off. They went anyway. Only one came back, and he did not come back right. He is buried now. Since the night they broke the seal, children wake screaming, the well-water turns cold before dawn, and on two nights the watch saw a pale figure walking the tomb road. Mara will point the player at Mayor Corbin for the formal ask.",
+          "gm_notes":    "Mara is the village's voice. She gives exposition plainly and without drama — the drama is already in the room. She does not know what is in the tomb; she knows only that the seal was broken and the village has not slept properly since."
         },
         {
-          "name": "Quest hook",
-          "description": "Someone at the inn (Brenna, or Mayor Corbin if he is present) asks the player to investigate the tomb, end the haunting, and if possible destroy whatever has been awakened. Reward is promised: the mayor will gift a powerful weapon and 100 gold pieces to whoever saves the village.",
-          "interaction": "on_entry",
-          "triggers": ["on_entry"],
-          "note": "On first entry, have an NPC (Brenna at the corner table, or Mayor Corbin) approach and ask the player to go to the tomb. Describe the haunting (nightmares, cold, pale figure) and that it began when the tomb was disturbed. Promise the mayor's reward on return."
+          "id":          "mayors_commission",
+          "type":        "lore",
+          "name":        "Mayor Corbin's Commission",
+          "description": "The mayor is a spare, grey man in a good but old coat. He does not stand when you come over. He says plainly: the village needs the tomb closed. Whatever was woken when the seal broke is the cause of the haunting, and the village cannot end it alone. He offers the mayor's purse — one hundred gold pieces — and the Sword of the Dawn, an heirloom blade kept in the village strongbox since the founding, to whoever walks down that tomb road and does not leave it standing open.",
+          "on_examine":  "Corbin was a soldier once; he is not asking out of hope. He is asking because no one else will go and the village has days, not weeks. The Sword of the Dawn is real — it was brought here by the founder of Three Knots, and the village has kept it for 'a proper need.' Corbin considers this a proper need.",
+          "gm_notes":    "The quest hook. Corbin delivers it on first entry if the player does not seek him out; Mara will steer them to him if they wander. Do not grant the reward here. The mayor's_reward feature handles delivery on return."
         },
         {
-          "name": "Return reward",
-          "description": "When the player returns to the inn after defeating The Dead King, Mayor Corbin is here (or arrives). He thanks the hero and presents a powerful weapon (e.g. Sword of the Dawn—a +1 longsword, or equivalent from the rules) and 100 GP.",
-          "interaction": "on_entry",
-          "note": "Only when the player has clearly defeated The Dead King and returned. Write a clear sentence the app can parse for gold: e.g. 'The mayor gives you 100 gold' or 'You receive 100 GP.' For the weapon: 'The mayor presents you with the Sword of the Dawn' (or similar). Do not grant this reward until they have completed the tomb and returned."
-        }
-      ],
-      "encounters": [],
-      "atmosphere": "Warm but uneasy; villagers are frightened and hopeful for a hero.",
-      "gm_notes": "Start here. Deliver the quest from an NPC. Only grant the mayor's weapon and 100 GP when the player returns after defeating The Dead King. Use exact reward wording so the app can parse gold and item."
-    },
-    "path_to_tomb": {
-      "id": "path_to_tomb",
-      "name": "Path to the Tomb",
-      "description": "A narrow path leads north from the village through bare hills. The air grows cold as you approach the tomb. The entrance is a sunken stairway, recently disturbed—broken seal, footprints. Darkness waits below.",
-      "connections": {
-        "Enter the tomb": "tomb_entrance",
-        "Return to the village": "inn_three_knots"
-      },
-      "features": [
-        {
-          "name": "Tomb entrance",
-          "description": "Stone steps descend into the earth. A shattered seal and scattered debris show where the tomb was broken open.",
-          "interaction": "observe"
-        }
-      ],
-      "encounters": [],
-      "atmosphere": "Eerie, wind moans over the hills; the tomb exhales cold.",
-      "gm_notes": "Use for travel between village and tomb. Optional: briefly use [MODE: travel] for the journey. Linear: only Enter the tomb or Return to the village."
-    },
-    "tomb_entrance": {
-      "id": "tomb_entrance",
-      "name": "Tomb Entrance",
-      "description": "The stair opens into a low chamber. Faded murals show a crowned figure and kneeling subjects. Dust and broken pottery litter the floor. A single corridor leads deeper into the tomb. The air is cold and still.",
-      "connections": {
-        "Deeper into the tomb": "tomb_corridor"
-      },
-      "features": [
-        {
-          "name": "Murals",
-          "description": "The art depicts an ancient king and his court. The king's eyes have been scratched out in every image—recent damage.",
-          "interaction": "observe"
-        }
-      ],
-      "encounters": [],
-      "atmosphere": "Oppressive silence; something was woken here.",
-      "gm_notes": "No combat. Set the tone. Only exit: Deeper into the tomb → tomb_corridor. Linear."
-    },
-    "tomb_corridor": {
-      "id": "tomb_corridor",
-      "name": "Guard Corridor",
-      "description": "A long corridor lined with niches. One of the niches holds a skeletal warrior in rusted armor, still clutching a shortsword. It steps down as you approach—the tomb's first defender.",
-      "connections": {
-        "Continue forward": "tomb_chamber"
-      },
-      "features": [],
-      "encounters": [
-        {
-          "id": "corridor_skeleton",
-          "name": "Skeleton Warrior",
-          "monster_ref": "skeleton_warrior",
-          "quantity": 1,
-          "trigger": "on_entry",
-          "behavior": "Attacks on sight. Does not negotiate.",
-          "tactics": "Melee with shortsword. Use exact AC and attacks from bestiary.",
-          "on_death": {
-            "xp_award": 50,
-            "narrative": "The skeleton collapses into bones. The way forward is clear.",
-            "treasure": [{"item": "gold", "quantity": 5}]
-          }
-        }
-      ],
-      "atmosphere": "Clatter of bones; the only enemy in this room.",
-      "gm_notes": "Exactly one enemy. Use skeleton_warrior stats. After defeat, only exit: Continue forward → tomb_chamber. Linear."
-    },
-    "tomb_chamber": {
-      "id": "tomb_chamber",
-      "name": "Chamber of the Seal",
-      "description": "A square chamber. Three stone pillars bear runes. The far door is sealed by a faint shimmer—magical. Inscription on the wall: 'The order of the crown opens the way.' The runes on the pillars can be pressed; they must be activated in the correct order (crown, then sceptre, then tomb) to break the seal.",
-      "connections": {
-        "Continue": "tomb_hall"
-      },
-      "features": [
-        {
-          "name": "Rune pillars",
-          "description": "Three pillars with different runes: one resembles a crown, one a sceptre, one a coffin. The inscription implies an order.",
-          "interaction": "intelligence",
-          "dc": 15,
-          "success": "You deduce the order: crown, sceptre, tomb. Pressing them in that sequence dispels the seal on the door.",
-          "failure": "Wrong order triggers a harmless flash; the seal holds. You may try again.",
-          "note": "Puzzle: INT or Investigation check DC 15. Correct order: crown first, then sceptre, then tomb. On success, door opens; only exit is Continue → tomb_hall."
-        }
-      ],
-      "encounters": [],
-      "atmosphere": "Ancient magic; the seal weakens when the puzzle is solved.",
-      "gm_notes": "Puzzle room. One correct order (crown, sceptre, tomb). Use DC 15 from rules. No combat. Linear: only Continue → tomb_hall after puzzle."
-    },
-    "tomb_hall": {
-      "id": "tomb_hall",
-      "name": "Hall of Blades",
-      "description": "A long hall. The floor is patterned with pressure plates—a trap. Darts or blades will fire from the walls if the plates are triggered. The safe path is along the edges (Perception to spot) or a careful DEX check to cross.",
-      "connections": {
-        "Continue": "tomb_antechamber"
-      },
-      "features": [
-        {
-          "name": "Pressure-plate trap",
-          "description": "Stepping on the wrong stones triggers a dart trap. DEX save to avoid or Perception to find the safe path.",
-          "interaction": "dexterity",
-          "dc": 14,
-          "success": "You pick your way across without triggering the trap (or dodge the darts).",
-          "failure": "Darts shoot from the walls. [DAMAGE_TO_PLAYER: 7] or similar; 1d6+1 piercing. You may try again or search for a safe route (Perception DC 12).",
-          "note": "Trap: DEX save DC 14 to cross safely. On failure, 7 damage (1d6+1); use [DAMAGE_TO_PLAYER: N] so the app tracks HP. Optional: Perception DC 12 to spot safe path and avoid roll."
-        }
-      ],
-      "encounters": [],
-      "atmosphere": "Deathly quiet; one wrong step and the walls strike.",
-      "gm_notes": "Trap room. Use DEX save DC 14; on fail, 7 damage. Linear: only Continue → tomb_antechamber."
-    },
-    "tomb_antechamber": {
-      "id": "tomb_antechamber",
-      "name": "Antechamber of the King",
-      "description": "A final chamber before the throne room. A single guardian—a shambling corpse in ancient armor—blocks the great doors. It turns toward you, jaws slack. One more defender before the Dead King.",
-      "connections": {
-        "Enter the throne room": "tomb_throne"
-      },
-      "features": [],
-      "encounters": [
-        {
-          "id": "antechamber_zombie",
-          "name": "Tomb Guardian",
-          "monster_ref": "tomb_guardian",
-          "quantity": 1,
-          "trigger": "on_entry",
-          "behavior": "Bound to guard the throne. Attacks anyone who approaches the doors.",
-          "tactics": "Melee only. Use exact AC and damage from bestiary.",
-          "on_death": {
-            "xp_award": 100,
-            "narrative": "The guardian crumples. The great doors to the throne room stand before you.",
-            "treasure": [{"item": "gold", "quantity": 15}]
-          }
-        }
-      ],
-      "atmosphere": "Last obstacle before the source of the curse.",
-      "gm_notes": "Exactly one enemy (tomb_guardian). After defeat, only exit: Enter the throne room → tomb_throne. Linear."
-    },
-    "tomb_throne": {
-      "id": "tomb_throne",
-      "name": "Throne Room of the Dead King",
-      "description": "A vast chamber. On a dais at the far end sits a skeletal figure in tattered royal robes and a corroded crown—The Dead King. Cold blue fire burns in his eye sockets. He rises, longsword in hand. 'You dare disturb my rest. You will join the rest who sleep here.' The haunting emanates from him; defeating him is the only way to end the curse.",
-      "connections": {
-        "Flee to the surface": "path_to_tomb",
-        "Return to the village": "path_to_tomb"
-      },
-      "features": [],
-      "encounters": [
-        {
-          "id": "dead_king_boss",
-          "name": "The Dead King",
-          "monster_ref": "dead_king",
-          "quantity": 1,
-          "trigger": "on_entry",
-          "behavior": "The source of the haunting. He speaks briefly then attacks. Does not flee. Fight to the death.",
-          "tactics": "Uses Crown's Wrath (longsword) in melee. Use exact HP, AC, and attacks from bestiary (dead_king).",
-          "on_death": {
-            "xp_award": 450,
-            "narrative": "The Dead King crumbles. The crown rolls across the floor. The cold lifts; the haunting is broken. You may take his signet ring and 50 GP in ancient coins. Return to the village to claim the mayor's reward.",
-            "treasure": [{"item": "gold", "quantity": 50}]
+          "id":             "mayors_reward",
+          "type":           "interactive",
+          "name":           "The Mayor's Reward",
+          "description":    "Mayor Corbin, when the Dead King is down and the tomb road is quiet, stands from his seat at the long table and asks for the hall. The village gathers. He brings out a lacquered wooden case from behind the bar, opens it on the table, and lifts out the Sword of the Dawn — a plain-looking longsword of pale steel, a sun engraved on the pommel — and sets it beside a leather purse heavy with the village's hoarded gold.",
+          "states":         ["unclaimed", "claimed"],
+          "initial_state":  "unclaimed",
+          "actions": {
+            "unclaimed": {
+              "label":   "Accept the mayor's reward",
+              "result":  "Corbin says the village's thanks where everyone can hear it, which is the payment that matters to him. He presses the purse into your hand and then, more carefully, the sword. The blade is lighter than it ought to be. In the smoky hall it sheds a faint clean light, and several of the villagers draw breath to see it. Corbin says: 'It was kept for a proper need. The village is in your debt.'",
+              "effects": []
+            },
+            "claimed": {
+              "label":   "The reward has been given",
+              "result":  "The purse is on your belt. The Sword of the Dawn is at your hip.",
+              "effects": []
+            }
           },
-          "special_notes": "Boss. HP 45, AC 16, +7 to hit, 2d8+4 slashing. Optional Necrotic Gaze. Use exact stats. After defeat, remind player to return to the inn for the mayor's weapon and 100 GP."
+          "rewards": [
+            { "type": "gold", "amount": 100 },
+            { "type": "item", "item_id": "sword_of_the_dawn", "quantity": 1 }
+          ],
+          "prerequisites": {
+            "encounter_defeated": ["dead_king_boss"]
+          },
+          "prereq_hint": "Corbin will not bring out the case until the tomb is quiet and the haunting plainly ended. There is no point asking.",
+          "gm_notes":    "Deliver the reward only on the player's return after the Dead King is defeated. Use plain phrasing in narration so the app can parse the gold and item ('one hundred gold pieces', 'the Sword of the Dawn')."
         }
       ],
-      "atmosphere": "Climactic. The fate of the village rests on this fight.",
-      "gm_notes": "Final boss: The Dead King (dead_king). One enemy only. Use exact stats. When he is defeated, the haunting ends. Tell the player to return to the inn; only then does the mayor give the Sword of the Dawn (or equivalent) and 100 GP. Exits after combat: Flee to the surface / Return to the village → path_to_tomb."
+      "encounters": [],
+      "hazards":    []
+    },
+
+    "path_to_tomb": {
+      "id":          "path_to_tomb",
+      "name":        "The Tomb Road",
+      "description": "The north road climbs out of the village into a run of bare grey hills, the grass short and colorless even for spring. A quarter-mile on, the road bends around a shoulder of stone and shows you the tomb: a sunken stair cut into a hillside, a stone lintel above it carved with weatherworn laurels, and a heavy sealing-stone that has been pried half aside and left where it fell. The air at the tomb's mouth is noticeably colder than the air on the road, and it is cold already.",
+      "tags":        ["travel", "empty"],
+      "connections": {
+        "down_the_stair": {
+          "label": "down the broken stair",
+          "to":    "tomb_entrance",
+          "state": "open"
+        },
+        "back_to_village": {
+          "label": "back down to the village",
+          "to":    "inn_three_knots",
+          "state": "open"
+        }
+      },
+      "environment": {
+        "name":        "Cold Draw",
+        "description": "The air at the stair's mouth moves the wrong way — a slow draw inward, as if the tomb were breathing. It is not strong enough to threaten a torch, but it is strong enough to notice.",
+        "effects":     []
+      },
+      "features": [
+        {
+          "id":          "broken_seal",
+          "type":        "lore",
+          "name":        "The Broken Seal",
+          "description": "A heavy disc of grey stone, about a handspan thick, that was the tomb's sealing-stone. It has been pried out of its socket with iron bars and dropped aside; the socket's edges are freshly chipped. A faint engraved pattern on the stone's face — a ring of knotted cords — has been scored through with a chisel, as if the cords themselves were what needed breaking.",
+          "on_examine":  "The three knots of the village's name are an old sealing-charm; the village's founder set them here. Someone who knew what the charm was, cut through it deliberately before they went in. Whoever broke this did not do it by accident.",
+          "gm_notes":    "Small foreshadow. The treasure-seekers knew what they were cutting through; this was not a simple grave-robbery."
+        }
+      ],
+      "encounters": [],
+      "hazards":    []
+    },
+
+    "tomb_entrance": {
+      "id":          "tomb_entrance",
+      "name":        "The Antechapel",
+      "description": "The stair ends in a low square chamber paved in worn limestone. The ceiling is a plain barrel vault; the walls carry a continuous painted frieze of a crowned king receiving kneeling subjects in a hall of torches. The paint is faded, but intact — except the king's eyes, which have been scratched out of every figure, recently, in every panel. A single dark corridor leads deeper into the tomb. The air is still and cold and smells of dust and old iron.",
+      "tags":        ["lore", "empty"],
+      "connections": {
+        "inward": {
+          "label": "deeper, down the corridor",
+          "to":    "tomb_corridor",
+          "state": "open"
+        },
+        "back_to_stair": {
+          "label": "back up the stair",
+          "to":    "path_to_tomb",
+          "state": "open"
+        }
+      },
+      "features": [
+        {
+          "id":          "scratched_murals",
+          "type":        "lore",
+          "name":        "The Scratched Murals",
+          "description": "The frieze runs the full circuit of the antechapel: the same crowned figure in each panel, receiving the same lines of kneeling subjects, with minor variations in the background — a hall, a field, a deathbed. The king's eyes have been gouged out of every panel with the point of a knife. The scratches are pale against the old paint — the work of weeks, not centuries.",
+          "on_examine":  "Whoever did this worked slowly and thoroughly. The scratches go through every image of the king, including two that are half-hidden behind a fallen chunk of masonry; the chunk had to be shifted and set back. This is not vandalism. This is someone who did not want the king to see them coming.",
+          "gm_notes":    "Hint the antagonists-before-the-player: the treasure-seekers did not simply blunder in. At least one of them knew enough of the tomb's nature to try to blind the Dead King's likeness before going deeper. It did not work."
+        }
+      ],
+      "encounters": [],
+      "hazards":    []
+    },
+
+    "tomb_corridor": {
+      "id":          "tomb_corridor",
+      "name":        "The Guard Corridor",
+      "description": "A long narrow corridor lined on both sides with shallow niches cut into the stone. Most of the niches are empty, their occupants long since collapsed into dust and scraps of mail. In one niche, third from the end on the left, something that was a soldier stands upright — bone in rusted ringmail, a pitted shortsword held in a dry grip, the skull tilted as if listening. As your light reaches it, it steps down into the corridor.",
+      "tags":        ["encounter", "undead"],
+      "connections": {
+        "forward": {
+          "label": "on, to the sealed chamber",
+          "to":    "tomb_chamber",
+          "state": "open"
+        },
+        "back":   {
+          "label": "back to the antechapel",
+          "to":    "tomb_entrance",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [
+        {
+          "id":    "corridor_skeleton",
+          "name":  "The First Watcher",
+          "groups": [
+            { "monster_ref": "skeleton_warrior", "quantity": 1 }
+          ],
+          "trigger": {
+            "type":      "on_enter",
+            "condition": null
+          },
+          "placement": "The skeleton steps out of its niche and blocks the corridor. The other niches do not stir — this is the only one still keeping watch.",
+          "behavior":  "Attacks on sight. Does not negotiate. Does not flee. Fights until it is broken to pieces on the flags.",
+          "gm_notes":  "First combat of the module; the player's first real read on what the tomb contains. Use the bestiary's morale rule honestly — the skeleton is mindless and does not check morale. If the player retreats up the corridor, the skeleton pursues as far as the antechapel stair and no farther.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": 5 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "tomb_chamber": {
+      "id":          "tomb_chamber",
+      "name":        "The Chamber of the Seal",
+      "description": "A square chamber of cut limestone, ceiling lost in darkness. Three waist-high pillars of black stone stand in a row across the floor, each carved on its top face with a different rune: a crown, a sceptre, a coffin. The far door is not locked in any mechanical sense — it simply shimmers faintly, a thin seal of old light running edge-to-edge across its frame. Above the door, scored into the lintel in a plain hand, five words: THE ORDER OF THE CROWN OPENS THE WAY.",
+      "tags":        ["puzzle", "lore"],
+      "connections": {
+        "sealed_inner_door": {
+          "label":        "through the sealed inner door",
+          "to":           "tomb_hall",
+          "state":        "locked",
+          "reveal_hint":  "The inner door is not barred; its seal is a ward of light. The pillars are surely how it is broken."
+        },
+        "back_to_corridor": {
+          "label": "back to the guard corridor",
+          "to":    "tomb_corridor",
+          "state": "open"
+        }
+      },
+      "features": [
+        {
+          "id":          "rune_pillars",
+          "type":        "puzzle",
+          "name":        "The Three Rune-Pillars",
+          "description": "Three pillars, three runes: a crown, a sceptre, a coffin. Each pillar's top is a shallow stone plate, hinged to sink a handspan when weight is applied — they are made to be pressed. The inscription on the lintel implies an order.",
+          "solution": {
+            "description": "The correct order is crown → sceptre → coffin: the king takes the throne, the king wields the rod, the king lies down. Accept any phrasing in the player's reasoning that arrives at this sequence (rule, rule, rest; reign, authority, death; take, hold, release). A wrong order produces a harmless flash of light and the pillars reset; the player may try again freely. GM may offer the INT check as a fallback if the player is stuck.",
+            "check":       { "skill": null, "ability": "int", "dc_tier": "hard" }
+          },
+          "on_success": {
+            "narration": "You press the pillars in order — crown, sceptre, coffin. On the third, the chamber draws a single long breath inward, the light-seal across the inner door thins to a line, and the line goes out. The door shifts back in its frame a handspan, unsealed.",
+            "effects": [
+              { "type": "unlock_connection", "target": "sealed_inner_door" }
+            ],
+            "reward": []
+          },
+          "on_failure": {
+            "narration": "A soft, harmless flash of white light runs across all three pillars; the runes dim a moment and return. The seal on the door is unchanged. The pillars are ready to try again."
+          }
+        }
+      ],
+      "encounters": [],
+      "hazards":    []
+    },
+
+    "tomb_hall": {
+      "id":          "tomb_hall",
+      "name":        "The Hall of Blades",
+      "description": "A long hall, twice the length of any room yet. The floor is laid in a regular grid of square flagstones, each the length of a boot, and perhaps a third of them sit a quarter-inch proud of their neighbors — pressure plates, old but plainly functional. The walls to either side are pierced at shin height and shoulder height with a row of narrow slots, blackened inside with old blood. The far end of the hall is a closed stone door.",
+      "tags":        ["hazard", "empty"],
+      "connections": {
+        "forward": {
+          "label": "through the far door",
+          "to":    "tomb_antechamber",
+          "state": "open"
+        },
+        "back_to_chamber": {
+          "label": "back to the chamber of the seal",
+          "to":    "tomb_chamber",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [],
+      "hazards": [
+        {
+          "id":          "pressure_plates",
+          "name":        "The Darts of the Hall",
+          "description": "A third of the floor's flagstones are pressure plates. Depressing one drops a counterweight behind the wall; the wall-slots fire a volley of old iron darts across the hall at shin and shoulder height. The safe path is along the edges, where the flags are unraised.",
+          "gm_notes":    "Classic detect-then-avoid. A player who looks before stepping can solve this without a roll. A player who walks in carelessly takes the darts. The hazard resets between visits only if the party left the hall; within a single crossing, a failed roll does not re-trigger — the player is through.",
+          "trigger": {
+            "type":   "on_traverse",
+            "target": null
+          },
+          "detection": {
+            "check":      { "skill": null, "ability": "wis", "dc_tier": "medium" },
+            "on_success": "You crouch at the threshold and read the floor before stepping. The raised flags are a shade paler than the rest — cleaner, because no foot has scuffed their tops. The safe path is plain: hug the left wall for the first six flags, cross at the second seam, hug the right wall the rest of the way."
+          },
+          "avoidance": {
+            "check":      { "skill": null, "ability": "dex", "dc_tier": "medium" },
+            "on_success": "You pick your way across the hall in a half-dozen careful steps, shifting your weight from heel to toe, and none of the flags under you drops.",
+            "on_failure": {
+              "narration":  "Your third step rings hollow under the heel, the flag drops a finger's-width, and the hall fires. Old iron darts clatter off the walls and off your mail; one takes you in the thigh and one in the shoulder before you can fall flat.",
+              "damage":     { "amount": "1d6+1" },
+              "conditions": []
+            }
+          },
+          "reward_on_detection": { "xp": 25, "narration": "You read the floor before it reads you. The dart-volley never fires." },
+          "reward_on_avoidance": { "xp": 10 },
+          "persists":             false,
+          "resolved_by_detection": true
+        }
+      ]
+    },
+
+    "tomb_antechamber": {
+      "id":          "tomb_antechamber",
+      "name":        "The Antechamber",
+      "description": "A low square room with a single pair of great bronze doors at its far end. Between you and the doors stands a thing that was a man once — a tall corpse in the heavy ringed coat of an old royal guard, a bronze helm still on its skull, a longsword drawn and held low in its right hand. It does not rot. It does not rattle. It simply turns its head as you come in, and steps forward once.",
+      "tags":        ["encounter", "undead"],
+      "connections": {
+        "throne_doors": {
+          "label": "through the great bronze doors",
+          "to":    "tomb_throne",
+          "state": "open"
+        },
+        "back_to_hall": {
+          "label": "back through the hall of blades",
+          "to":    "tomb_hall",
+          "state": "open"
+        }
+      },
+      "features": [],
+      "encounters": [
+        {
+          "id":    "antechamber_guardian",
+          "name":  "The Tomb Guardian",
+          "groups": [
+            { "monster_ref": "tomb_guardian", "quantity": 1 }
+          ],
+          "trigger": {
+            "type":      "on_enter",
+            "condition": null
+          },
+          "placement": "The guardian stands square in the middle of the chamber, between the player and the bronze doors. It will not let the player past. It does not pursue beyond the threshold of the hall of blades.",
+          "behavior":  "Mindless and bound to its post. Attacks the nearest living thing and does not flee. Unlike a common zombie it is no slower than a living man — the old oaths still move the body.",
+          "gm_notes":  "The player's second combat; meant to be noticeably harder than the corridor skeleton and a clear warning that the throne-room fight will be worse. If the player retreats through the bronze doors (impossible until guardian is down) or back to the hall of blades, the guardian holds its post.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": 15 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
+    },
+
+    "tomb_throne": {
+      "id":          "tomb_throne",
+      "name":        "The Throne of the Dead King",
+      "description": "The bronze doors open on a great hall, low-vaulted and lit by a pale blue fire that burns in iron braziers along the walls without fuel or heat. At the far end, on a dais of black stone, a plain stone throne; on the throne, a tall figure in the ruin of a royal surcoat and a corroded iron crown, a longsword laid across his knees. Where his eyes should be, two points of the same pale fire. He does not rise at once. He watches you cross half the hall before he lifts the sword from his knees and stands. His voice, when it comes, is plain and tired and terrible. 'You disturb my rest. You will share it.'",
+      "tags":        ["encounter", "boss", "undead", "climax"],
+      "connections": {
+        "retreat": {
+          "label": "flee back toward the surface",
+          "to":    "tomb_antechamber",
+          "state": "open"
+        }
+      },
+      "environment": {
+        "name":        "Cold of the Crown",
+        "description": "The hall's pale blue fire gives no heat. The air draws warmth out of living flesh slowly and deliberately — not enough to harm, but enough that the player's breath shows, sword-hand stiffens, and every moment in the hall costs a little.",
+        "effects":     [
+          "The cold is atmospheric, not mechanical. The GM should narrate its pressure but not roll against it; the Dead King himself is the threat."
+        ]
+      },
+      "features": [],
+      "encounters": [
+        {
+          "id":    "dead_king_boss",
+          "name":  "The Dead King",
+          "groups": [
+            { "monster_ref": "dead_king", "quantity": 1 }
+          ],
+          "trigger": {
+            "type":      "on_enter",
+            "condition": null
+          },
+          "placement": "The Dead King stands from the throne and walks down the three shallow steps of the dais at an unhurried pace. He does not close quickly. He closes inevitably.",
+          "behavior":  "Fights to the end. Does not flee; does not parley; does not check morale. Opens with Crown's Wrath (the longsword) in melee. Reserves Drain of the Crown for a wounded opponent. If reduced below half HP, narrates the pale fire in his eyes guttering lower but does not retreat.",
+          "gm_notes":  "The module's climax. Tuned to be dangerous but survivable for a level-1 fighter with chain, shield, and a measure of luck — and plainly easier with the Sword of the Dawn, which the player does not have yet. The fight is meant to be the hardest thing in the module and the player should feel it. If the fight is clearly going wrong and the player has not had an escape beat, the GM may have the Dead King break off for a round after a clean hit from the player — he has eternity; he can afford to savor this.",
+          "rewards": {
+            "xp": "from_bestiary",
+            "treasure": [
+              { "type": "gold", "amount": 50 }
+            ]
+          },
+          "on_defeat_effects": []
+        }
+      ],
+      "hazards": []
     }
+  },
+
+  "module_bestiary": {
+    "id":          "three_knots_module_bestiary",
+    "name":        "Three Knots — Module Foes",
+    "description": "Unique foes specific to The Haunting of Three Knots. Module-scoped entries are resolved before the shared bestiary.",
+    "monsters": {
+      "tomb_guardian": {
+        "id":          "tomb_guardian",
+        "name":        "Tomb Guardian",
+        "description": "A tall corpse in the heavy ringed coat of an old royal guard, a bronze helm still on its skull, a longsword drawn and held low in a dry grip. It does not rot and does not rattle. Whatever kept the old oaths still moves it.",
+        "type":        "undead",
+        "hp":          18,
+        "ac":          14,
+        "morale":      12,
+        "attacks": [
+          {
+            "name":   "Oathsworn Longsword",
+            "bonus":  3,
+            "damage": "1d8+1",
+            "range":  "melee"
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "mindless",
+            "name":        "Mindless",
+            "description": "Cannot be charmed, frightened, or reasoned with. Does not check morale.",
+            "type":        "passive"
+          },
+          {
+            "id":          "bound_to_post",
+            "name":        "Bound to Post",
+            "description": "Will not pursue beyond the antechamber's doors. Holds the line between the player and the throne room.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 100,
+        "behavior": "Mindless but disciplined. Attacks the nearest living thing. Does not pursue; does not flee.",
+        "tactics":  "Straight melee with the longsword. Positions itself between the player and the bronze doors. No tricks — it does not need them."
+      },
+
+      "dead_king": {
+        "id":          "dead_king",
+        "name":        "The Dead King",
+        "description": "A tall, dry figure on a stone throne, in the ruin of a royal surcoat and a corroded iron crown. Where his eyes should be, two points of cold blue fire. His voice, when he speaks, is plain and tired and terrible — the voice of a man who ruled once and remembers it and resents every waking moment.",
+        "type":        "undead",
+        "hp":          35,
+        "ac":          16,
+        "morale":      12,
+        "attacks": [
+          {
+            "name":   "Crown's Wrath (Longsword)",
+            "bonus":  5,
+            "damage": "1d10+3",
+            "range":  "melee"
+          },
+          {
+            "name":   "Drain of the Crown",
+            "bonus":  5,
+            "damage": "1d6",
+            "range":  "melee",
+            "on_hit": "On a successful touch, the target must save vs. Death. On a failed save, the pale fire of the crown passes through the target's chest and takes the warmth of it; the target's maximum hit points are reduced by the damage dealt until they complete a full night's rest in a warm place. If this reduces maximum hit points to 0, the target dies on the spot. The Dead King uses this only against a clearly wounded opponent."
+          }
+        ],
+        "special_abilities": [
+          {
+            "id":          "mindless_resolve",
+            "name":        "Mindless Resolve",
+            "description": "Cannot be charmed, frightened, or reasoned with. Does not check morale. Does not flee.",
+            "type":        "passive"
+          },
+          {
+            "id":          "crown_of_cold",
+            "name":        "Crown of Cold",
+            "description": "The pale blue fire of the crown gives no heat. Living creatures within the throne hall feel the air draw warmth from them; the effect is atmospheric and narrated by the GM, with no mechanical toll beyond the Dead King's own attacks.",
+            "type":        "passive"
+          },
+          {
+            "id":          "dawn_vulnerability",
+            "name":        "Undone by the Dawn",
+            "description": "Strikes from a weapon marked for the sun — the Sword of the Dawn, a cleric's Turn at high level, or equivalent — deal an additional 1d6 damage. The Dead King cannot gain this vulnerability mid-fight; he enters the hall knowing whether it applies.",
+            "type":        "passive"
+          }
+        ],
+        "xp_value": 450,
+        "behavior": "Rules from the throne and will not yield it. Fights to destruction; does not flee, does not negotiate, does not check morale. Opens at walking pace to let the player cross half the hall.",
+        "tactics":  "Longsword in melee; Drain of the Crown saved for a clearly-wounded target. The fight is meant to be the hardest thing in the module and should feel it — narrate the pale fire of his eyes dimming as his HP falls, so the player knows the end is within reach."
+      }
+    }
+  },
+
+  "completion_condition": {
+    "type":   "defeat_encounter",
+    "target": "dead_king_boss"
   }
 }
