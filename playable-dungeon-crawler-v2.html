@@ -6,7 +6,25 @@
     <title>AI Dungeon Crawler - v2 Testing Build</title>
     <link rel="stylesheet" href="./styles/main.css">
     <script src="https://kit.fontawesome.com/f4b50dbafe.js" crossorigin="anonymous"></script>
+
+    <!-- v1 refactor — module scaffolding (Stage 1a). Each file attaches to a window
+         namespace so the main inline script below can call into it as it is filled in
+         over later stages. Order matters: base engines first, then UI modules, then
+         bootstrap. -->
     <script src="./scripts/rules-engine.js"></script>
+    <script src="./scripts/pack-loader.js"></script>
+    <script src="./scripts/game-state.js"></script>
+    <script src="./scripts/prompt-builder.js"></script>
+    <script src="./scripts/response-parser.js"></script>
+    <script src="./scripts/llm-proxy.js"></script>
+    <script src="./scripts/ui-character.js"></script>
+    <script src="./scripts/ui-encounters.js"></script>
+    <script src="./scripts/ui-narrative.js"></script>
+    <script src="./scripts/ui-features.js"></script>
+    <script src="./scripts/ui-hazards.js"></script>
+    <script src="./scripts/ui-connections.js"></script>
+    <script src="./scripts/ui-dice.js"></script>
+    <script src="./scripts/main.js"></script>
 </head>
 <body>
     <!-- Template placeholders - populated by template loader -->
