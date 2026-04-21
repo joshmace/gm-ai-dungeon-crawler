@@ -902,12 +902,17 @@ AND logic only. If not met, feature is **hidden** from the UI; optional `prereq_
 ### Module guidance sidecar (optional)
 
 ```jsonc
-// Manifest
+// Inside the module file's top-level module block
 {
-  "adventure_module": "village_three_knots.json",
-  "module_guidance": "village_three_knots_guidance.md"   // optional
+  "module": {
+    "id": "village_three_knots",
+    "title": "...",
+    "guidance": "village_three_knots_guidance.md"   // optional
+  }
 }
 ```
+
+Module guidance lives inside the module file, consistent with how rules, setting, and character each carry their own guidance/lore sidecar reference inside their primary JSON. The pack manifest does not carry a `module_guidance` field.
 
 Prompt builder injects alongside rules-pack guidance. Used for author's running-notes, tone essays, rules-pack-specific adjustments, design intent, spoiler/reveal guidance.
 
