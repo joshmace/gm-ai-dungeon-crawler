@@ -18,7 +18,9 @@ This is a B/X-flavored old-school pack. Tone is atmospheric rather than heroic: 
 
 **X-in-6.** Some tasks resolve on a d6 rather than a d20 — thief skills, surprise checks, secret-door detection. Use when the odds are narrow and a d20 swing would be too wide.
 
-**No advantage/disadvantage.** Situational edges become flat DC adjustments instead. A higher position, a good plan, a torch in a creature's face — each is worth a step on the difficulty scale (−2 or +2 to the DC).
+**Roll-under resolution.** Checks and saves roll d20; succeed on a roll ≤ the target (the ability score for a raw ability check, the authored value for a categorical save). A natural 1 always succeeds; a natural 20 always fails.
+
+**No advantage/disadvantage.** Situational edges become flat target adjustments instead. A higher position, a good plan, a torch in a creature's face — each is worth a step on the difficulty scale (+2 to the target for an easier check, −2 for a harder one).
 
 **Side-based initiative.** At combat start, one side acts first for the whole round. Use a 2d6 reaction-style roll to decide if it matters; default to the player side when surprise does not figure. Individual initiative is a v2 feature.
 
