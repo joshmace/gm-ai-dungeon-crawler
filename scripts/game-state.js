@@ -212,11 +212,101 @@
         };
     }
 
+    // ------------------------------------------------------------
+    // Rules / bestiary / module / setting shims
+    //
+    // These wrap the v1 shapes so the legacy inline renderers can keep reading
+    // their pre-v1 paths. Each shim retires when its consumer gets rewritten
+    // in a later stage (rules -> Stage 2, module -> Stage 5, bestiary -> mixed).
+    // ------------------------------------------------------------
+
+    function buildShimmedRules(rules) {
+        // Pre-v1 code reads rules.combat.conditions as a dict keyed by id. v1
+        // stores them as an array. Build both so code paths keep working.
+        const conditionsDict = {};
+        for (const c of (rules.conditions || [])) conditionsDict[c.id] = c;
+
+        return {
+            ...rules,
+            combat: {
+                ...(rules.combat || {}),
+                conditions: conditionsDict
+            },
+            // Pre-v1: rules.experience.level_progression is the XP table.
+            experience: {
+                level_progression: (rules.progression && rules.progression.level_table) || []
+            },
+            // Pre-v1: rules.core_mechanics.ability_checks carried the DC ladder.
+            // Point it at v1 rules.difficulty so downstream reads resolve.
+            core_mechanics: {
+                ability_checks: rules.difficulty || {}
+            }
+        };
+    }
+
+    function buildShimmedBestiary(gameData) {
+        // Legacy code does gameData.bestiary[monsterId]. v1 keeps monsters under
+        // bestiary.monsters (shared) and module.module_bestiary.monsters (module).
+        // Merge into one flat dict; module-scoped entries override shared.
+        const flat = {};
+        const shared = (gameData.bestiary && gameData.bestiary.monsters) || {};
+        for (const [id, m] of Object.entries(shared)) flat[id] = m;
+        const scoped = (gameData.module && gameData.module.module_bestiary
+                        && gameData.module.module_bestiary.monsters) || {};
+        for (const [id, m] of Object.entries(scoped)) flat[id] = m;
+        return flat;
+    }
+
+    // Envelope fields live under .module in the raw module file; pack-loader
+    // flattened them alongside rooms for Stage 1b convenience. Re-nest the
+    // envelope so pre-v1 reads of gameData.module.module.starting_room still work.
+    const MODULE_ENVELOPE_FIELDS = [
+        'id', 'title', 'version', 'author', 'description',
+        'starting_room', 'level_range', 'estimated_rooms',
+        'estimated_playtime', 'tags', 'guidance'
+    ];
+
+    function buildShimmedModule(gameData) {
+        const mod = gameData.module || {};
+        const envelope = {};
+        for (const k of MODULE_ENVELOPE_FIELDS) {
+            if (mod[k] !== undefined) envelope[k] = mod[k];
+        }
+        return {
+            module:               envelope,
+            rooms:                mod.rooms || {},
+            module_bestiary:      mod.module_bestiary || null,
+            module_items:         mod.module_items || null,
+            completion_condition: mod.completion_condition || null
+        };
+    }
+
+    // Entry point: take a v1 gameData from PackLoader, return a shimmed object
+    // the legacy renderers can consume. The v1 payload itself is preserved
+    // under _v1 so modules extracted in later stages can read native shapes
+    // without going through the shim.
+    function init(gameData) {
+        if (!gameData || !gameData.character || !gameData.rules || !gameData.module) {
+            throw new Error('GameState.init: gameData is missing required archetypes');
+        }
+        return {
+            character: buildShimmedCharacter(gameData.character, gameData.rules, gameData),
+            rules:     buildShimmedRules(gameData.rules),
+            bestiary:  buildShimmedBestiary(gameData),
+            module:    buildShimmedModule(gameData),
+            setting:   gameData.setting || null,
+            _v1:       gameData
+        };
+    }
+
     global.GameState = {
-        init: null,              // wired in 1c-ii alongside the rules/bestiary/module shims
+        init,
         _modifierFor: modifierFor,
         _hpMax: hpMax,
         _resolveItem: resolveItem,
-        _buildShimmedCharacter: buildShimmedCharacter
+        _buildShimmedCharacter: buildShimmedCharacter,
+        _buildShimmedRules:     buildShimmedRules,
+        _buildShimmedBestiary:  buildShimmedBestiary,
+        _buildShimmedModule:    buildShimmedModule
     };
 })(typeof window !== 'undefined' ? window : globalThis);
