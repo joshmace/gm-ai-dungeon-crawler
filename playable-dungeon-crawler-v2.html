@@ -98,11 +98,8 @@
         
         const CONFIG = {
             DEBUG_MODE: true,
-            /** Game Pack manifest: references setting, rules, bestiary, adventure_module. Character is per-user and keyed by Game Pack. */
+            /** Game Pack manifest: references setting, rules, bestiary, adventure_module, items, character. */
             GAME_PACK: './game_pack_village_three_knots.json',
-            DATA_FILES: {
-                character: './character_aldric.json'
-            },
             API_ENDPOINT: '/api/messages',
             /** Stream GM responses via SSE; set false to fall back to single-shot JSON. */
             STREAM: true,
@@ -328,78 +325,30 @@
         // DATA LOADING
         // ============================================
         
+        // Stage 1d: data load now flows through the v1 pipeline.
+        //   PackLoader.loadPack() -> raw v1 gameData (manifest + 6 archetypes + sidecars, validated)
+        //   GameState.init()      -> pre-v1-shaped shim the legacy renderers read
+        // The shimmed object is copied onto the existing const-bound `gameData`
+        // by property mutation so every downstream access continues to work.
         async function loadGameData() {
             try {
-                updateLoadingStatus('Loading Game Pack manifest...');
-                const manifestResponse = await fetch(CONFIG.GAME_PACK);
-                if (!manifestResponse.ok) throw new Error('Failed to load Game Pack manifest');
-                const manifest = await manifestResponse.json();
-                
-                updateLoadingStatus('Loading character data...');
-                const characterPath = manifest.character || CONFIG.DATA_FILES.character;
-                const charResponse = await fetch(characterPath);
-                if (!charResponse.ok) throw new Error('Failed to load character');
-                const charData = await charResponse.json();
-                gameData.character = charData.character;
-                if (manifest.id && gameData.character.game_pack_id && gameData.character.game_pack_id !== manifest.id) {
-                    console.warn('[DATA] Character game_pack_id does not match Game Pack manifest:', gameData.character.game_pack_id, 'vs', manifest.id);
-                }
-                
-                updateLoadingStatus('Loading setting...');
-                try {
-                    const setResponse = await fetch(manifest.setting);
-                    if (setResponse.ok) {
-                        const setData = await setResponse.json();
-                        gameData.setting = setData.setting != null ? setData.setting : setData;
-                    } else {
-                        gameData.setting = null;
-                    }
-                } catch (e) {
-                    gameData.setting = null;
-                    debugLog('DATA', 'Setting load optional:', e.message);
-                }
-                
-                updateLoadingStatus('Loading rules...');
-                try {
-                    const rulesResponse = await fetch(manifest.rules);
-                    if (rulesResponse.ok) {
-                        const rulesData = await rulesResponse.json();
-                        gameData.rules = rulesData.rules;
-                    } else {
-                        gameData.rules = null;
-                    }
-                } catch (e) {
-                    gameData.rules = null;
-                    debugLog('DATA', 'Rules load optional:', e.message);
-                }
-                
-                updateLoadingStatus('Loading bestiary...');
-                const bestResponse = await fetch(manifest.bestiary);
-                if (!bestResponse.ok) throw new Error('Failed to load bestiary');
-                const bestData = await bestResponse.json();
-                gameData.bestiary = bestData.monster_manual && bestData.monster_manual.monsters
-                    ? bestData.monster_manual.monsters
-                    : (bestData.monsters || bestData);
-                
-                updateLoadingStatus('Loading adventure module...');
-                const modResponse = await fetch(manifest.adventure_module);
-                if (!modResponse.ok) throw new Error('Failed to load adventure module');
-                const modData = await modResponse.json();
-                gameData.module = modData;
-                
-                debugLog('DATA', 'All game data loaded successfully');
+                const v1 = await PackLoader.loadPack(CONFIG.GAME_PACK, updateLoadingStatus);
+                const shim = GameState.init(v1);
+                Object.assign(gameData, shim);
+                debugLog('DATA', 'Pack loaded:', v1.manifest && v1.manifest.id);
                 return true;
-                
             } catch (error) {
                 console.error('Failed to load game data:', error);
-                updateLoadingStatus(`ERROR: ${error.message}`);
+                Main.showError(error);
                 return false;
             }
         }
 
+        // Thin wrapper kept so callers later in the monolith (initializeGameStateFromData,
+        // finishGameStart) can keep calling updateLoadingStatus without caring that the
+        // real implementation lives in scripts/main.js now. Retired during Stage 1e+.
         function updateLoadingStatus(message) {
-            const statusEl = document.getElementById('loadingStatus');
-            if (statusEl) statusEl.textContent = message;
+            Main.setStatus(message);
         }
 
         // ============================================
