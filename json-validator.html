@@ -1,153 +1,323 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>JSON Validator</title>
+    <title>Game Pack Validator</title>
     <style>
         body {
             font-family: monospace;
             padding: 20px;
             background: #1a1410;
             color: #e8dcc4;
-        }
-        .test {
-            margin: 10px 0;
-            padding: 15px;
-            background: #2a1f15;
-            border-left: 3px solid #5a4a3a;
-            border-radius: 4px;
-        }
-        .success {
-            border-left-color: #50c050;
-        }
-        .error {
-            border-left-color: #c85050;
-        }
-        .warning {
-            border-left-color: #f0a000;
-        }
-        pre {
-            background: #0a0a0a;
-            padding: 10px;
-            overflow-x: auto;
-            max-height: 300px;
-            border-radius: 3px;
+            max-width: 1100px;
+            margin: 0 auto;
         }
         h1 {
             color: #d4af37;
+            margin: 0 0 4px 0;
         }
-        .summary {
-            background: #3d2f1f;
+        .subtitle {
+            color: #a0907a;
+            margin: 0 0 20px 0;
+        }
+        code {
+            color: #d4af37;
+        }
+        .picker {
+            background: #2a1f15;
+            border-left: 3px solid #5a4a3a;
             padding: 15px;
             border-radius: 4px;
-            margin: 20px 0;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .picker label {
+            color: #a0907a;
+        }
+        .picker select,
+        .picker input {
+            font-family: monospace;
+            background: #1a1410;
+            color: #e8dcc4;
+            border: 1px solid #5a4a3a;
+            padding: 6px 8px;
+            border-radius: 3px;
+        }
+        .picker input {
+            flex: 1;
+            min-width: 280px;
+        }
+        .picker button {
+            font-family: monospace;
+            background: #d4af37;
+            color: #1a1410;
+            border: 0;
+            padding: 6px 16px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .picker button:hover:not(:disabled) {
+            background: #e8c04a;
+        }
+        .picker button:disabled {
+            background: #5a4a3a;
+            color: #a0907a;
+            cursor: not-allowed;
+        }
+        .section {
+            background: #2a1f15;
+            border-left: 3px solid #5a4a3a;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+        .section.errors { border-left-color: #c85050; }
+        .section.warnings { border-left-color: #f0a000; }
+        .section.info { border-left-color: #50a0c0; }
+        .section-header {
+            padding: 10px 15px;
+            cursor: pointer;
+            user-select: none;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-header .count {
+            color: #a0907a;
+            font-weight: normal;
+        }
+        .section.errors .section-header .count { color: #c85050; }
+        .section.warnings .section-header .count { color: #f0a000; }
+        .section-body {
+            padding: 0 15px 12px 15px;
+            display: none;
+        }
+        .section.open .section-body {
+            display: block;
+        }
+        .finding {
+            padding: 8px 0;
+            border-bottom: 1px solid #3d2f1f;
+            line-height: 1.5;
+        }
+        .finding:last-child { border-bottom: 0; }
+        .finding .loc {
+            color: #a0907a;
+            font-size: 0.9em;
+        }
+        .finding .msg {
+            color: #e8dcc4;
+        }
+        .placeholder {
+            color: #a0907a;
+            padding: 20px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <h1>🔍 JSON Validator</h1>
-    <p>Checking all JSON files for syntax errors...</p>
-    <div id="results"></div>
-    <div id="summary"></div>
+    <h1>Game Pack Validator</h1>
+    <p class="subtitle">Loads a pack manifest and validates it against the v1 schema (see <code>JSON_SCHEMAS.md</code>).</p>
+
+    <div class="picker">
+        <label for="pack-select">Pack:</label>
+        <select id="pack-select">
+            <option value="game_pack_lantern_and_blade.json">Lantern &amp; Blade</option>
+            <option value="game_pack_village_three_knots.json">Three Knots</option>
+            <option value="game_pack.json">Rules Test Hub</option>
+            <option value="">&mdash; custom &mdash;</option>
+        </select>
+        <input type="text" id="pack-path" value="game_pack_lantern_and_blade.json" placeholder="manifest path">
+        <button id="validate-btn">Validate</button>
+    </div>
+
+    <div id="results">
+        <div class="placeholder">Pick a pack and click Validate.</div>
+    </div>
 
     <script>
-        const files = [
-            'character_aldric.json',
-            'test_module_arena.json',
-            'monster_manual.json',
-            'rules.json'
-        ];
+        // Archetype keys on the manifest, in display order.
+        const ARCHETYPES = ['rules', 'setting', 'bestiary', 'items', 'adventure_module', 'character'];
 
-        let totalTests = 0;
-        let passedTests = 0;
-        let failedTests = 0;
+        const packSelect = document.getElementById('pack-select');
+        const packPath = document.getElementById('pack-path');
+        const validateBtn = document.getElementById('validate-btn');
 
-        async function validateFile(filename) {
-            totalTests++;
-            const resultsDiv = document.getElementById('results');
-            const testDiv = document.createElement('div');
-            testDiv.className = 'test';
-            testDiv.innerHTML = `<strong>📄 ${filename}</strong><br>`;
-            resultsDiv.appendChild(testDiv);
+        // Keep the dropdown and text box in sync. Picking a preset fills the box;
+        // typing a non-preset value flips the dropdown to "custom".
+        packSelect.addEventListener('change', () => {
+            if (packSelect.value) packPath.value = packSelect.value;
+        });
+        packPath.addEventListener('input', () => {
+            const match = Array.from(packSelect.options).find(o => o.value === packPath.value);
+            packSelect.value = match ? packPath.value : '';
+        });
 
+        validateBtn.addEventListener('click', runValidation);
+
+        async function runValidation() {
+            const path = packPath.value.trim();
+            if (!path) {
+                render({ errors: [{ msg: 'Manifest path is empty.' }], warnings: [], info: [] });
+                return;
+            }
+            validateBtn.disabled = true;
+            validateBtn.textContent = 'Validating...';
             try {
-                // Step 1: Fetch the file
-                testDiv.innerHTML += `⏳ Fetching...<br>`;
-                const response = await fetch(`./${filename}`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                // Step 2: Get as text first to see raw content
-                const rawText = await response.text();
-                testDiv.innerHTML += `✓ Fetched (${rawText.length} bytes)<br>`;
-
-                // Show first 200 chars
-                testDiv.innerHTML += `<pre>First 200 chars:\n${rawText.substring(0, 200)}...</pre>`;
-
-                // Step 3: Try to parse as JSON
-                testDiv.innerHTML += `⏳ Parsing JSON...<br>`;
-                const data = JSON.parse(rawText);
-                
-                // Step 4: Validate structure
-                testDiv.className = 'test success';
-                testDiv.innerHTML += `✅ <strong>VALID JSON</strong><br>`;
-                testDiv.innerHTML += `Structure: ${Object.keys(data).join(', ')}<br>`;
-                
-                // Show preview
-                const preview = JSON.stringify(data, null, 2).substring(0, 500);
-                testDiv.innerHTML += `<pre>Preview:\n${preview}...\n</pre>`;
-                
-                passedTests++;
-                
-            } catch (error) {
-                failedTests++;
-                testDiv.className = 'test error';
-                testDiv.innerHTML += `❌ <strong>FAILED</strong><br>`;
-                testDiv.innerHTML += `<strong>Error Type:</strong> ${error.name}<br>`;
-                testDiv.innerHTML += `<strong>Error Message:</strong> ${error.message}<br>`;
-                
-                // Try to show where the error is
-                if (error instanceof SyntaxError) {
-                    testDiv.innerHTML += `<br><strong>This is a JSON syntax error!</strong><br>`;
-                    testDiv.innerHTML += `The file contains invalid JSON syntax.<br>`;
-                    testDiv.innerHTML += `<br><strong>Common causes:</strong><br>`;
-                    testDiv.innerHTML += `• Trailing comma in array or object<br>`;
-                    testDiv.innerHTML += `• Missing quote marks<br>`;
-                    testDiv.innerHTML += `• Unescaped special characters<br>`;
-                    testDiv.innerHTML += `• Comments (JSON doesn't allow comments)<br>`;
-                }
-                
-                testDiv.innerHTML += `<pre>${error.stack}</pre>`;
+                const result = await validate(path);
+                render(result);
+            } finally {
+                validateBtn.disabled = false;
+                validateBtn.textContent = 'Validate';
             }
         }
 
-        async function runTests() {
-            for (const file of files) {
-                await validateFile(file);
+        // Manifests use "./foo.json" — strip the leading "./" for fetch.
+        function resolvePath(ref) {
+            if (typeof ref !== 'string') return null;
+            return ref.replace(/^\.\//, '');
+        }
+
+        // Returns { ok, data?, raw?, error? }.
+        async function fetchJson(path) {
+            let response;
+            try {
+                response = await fetch('./' + path);
+            } catch (e) {
+                return { ok: false, error: `network error — ${e.message}` };
             }
-            
-            // Summary
-            const summaryDiv = document.getElementById('summary');
-            summaryDiv.className = 'summary';
-            
-            if (failedTests === 0) {
-                summaryDiv.innerHTML = `
-                    <h2 style="color: #50c050;">✅ All JSON Files Valid!</h2>
-                    <p>All ${totalTests} files passed validation.</p>
-                    <p><strong>Next step:</strong> The error must be in how the data is being loaded. Check the browser console for more details.</p>
-                `;
+            if (!response.ok) {
+                return { ok: false, error: `HTTP ${response.status} ${response.statusText}` };
+            }
+            const raw = await response.text();
+            try {
+                return { ok: true, data: JSON.parse(raw), raw };
+            } catch (e) {
+                return { ok: false, raw, error: `parse error — ${e.message}` };
+            }
+        }
+
+        // Orchestrates the load + parse passes. Later chunks add semantic passes.
+        async function validate(manifestPath) {
+            const errors = [];
+            const warnings = [];
+            const info = [];
+
+            // Load pass: manifest.
+            const manifestRes = await fetchJson(manifestPath);
+            if (!manifestRes.ok) {
+                errors.push({
+                    file: manifestPath,
+                    loc: '(manifest)',
+                    msg: `Could not load manifest — ${manifestRes.error}`
+                });
+                return { errors, warnings, info };
+            }
+            const manifest = manifestRes.data;
+            info.push({
+                file: manifestPath,
+                loc: 'manifest',
+                msg: `loaded — id="${manifest.id || '(missing)'}" · ${manifestRes.raw.length} bytes`
+            });
+
+            // Load pass: archetype files.
+            const files = {};
+            for (const key of ARCHETYPES) {
+                const ref = manifest[key];
+                if (!ref) {
+                    files[key] = { path: null, ok: false, error: 'not referenced in manifest' };
+                    errors.push({
+                        file: manifestPath,
+                        loc: key,
+                        msg: `Manifest is missing the "${key}" reference.`
+                    });
+                    continue;
+                }
+                const resolved = resolvePath(ref);
+                const res = await fetchJson(resolved);
+                files[key] = { path: resolved, ...res };
+
+                if (!res.ok) {
+                    errors.push({
+                        file: resolved,
+                        loc: key,
+                        msg: res.error
+                    });
+                    continue;
+                }
+                info.push({
+                    file: resolved,
+                    loc: key,
+                    msg: `loaded — ${res.raw.length} bytes · top-level: ${topLevelSummary(res.data)}`
+                });
+            }
+
+            // Chunks 2–4 will append to errors/warnings here, using `manifest` and `files`.
+
+            return { manifest, manifestPath, files, errors, warnings, info };
+        }
+
+        function topLevelSummary(data) {
+            if (data == null || typeof data !== 'object') return String(typeof data);
+            if (Array.isArray(data)) return `array[${data.length}]`;
+            const keys = Object.keys(data);
+            return keys.length <= 6
+                ? keys.join(', ')
+                : keys.slice(0, 6).join(', ') + `, …(+${keys.length - 6})`;
+        }
+
+        function render(result) {
+            const { errors = [], warnings = [], info = [] } = result;
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            // Open errors by default when there are any; otherwise open info.
+            resultsDiv.appendChild(renderSection('errors',   'Errors',   errors,   errors.length > 0));
+            resultsDiv.appendChild(renderSection('warnings', 'Warnings', warnings, false));
+            resultsDiv.appendChild(renderSection('info',     'Info',     info,     errors.length === 0));
+        }
+
+        function renderSection(kind, label, findings, openByDefault) {
+            const section = document.createElement('div');
+            section.className = 'section ' + kind + (openByDefault ? ' open' : '');
+
+            const header = document.createElement('div');
+            header.className = 'section-header';
+            header.innerHTML = `<span>${label}</span><span class="count">${findings.length}</span>`;
+            header.addEventListener('click', () => section.classList.toggle('open'));
+            section.appendChild(header);
+
+            const body = document.createElement('div');
+            body.className = 'section-body';
+            if (findings.length === 0) {
+                body.innerHTML = '<div class="placeholder" style="padding:10px;">none</div>';
             } else {
-                summaryDiv.innerHTML = `
-                    <h2 style="color: #c85050;">❌ Found ${failedTests} Invalid File(s)</h2>
-                    <p>Passed: ${passedTests}/${totalTests}</p>
-                    <p><strong>Fix the files marked with ❌ above.</strong></p>
-                    <p>Use a JSON validator like <a href="https://jsonlint.com/" target="_blank" style="color: #d4af37;">JSONLint</a> to fix syntax errors.</p>
-                `;
+                for (const f of findings) {
+                    const row = document.createElement('div');
+                    row.className = 'finding';
+                    const locBits = [];
+                    if (f.file) locBits.push(escapeHtml(f.file));
+                    if (f.loc)  locBits.push(escapeHtml(f.loc));
+                    const locLine = locBits.length ? `<span class="loc">${locBits.join(' · ')}</span><br>` : '';
+                    row.innerHTML = `${locLine}<span class="msg">${escapeHtml(f.msg)}</span>`;
+                    body.appendChild(row);
+                }
             }
+            section.appendChild(body);
+            return section;
         }
 
-        runTests();
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        // Auto-run on page load with the default pack.
+        runValidation();
     </script>
 </body>
 </html>
