@@ -1375,3 +1375,312 @@ Lightweight gating on features. When prerequisites are not met, the feature is *
 `module_crows_hollow.json` + `crows_hollow_guidance.md`.
 
 ---
+
+## Character
+
+Pregen or player-built character sheet. Stores **raw values only**; everything displayed is derived at runtime from raw values + active rules pack + equipped items. When the rules pack changes its formulas, the character renders differently without migration.
+
+### Stored vs. computed
+
+**Stored in character JSON:**
+
+- Ability scores (raw)
+- Class id, level, XP
+- Current HP (max is derived)
+- Equipment (slot assignments), pack contents
+- Charged-item state, feature-resource pools
+- Active condition ids
+- Gold
+- Proficient saves and skills (id lists)
+- Class features (prose)
+
+**Derived at render time (NOT stored):**
+
+- Ability modifiers (from `rules.modifier_formula`)
+- HP max (from class + level + CON via rules pack)
+- AC (equipped armor + dex + magic bonuses)
+- Attack / damage totals (ability mod + proficiency + magic)
+- Save totals, skill modifiers
+- Encumbrance load (sum of `weight_slots`)
+- Proficiency bonus (from the rules pack's `level_table` row for the character's level)
+
+### Top-level shape
+
+```jsonc
+{
+  "character": {
+    "id":              "ren_callory_v1",                // required — machine id
+    "game_pack_id":    "lantern_and_blade_starter_v1",  // required — must match the manifest id
+    "schema_version":  1,                               // required — integer
+
+    "basic_info": {
+      "name":  "Ren Callory",                           // required
+      "class": "fighter",                               // required — rules pack class id; "" for classless packs
+      "level": 3                                        // required — integer ≥ 1
+    },
+
+    "ability_scores": {                                 // required — keyed by ability id from rules pack
+      "str": 16, "dex": 12, "con": 14,
+      "int": 10, "wis": 13, "cha": 8
+    },
+
+    "saves": {
+      "proficient": ["str", "con"]                      // required — id list (ability ids or category ids depending on saves.type)
+    },
+
+    "skills": {
+      "proficient": ["athletics", "perception"]         // required — skill id list; [] for skill-less packs
+    },
+
+    "hp_current": 28,                                   // required — current only; max is derived
+
+    "equipment": [                                      // required — flat array
+      { "item_id": "lanternblade",  "slot": "main_hand" },
+      { "item_id": "chain_mail",    "slot": "body" },
+      { "item_id": "iron_shield",   "slot": "shield" },
+      { "item_id": "ring_of_protection", "slot": "ring" }
+    ],
+
+    "pack": [                                           // required — array of { item_id, quantity }
+      { "item_id": "healing_potion", "quantity": 2 },
+      { "item_id": "torch",          "quantity": 3 }
+    ],
+
+    "charged_items": {                                  // required — may be empty object {}
+      "wand_of_fireball": { "current_charges": 2 }
+    },
+
+    "feature_resources": {                              // optional — spell slots, per-rest uses
+      "second_wind": {
+        "name":     "Second Wind",
+        "current":  1,
+        "max":      1,
+        "recharge": "short_rest"                        // "long_rest" | "short_rest" | "daily" | "none"
+      }
+    },
+
+    "conditions": [],                                   // required — active condition ids; empty array if none
+
+    "gold": 15,                                         // required — integer ≥ 0
+    "xp":   900,                                        // required — integer ≥ 0
+
+    "class_features": [                                 // required — may be empty array
+      {
+        "id":          "second_wind",
+        "name":        "Second Wind",
+        "description": "Once per short or long rest, spend a bonus action to regain 1d10 + fighter level HP. Decrement via [RESOURCE_USE: second_wind]."
+      }
+    ],
+
+    "guidance": "ren_callory_guidance.md"               // optional — path to character guidance sidecar
+  }
+}
+```
+
+### Equipment
+
+- Flat array. Each entry: `item_id` (required), `slot` (required — a valid slot string for the item's type).
+- Multiple items may share a slot label (two rings both use `"slot": "ring"`); the app enforces count against the rules pack's `slot_limits`.
+- A two-handed item (`slot: "two_handed"` at the item level) occupies both `main_hand` and `off_hand` — no special encoding needed on the character side.
+
+### Feature resources
+
+Character-side resource pools for class features that expend and recharge — spell slots, Second Wind, Channel Divinity, ki points.
+
+- Pool ids are free-form strings scoped to the character (no rules-pack registry in v1).
+- The app surfaces each pool as `current / max` in the character panel; the player may decrement directly.
+- The GM may signal use mid-narration with an inline tag `[RESOURCE_USE: <pool_id>]`; the app decrements on the tag.
+- `recharge` restores `current → max` when the corresponding rest event fires. `"none"` means refill only on specific in-fiction conditions (GM narrates).
+- Prose in `class_features[].description` should reference the pool id so the GM knows which to decrement.
+
+### Class features
+
+Prose-only in v1. An array of `{ id, name, description }` objects. The GM reads and adjudicates; no structured feature tree. Level-ups add entries to the array (designer- or GM-authored).
+
+Structured class systems — spells, subclass trees, per-level progression tables — are v2.
+
+### Guidance sidecar (`<name>_guidance.md`)
+
+Optional markdown. Appearance, personality, backstory, voice notes, notable relationships. Everything flavor lives here; the JSON has no `appearance` / `personality` / `backstory` fields.
+
+### Reference example
+
+`character_ren_callory.json` + `ren_callory_guidance.md`.
+
+---
+
+## Save state
+
+Written by the app per play-through. Authored packs never touch this format — it's documented here so the validator, migration tooling, and any debugging work all read from the same spec.
+
+### Top-level shape
+
+```jsonc
+{
+  "schema_version": 1,                                // required — integer; increments on breaking save-format changes
+  "game_pack_id":   "lantern_and_blade_starter_v1",   // required — matches manifest id
+  "module_id":      "watch_at_crows_hollow",          // required — matches module.id
+
+  "current_room":  "gate_room",                       // required — room id
+  "visited_rooms": ["watch_house_yard", "gate_room"], // required — ordered array, first entry is the starting room
+
+  "encounters": {                                     // required — keyed by encounter id
+    "barracks_haunting": {
+      "resolved":  true,
+      "instances": [
+        { "monster_ref": "restless_spirit",  "instance_id": "rs_1", "current_hp": 0, "defeated": true },
+        { "monster_ref": "skeleton_warrior", "instance_id": "sw_1", "current_hp": 0, "defeated": true }
+      ]
+    }
+  },
+
+  "hazards": {                                        // required — keyed by hazard id
+    "rotten_floorboard": {
+      "state":       "detected",                      // "undetected" | "detected" | "triggered" | "avoided"
+      "times_fired": 0
+    }
+  },
+
+  "features": {                                       // required — keyed by feature id; shape depends on sub-type
+    "muster_roll":    { /* lore — no state tracked; entry may be omitted */ },
+    "overturned_locker": { "searched": true, "succeeded": true },
+    "stone_lever":    { "current_state": "down" },
+    "time_riddle":    { "solved": true }
+  },
+
+  "connections_modified": {                           // required — only connections whose state has changed
+    "iron_strapped_door": { "state": "open" }
+  },
+
+  "combat": {
+    "in_combat": false,
+    "round":     0                                    // starts at 1 when combat begins; resets to 0 when it ends
+  },
+
+  "completion": {
+    "completed":     false,
+    "conditions_met": {}
+  }
+}
+```
+
+### Notes
+
+- **Deltas only.** Features/hazards/connections are stored only when they differ from the module's authored initial state.
+- **Per-instance HP.** Encounters track every creature instance independently — the same monster type with quantity 3 produces three entries in `instances[]`.
+- **Round counter** increments per combat round; `[COMBAT: off]` resets it to 0.
+- **Schema version** is incremented on breaking save-format changes; the app will need a migration path at that point. No migrations required in v1.
+
+---
+
+## Validator responsibilities
+
+A compact checklist for the validator rewrite (`json-validator.html`).
+
+### Reference integrity
+
+- Every path in the manifest resolves.
+- Character's `game_pack_id` matches manifest `id`.
+- Every `monster_ref` resolves in `module_bestiary.monsters` or `bestiary.monsters` (module-scoped first).
+- Every `item_id` resolves in `module_items.items` or `items_library.items` (module-scoped first).
+- Every connection target is a valid room id.
+- Every `unlock_connection` / `reveal_connection` target is a valid connection id in the relevant room.
+- Every `activate_feature` target is a valid feature id.
+- Every `encounter_defeated` id in prerequisites is a valid encounter id.
+- Every `feature_state` id in prerequisites is a valid feature id.
+- Every `completion_condition.target` is a valid encounter or room id, per `type`.
+- Every condition id in hazards / character is declared in `rules.conditions`.
+- Every damage-type id in weapons / attacks / magic / resistances is declared in `rules.resources.damage_types` (when damage types are enabled on the pack).
+- Every ability id in skills / saves / formulas / magic bonuses is declared in `rules.character_model.abilities`.
+- Every skill id in character / checks / magic bonuses is declared in `rules.character_model.skills`.
+- Every slot on character equipment is a valid slot for the item's type; slot-count respects `rules.character_model.slot_limits`.
+
+### Archetype-specific rules
+
+- **Hazards:** no `monster_ref` anywhere. `detection` and `avoidance` blocks are optional; at least one must be present for the hazard to do anything.
+- **Encounters:** must have `groups[]` with at least one group carrying a `monster_ref`.
+- **Features:** no damage in any outcome (`on_failure`, `on_success`, action `result`). Lore features have no `reward[]`, no `check`, no `states`, no `solution`.
+- **Feature typing:** `type` must be one of `lore` / `searchable` / `interactive` / `puzzle`. Each sub-type's required body fields must be present (see the Features section).
+- **Connections:** structured form's `state` must be `"open"` / `"locked"` / `"hidden"`.
+- **Interactive features:** `initial_state` must be in `states[]`; every key in `actions{}` must be in `states[]`.
+
+### Required-field checks
+
+- All fields marked **required** above must be present.
+- All fields marked **conditional** must be present when their triggering condition is met (e.g. `classes` when `uses_classes: true`).
+
+### Warnings (non-fatal)
+
+- Inline monster stat blocks that could be moved to `module_bestiary`.
+- `starting_room` not reachable via any connection chain (likely authoring error but possibly intentional).
+- Hazards with neither `detection` nor `avoidance` (might be deliberate "automatic" shape, but worth flagging).
+- Empty `attacks[]` on monsters — technically valid, usually an oversight.
+
+---
+
+## Open questions
+
+Two small v1 surfaces that the plan doc flags as cross-cutting TODOs. Pack authors should treat the lists below as the current working set; final authoritative lists will be published here.
+
+### Condition icon library
+
+The `conditions[].icon` field takes an id from a fixed library. **Known-safe icons** (use freely):
+
+`skull`, `fire`, `drop`, `eye`, `chains`
+
+**Candidates surfaced by the 5e-shaped starter pack** (likely to be accepted):
+
+`heart`, `lightning`, `moon`, `falling`, `snowflake`, `sun`, `shield`, `sword`, `hand`, `swirl`
+
+Unrecognized icon ids fall back to `skull`. Custom icons are v2.
+
+### `consumable.on_use` keywords
+
+The consumable `on_use` field takes a keyword the app can parse. **Candidates surfaced by the starter pack:**
+
+`heal_player`, `cure_condition`, `buff_ability`, `buff_save`, `gm_adjudicate`
+
+`gm_adjudicate` is the catch-all: the item's `amount` field is treated as prose and the GM narrates the effect. Any non-keyword `on_use` value should default to `gm_adjudicate`.
+
+Full authoritative list pending.
+
+---
+
+## Deferred to v2
+
+The full deferred-feature list lives in `RULES_SCHEMA_PLAN.md` (search for "Deferred to v2"). Summary:
+
+- Tier 2 systems (PbtA, Blades, FATE, Savage Worlds)
+- 2d10 resolution, descending AC, death saves
+- Individual-roll initiative + full turn-order UI
+- Stacking conditions, structured condition effects, auto-expiring conditions
+- Per-class XP tables, structured class systems (spells, subclass trees, per-level feature progression)
+- OR logic / complex expressions in feature prerequisites; prereqs on encounters/hazards/connections
+- Additional effect types: `spawn_encounter`, `trigger_event`, `end_module`
+- Multi-currency (cp/sp/gp/pp); shops / appraisal / item valuation
+- Structured magic-item advantage/disadvantage; attunement; item sets; cursed mechanics
+- Random loot tables (weighted outcomes, nested rolls)
+- Wandering-monster triggers, exploration-turn counter, round-based hazard cooldowns
+- Module-level default environment; hex crawl / point crawl / overland travel modules
+- Custom condition icons; tags / categories on rules packs for pack-picker filtering
+- Bestiary inheritance / templates; structured monster attack riders
+- Formal signature-mechanic primitives (torch timers, crit tables, etc.)
+- Customizable GM personality profiles (layered: rules → module → user)
+
+When any of these ships, this doc is updated alongside the schema change.
+
+---
+
+## Reference implementation
+
+The full v1 starter pack lives in the repo root:
+
+- `game_pack_lantern_and_blade.json`
+- `rules_lantern_and_blade.json` + `lantern_and_blade_guidance.md`
+- `setting_hollowmarch.json` + `hollowmarch_lore.md`
+- `bestiary_lantern_and_blade.json`
+- `items_lantern_and_blade.json`
+- `module_crows_hollow.json` + `crows_hollow_guidance.md`
+- `character_ren_callory.json` + `ren_callory_guidance.md`
+
+When the schema and this doc disagree, the plan doc (`RULES_SCHEMA_PLAN.md`) is the tiebreaker.
