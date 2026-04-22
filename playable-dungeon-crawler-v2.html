@@ -185,6 +185,9 @@
             bestiary: null,
             module: null
         };
+        // Stage 1e: expose to extracted modules. Same object, two access paths
+        // (lexical `gameData` for inline code, `window.gameData` for scripts/*.js).
+        window.gameData = gameData;
 
         // XP progression table (fallback when rules.json has no experience.level_progression). Matches rules.json scale (1/10 of classic).
         const XP_LEVELS_DEFAULT = {
@@ -320,6 +323,8 @@
             /** Last roll type: 'resolved' (attack auto-resolved by rules engine) | 'ability' | null (free-form). Drives the current-step hint in the combat prompt. */
             lastUserRollType: null,
         };
+        // Stage 1e: expose to extracted modules.
+        window.gameState = gameState;
 
         // ============================================
         // DATA LOADING
@@ -1459,232 +1464,6 @@
             if (el) el.style.display = 'none';
         }
 
-        // ============================================
-        // NARRATIVE FUNCTIONS
-        // ============================================
-        
-        function scrollToBottom() {
-            const scroll = document.getElementById('narrativeScroll');
-            setTimeout(() => {
-                scroll.scrollTop = scroll.scrollHeight;
-            }, 100);
-        }
-
-        /** Normalize narrative formatting so bold is consistent. Converts markdown ** to <b></b> so both **text** and <b>text</b> render as bold. */
-        function normalizeNarrativeFormatting(text) {
-            if (!text || typeof text !== 'string') return '';
-            const parts = text.split(/\*\*/);
-            let out = '';
-            for (let i = 0; i < parts.length; i++) {
-                if (i % 2 === 1) out += '<b>' + parts[i] + '</b>';
-                else out += parts[i];
-            }
-            return out;
-        }
-
-        function addNarration(text) {
-            const scroll = document.getElementById('narrativeScroll');
-            const entry = document.createElement('div');
-            entry.className = 'narrative-entry';
-            const formatted = normalizeNarrativeFormatting(text);
-            entry.innerHTML = `<div class="gm-narration">${formatted}</div>`;
-            scroll.appendChild(entry);
-            scrollToBottom();
-        }
-
-        /** When loading a saved game: add GM-style context (where you are). Context message is sufficient; no need to replay last GM message. */
-        function addResumeContext() {
-            const roomId = gameState.currentRoom;
-            const rooms = gameData.module && gameData.module.rooms;
-            const room = rooms && roomId ? rooms[roomId] : null;
-            if (room) {
-                const name = room.name || roomId || 'the area';
-                const desc = room.description || '';
-                const context = desc
-                    ? `You find yourself in ${name}. ${desc}`
-                    : `You find yourself in ${name}.`;
-                addNarration(context);
-            }
-        }
-
-        /** Strip optional scene imagery tags from GM text so they are not shown. (Future: module JSON may reference pre-made maps/images.) */
-        function parseSceneDirectives(text) {
-            if (!text) return { cleanText: '' };
-            const cleanText = text
-                .replace(/\[SCENE_IMAGE:\s*[^\]]+\]/gi, '')
-                .replace(/\[SCENE_PROMPT:\s*[^\]]+\]/gi, '')
-                .replace(/\[SCENE_ALT:\s*[^\]]+\]/gi, '')
-                .replace(/\[SCENE_STYLE:\s*[^\]]+\]/gi, '')
-                .replace(/\s{2,}/g, ' ')
-                .trim();
-            return { cleanText };
-        }
-
-        function addPlayerAction(text) {
-            const scroll = document.getElementById('narrativeScroll');
-            const entry = document.createElement('div');
-            entry.className = 'narrative-entry';
-            entry.innerHTML = `<div class="player-action">${text}</div>`;
-            scroll.appendChild(entry);
-            scrollToBottom();
-        }
-
-        function addSystemMessage(text) {
-            const scroll = document.getElementById('narrativeScroll');
-            const entry = document.createElement('div');
-            entry.className = 'narrative-entry';
-            entry.innerHTML = `<div class="system-message">${text}</div>`;
-            scroll.appendChild(entry);
-            scrollToBottom();
-        }
-
-        /** Append a mechanics callout (Section 2 format). Rules engine uses these for state; display only flavor in GM narrative. */
-        function addMechanicsCallout(text) {
-            if (!text || !text.trim()) return;
-            const scroll = document.getElementById('narrativeScroll');
-            const entry = document.createElement('div');
-            entry.className = 'narrative-entry mechanics-callout-entry';
-            const div = document.createElement('div');
-            div.className = 'mechanics-callout';
-            div.textContent = text.trim();
-            entry.appendChild(div);
-            scroll.appendChild(entry);
-            scrollToBottom();
-        }
-
-        function addLoadingIndicator() {
-            const scroll = document.getElementById('narrativeScroll');
-            const entry = document.createElement('div');
-            entry.className = 'narrative-entry';
-            entry.id = 'loadingIndicator';
-            entry.innerHTML = `<div class="loading-indicator">GM is thinking</div>`;
-            scroll.appendChild(entry);
-            scrollToBottom();
-            return entry;
-        }
-
-        function removeLoadingIndicator() {
-            const indicator = document.getElementById('loadingIndicator');
-            if (indicator) {
-                indicator.remove();
-            }
-        }
-
-        /** Control tags that must not render during streaming (stripped from live display; still parsed from full text on completion). */
-        const CONTROL_TAG_RE = /\[[A-Z][A-Z_]*(?:\s*:\s*[^\]]*)?\]/g;
-
-        /** Ensure the progressive narration div exists and return its inner content element. Replaces the "GM is thinking" indicator on first delta. */
-        function ensureStreamingNarration() {
-            let entry = document.getElementById('streamingNarration');
-            if (entry) return entry.querySelector('.gm-narration');
-            removeLoadingIndicator();
-            const scroll = document.getElementById('narrativeScroll');
-            entry = document.createElement('div');
-            entry.className = 'narrative-entry';
-            entry.id = 'streamingNarration';
-            entry.innerHTML = '<div class="gm-narration"></div>';
-            scroll.appendChild(entry);
-            return entry.querySelector('.gm-narration');
-        }
-
-        /** Update the streaming narration div with cleaned, progressively-grown text. */
-        function updateStreamingNarration(fullText) {
-            const target = ensureStreamingNarration();
-            const cleaned = fullText.replace(CONTROL_TAG_RE, '').replace(/\s{2,}/g, ' ').trim();
-            target.innerHTML = normalizeNarrativeFormatting(cleaned);
-            scrollToBottom();
-        }
-
-        /** Remove the streaming narration div. The final, fully-parsed narration is added by processAIResponse. */
-        function removeStreamingNarration() {
-            const entry = document.getElementById('streamingNarration');
-            if (entry) entry.remove();
-        }
-
-        /** Read Anthropic Messages SSE and return the full assistant text. Updates the streaming narration as deltas arrive. */
-        async function readAnthropicStream(response) {
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            let fullText = '';
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                // SSE events are separated by blank lines. Process any complete events in the buffer.
-                let nl;
-                while ((nl = buffer.indexOf('\n\n')) !== -1) {
-                    const rawEvent = buffer.slice(0, nl);
-                    buffer = buffer.slice(nl + 2);
-                    for (const line of rawEvent.split('\n')) {
-                        if (!line.startsWith('data:')) continue;
-                        const payload = line.slice(5).trim();
-                        if (!payload) continue;
-                        let evt;
-                        try { evt = JSON.parse(payload); } catch (e) { continue; }
-                        if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
-                            fullText += evt.delta.text;
-                            updateStreamingNarration(fullText);
-                        } else if (evt.type === 'message_stop') {
-                            // end of stream; outer loop will exit on reader.done
-                        } else if (evt.type === 'error') {
-                            throw new Error(evt.error && evt.error.message ? evt.error.message : 'Stream error');
-                        }
-                    }
-                }
-            }
-            return fullText;
-        }
-
-        /** Build plain-text copy of narrative panel for playtest feedback. Copies to clipboard; returns the text. */
-        function copyNarrativeToClipboard() {
-            const scroll = document.getElementById('narrativeScroll');
-            if (!scroll) return '';
-            const lines = [];
-            lines.push('---');
-            lines.push('Narrative panel (for playtest feedback)');
-            lines.push('---');
-            lines.push('');
-            for (const entry of scroll.querySelectorAll('.narrative-entry')) {
-                if (entry.id === 'loadingIndicator') continue;
-                const gm = entry.querySelector('.gm-narration');
-                const player = entry.querySelector('.player-action');
-                const system = entry.querySelector('.system-message');
-                const callout = entry.querySelector('.mechanics-callout');
-                const getText = (el) => (el && el.innerText != null ? el.innerText : (el && el.textContent != null ? el.textContent : '')).trim();
-                if (gm && gm.textContent.trim()) {
-                    lines.push('[GM] ' + getText(gm));
-                } else if (player && player.textContent.trim()) {
-                    lines.push('[Player] ' + getText(player));
-                } else if (system && system.textContent.trim()) {
-                    lines.push('[System] ' + getText(system));
-                } else if (callout && callout.textContent.trim()) {
-                    lines.push('[Callout] ' + getText(callout));
-                }
-            }
-            const text = lines.join('\n');
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text).then(() => {
-                    const btn = document.getElementById('copyNarrativeBtn');
-                    if (btn) {
-                        const orig = btn.textContent;
-                        btn.textContent = 'Copied!';
-                        btn.disabled = true;
-                        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
-                    }
-                }).catch(() => {});
-            }
-            return text;
-        }
-
-        function addErrorMessage(text) {
-            const scroll = document.getElementById('narrativeScroll');
-            const entry = document.createElement('div');
-            entry.className = 'narrative-entry';
-            entry.innerHTML = `<div class="error-message">Error: ${text}</div>`;
-            scroll.appendChild(entry);
-            scrollToBottom();
-        }
 
         // ============================================
         // WEAPON DAMAGE (from character JSON)
