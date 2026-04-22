@@ -119,6 +119,19 @@
             modeEl.className = 'mode-indicator mode-' + mode;
         }
 
+        // Debug room indicator: visible only in DEBUG_MODE so playtesters can see
+        // what room the engine thinks they're in when the GM's narration drifts.
+        const debugRoomEl = doc().getElementById('debugRoomIndicator');
+        if (debugRoomEl) {
+            const cfg = global.CONFIG || {};
+            if (cfg.DEBUG_MODE) {
+                debugRoomEl.textContent = `room: ${gs().currentRoom || '—'}`;
+                debugRoomEl.classList.add('visible');
+            } else {
+                debugRoomEl.classList.remove('visible');
+            }
+        }
+
         // Conditions: icon + tooltip.
         const icons = global.CONDITION_ICONS || {};
         const iconDefault = global.CONDITION_ICON_DEFAULT || '';

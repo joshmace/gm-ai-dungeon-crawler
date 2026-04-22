@@ -470,6 +470,21 @@ body {
   color: #ff9b9b;
 }
 
+/* Debug room indicator: shows gameState.currentRoom when CONFIG.DEBUG_MODE is on. */
+.debug-room-indicator {
+  font-size: 0.7rem;
+  font-family: monospace;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: rgba(212, 175, 55, 0.12);
+  color: rgba(212, 175, 55, 0.85);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  display: none;
+}
+.debug-room-indicator.visible {
+  display: inline-block;
+}
+
 .mode-indicator.mode-travel {
   background: rgba(0, 118, 198, 0.25);
   color: #8ec5e8;

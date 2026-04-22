@@ -278,6 +278,61 @@
         'estimated_playtime', 'tags', 'guidance'
     ];
 
+    // Quick-and-dirty dice formula expander for the reward shim below.
+    // Accepts "1d6", "2d4+1", "3", or a number; returns a number.
+    // Eager resolution means rewards are deterministic within a game session
+    // but re-roll between reloads — acceptable for Stage 1's pre-v1 legacy path.
+    function rollFormulaNumeric(s) {
+        if (typeof s === 'number') return s;
+        if (typeof s !== 'string') return 0;
+        const m = s.trim().match(/^(\d+)d(\d+)\s*([+-])?\s*(\d+)?$/i);
+        if (!m) return parseInt(s, 10) || 0;
+        const count = parseInt(m[1], 10);
+        const sides = parseInt(m[2], 10);
+        const sign  = m[3] === '-' ? -1 : 1;
+        const mod   = m[4] ? sign * parseInt(m[4], 10) : 0;
+        let sum = 0;
+        for (let i = 0; i < count; i++) sum += Math.floor(Math.random() * sides) + 1;
+        return sum + mod;
+    }
+
+    // Build a pre-v1 on_death object from a v1 encounter's rewards block.
+    // Legacy processDiceRoll reads enc.on_death.{xp_award, treasure[{item, quantity}]}
+    // V1 stores rewards under enc.rewards.{xp, treasure[{type, amount, item_id}]}
+    // where xp may be a number or "from_bestiary" (-> monster.xp_value).
+    function buildLegacyOnDeath(enc, monsterRef, gameData) {
+        const r = enc.rewards;
+        if (!r) return null;
+        let xp_award = null;
+        if (typeof r.xp === 'number') {
+            xp_award = r.xp;
+        } else if (r.xp === 'from_bestiary' && monsterRef) {
+            const sharedMonsters = (gameData.bestiary && gameData.bestiary.monsters) || {};
+            const scopedMonsters = (gameData.module && gameData.module.module_bestiary
+                                    && gameData.module.module_bestiary.monsters) || {};
+            const m = scopedMonsters[monsterRef] || sharedMonsters[monsterRef];
+            if (m && m.xp_value != null) xp_award = m.xp_value;
+        }
+        const treasure = [];
+        if (Array.isArray(r.treasure)) {
+            const modItems = (gameData.module && gameData.module.module_items
+                              && gameData.module.module_items.items) || {};
+            const libItems = (gameData.items && gameData.items.items) || {};
+            for (const t of r.treasure) {
+                if (t.type === 'gold') {
+                    treasure.push({ item: 'gold', quantity: rollFormulaNumeric(t.amount) });
+                } else if (t.type === 'item' && t.item_id) {
+                    const item = modItems[t.item_id] || libItems[t.item_id];
+                    treasure.push({
+                        item:     item ? item.name : t.item_id,
+                        quantity: t.quantity || 1
+                    });
+                }
+            }
+        }
+        return { xp_award, treasure };
+    }
+
     function buildShimmedModule(gameData) {
         const mod = gameData.module || {};
         const envelope = {};
@@ -285,9 +340,11 @@
             if (mod[k] !== undefined) envelope[k] = mod[k];
         }
         // Legacy code reads encounter.monster_ref at the top level; v1 nests it
-        // under encounter.groups[0].monster_ref. Surface groups[0] up so the
-        // pre-v1 renderers (monster panel, attack flow, prompt builder) resolve
-        // their lookups. A later stage replaces those callers with v1-aware ones.
+        // under encounter.groups[0].monster_ref. Legacy reward code reads
+        // encounter.on_death.{xp_award, treasure[{item, quantity}]}; v1 uses
+        // encounter.rewards.{xp, treasure[{type, amount}]}. Translate both so the
+        // pre-v1 renderers resolve their lookups. A later stage replaces those
+        // callers with v1-aware ones.
         const shimmedRooms = {};
         for (const [roomId, room] of Object.entries(mod.rooms || {})) {
             const shimmedRoom = { ...room };
@@ -295,7 +352,11 @@
                 shimmedRoom.encounters = room.encounters.map(enc => {
                     const first = Array.isArray(enc.groups) && enc.groups.length ? enc.groups[0] : null;
                     const monsterRef = enc.monster_ref || (first && first.monster_ref) || null;
-                    return { ...enc, monster_ref: monsterRef };
+                    const shimEnc = { ...enc, monster_ref: monsterRef };
+                    if (enc.rewards && !enc.on_death) {
+                        shimEnc.on_death = buildLegacyOnDeath(enc, monsterRef, gameData);
+                    }
+                    return shimEnc;
                 });
             }
             shimmedRooms[roomId] = shimmedRoom;
