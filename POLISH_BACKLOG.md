@@ -53,3 +53,20 @@ Each entry: one-line description + where it was surfaced + suggested approach.
 - **Fix direction:** one-liner — swap `Roll for Ability Check` for
   `Roll for ${abilityInfo.label || 'Ability Check'}`. Safe to do
   standalone or as part of Stage 2 character-panel work.
+
+### Healing-potion flow is prompt-brittle
+
+- **Surfaced:** Stage 1e-vii smoke test (2026-04-22).
+- **Behavior:** drinking a healing potion sometimes doesn't decrement
+  the pack count or restore HP.
+- **Root cause:** two separate mechanisms must fire:
+  1. `tryParsePackItemUse` regex requires the GM to phrase it as
+     "drink/drank/use/used a healing potion". "Quaff", "down", "take",
+     or "the elixir restores you" don't match → no decrement.
+  2. HP only changes when the GM explicitly emits `[HEAL_PLAYER: N]`
+     after the roll. If the GM narrates "you feel restored, +N HP"
+     without the tag, HP stays unchanged.
+- **Fix direction:** Stage 6 (items pipeline) owns consumable dispatch
+  with `on_use: heal_player` — the app parses the player action and
+  applies both effects, no GM coordination required. Don't bandaid
+  the regex.
