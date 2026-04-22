@@ -39,3 +39,17 @@ Each entry: one-line description + where it was surfaced + suggested approach.
   dispatch via encounter triggers) + Stage 5 (rooms, connections,
   features). Delete `ensureCombatRoomHasEncounters` then. Don't patch
   in the shim — it would be fragile.
+
+### Ability-check dice prompt doesn't name the ability
+
+- **Surfaced:** Stage 1e-vi smoke test (2026-04-22).
+- **Behavior:** Dice UI shows `Roll for Ability Check (1d20 +0)` when the
+  GM asks for, say, a Dexterity check. Modifier is correct; the ability
+  name isn't.
+- **Root cause:** the prompt template in `showDiceSection` is hardcoded
+  to `"Roll for Ability Check"`. `abilityInfo.label` already contains
+  the readable name ("Dexterity", "Perception", etc.) — it just isn't
+  interpolated into the prompt.
+- **Fix direction:** one-liner — swap `Roll for Ability Check` for
+  `Roll for ${abilityInfo.label || 'Ability Check'}`. Safe to do
+  standalone or as part of Stage 2 character-panel work.
