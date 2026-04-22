@@ -57,6 +57,22 @@ Each entry: one-line description + where it was surfaced + suggested approach.
   applies both effects, no GM coordination required. Don't bandaid
   the regex.
 
+### XP bar label — revisit during polish pass
+
+- **Surfaced:** Stage 2 smoke test (2026-04-22).
+- **Behavior:** Stage 2c aligned the XP bar's text and fill to the same
+  reference frame (band-relative: `xp earned this level / xp needed
+  for next level`). The numbers now match the bar, but the text reads
+  a little cryptically out of context — "0 / 1,800" on a freshly-dinged
+  L3 character doesn't obviously say "you earned 0 XP toward level 4".
+- **Fix direction:** revisit during the broader polish pass. Options:
+  - Add a label prefix: "To level {N+1}: {xpProgress} / {xpNeeded}".
+  - Show both bars: a thin absolute bar + the band-relative bar.
+  - Switch to a level-tick progress bar (ticks at each level, fill to
+    current XP in absolute terms). Needs width math but reads most
+    intuitively.
+- Not a blocker; the current form is correct and consistent.
+
 ### L&B `resources.hit_points.max_formula` contradicts `progression.hp_gain_per_level`
 
 - **Surfaced:** Stage 2a derivation smoke test (2026-04-22).
