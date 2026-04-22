@@ -51,15 +51,25 @@
         if (checks) {
             const dice = checks.dice || '1d20';
             if (checks.method === 'roll_under_score') {
-                lines.push(`Checks: roll ${dice}; succeed on a roll ≤ the target (ability score or save target). Natural 1 = critical success, natural 20 = critical failure.`);
+                lines.push(`Checks: roll ${dice}; succeed on a roll ≤ the target (ability score or save target). Natural 1 = critical success, natural 20 = critical failure. The app judges success/failure on every roll and reports it in the callout — you narrate the outcome, not the number.`);
             } else {
                 lines.push(`Checks: roll ${dice} + modifier; succeed on a total ≥ the DC. Natural 20 = critical success, natural 1 = critical failure.`);
             }
             if (checks.advantage_disadvantage) {
-                lines.push(`Advantage / disadvantage: when the GM calls for it, use [ROLL_REQUEST: <ability|skill>, advantage] or [ROLL_REQUEST: <ability|skill>, disadvantage]. The app rolls 2d20 and keeps the high (advantage) or low (disadvantage).`);
+                lines.push(`Advantage / disadvantage: when the GM calls for it, use [ROLL_REQUEST: <ability|skill>, advantage] or [ROLL_REQUEST: <ability|skill>, disadvantage]. The app rolls 2d20 and keeps the high (advantage) or low (disadvantage) for roll-high packs; swapped for roll-under.`);
             } else {
                 lines.push(`Advantage / disadvantage: NOT supported in this ruleset — never append ", advantage" or ", disadvantage" to a [ROLL_REQUEST].`);
             }
+        }
+
+        // Saves — for categorical packs, list the authored save ids so the GM
+        // can issue [ROLL_REQUEST: <save_id>] (Three Knots: death, wands, etc.).
+        const savesCfg = r.character_model && r.character_model.saves;
+        if (savesCfg && savesCfg.type === 'categorical' && Array.isArray(savesCfg.categories) && savesCfg.categories.length) {
+            const names = savesCfg.categories.map(c => `${c.id} (${c.name})`).join('; ');
+            lines.push(`Saves (categorical): authored target on the character sheet. Call for one via [ROLL_REQUEST: <save_id>] using these ids: ${names}.`);
+        } else if (savesCfg && savesCfg.type !== 'categorical') {
+            lines.push(`Saves (per-ability): call for a save via [ROLL_REQUEST: <ability> save], e.g. [ROLL_REQUEST: CON save]. Plain [ROLL_REQUEST: <ability>] is an ability check (no proficiency).`);
         }
 
         // Difficulty ladder — roll-high emits DC numbers; roll-under emits target modifiers.
@@ -179,8 +189,26 @@
                     if (f.failure)     out += ` | On failure: "${f.failure}"`;
                     if (f.contains)    out += ` | Contains: ${JSON.stringify(f.contains)}`;
                     if (f.interaction) out += ` | Interaction: ${f.interaction}`;
-                    if (f.dc != null)  out += ` | DC: ${f.dc} (use this exact value from ruleset scale)`;
+                    // Stage 4: v1 features carry tier strings (dc_tier) instead of
+                    // numeric DCs. Render the tier so the GM names it rather than
+                    // the number; the engine maps tier → DC per rules pack.
+                    if (f.check && f.check.dc_tier) {
+                        const ctype = f.check.skill ? `${f.check.skill} skill` : (f.check.ability ? `${f.check.ability} check` : 'check');
+                        out += ` | Check: ${ctype}, tier ${f.check.dc_tier} (app rolls / compares)`;
+                    } else if (f.dc != null) {
+                        out += ` | DC: ${f.dc} (use this exact value from ruleset scale)`;
+                    }
                     out += '\n';
+                }
+            }
+            if (Array.isArray(room.hazards) && room.hazards.length > 0) {
+                out += 'Hazards (APP HANDLES — do not request rolls for these; narrate only after the app reports the outcome in a callout):\n';
+                for (const h of room.hazards) {
+                    const tt = (h.trigger && h.trigger.type) || 'on_enter';
+                    const shape = h.detection && h.avoidance ? 'detect-then-avoid'
+                                : h.avoidance                 ? 'pure-avoidance'
+                                : 'automatic';
+                    out += `- ${h.name || h.id} (${tt}, ${shape}): ${h.description || ''}\n`;
                 }
             }
             if (room.encounters && room.encounters.length > 0) {
