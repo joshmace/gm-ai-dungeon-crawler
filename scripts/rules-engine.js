@@ -86,45 +86,237 @@
      * Resolve a single attack. Rolls d20 to hit; on a hit, rolls damage (with crit doubling if natural 20).
      * On a fumble (natural 1), always misses — no damage roll.
      *
-     * Inputs:
-     *   attackBonus   - total modifier added to the d20 (ability mod + proficiency)
-     *   damageFormula - weapon dice e.g. "1d8"
-     *   damageBonus   - flat bonus added to damage (ability mod)
-     *   targetAC      - target's Armor Class (hit if total >= AC)
-     *   rng           - optional RNG
+     * Inputs (all optional except where noted):
+     *   attackBonus      - total modifier added to the d20 (ability mod + proficiency + magic.attack_bonus).
+     *   damageFormula    - weapon dice e.g. "1d8". Required on hit.
+     *   damageBonus      - flat bonus added to damage (ability mod + magic.damage_bonus).
+     *   targetAC         - target's Armor Class (hit if total >= AC). Default 10.
+     *   critThreshold    - natural d20 at-or-above which counts as crit. Default 20. Pass 19 for
+     *                      Champion Improved Critical.
+     *   critEffect       - 'double_dice' (default) | 'max_damage' | 'extra_die'. Pulled from
+     *                      rules.combat.critical_hit.effect.
+     *   bonusDamage      - { amount: "1d4", type: "radiant" } — magic rider, added on every hit
+     *                      (including crits; the rider itself also doubles on crits when
+     *                      critEffect === 'double_dice', matching 5e-canonical behavior).
+     *   damageType       - primary damage type string (e.g. 'slashing').
+     *   resistance       - array of damage types the target resists (halves damage).
+     *   immunity         - array of damage types the target is immune to (zeros damage).
+     *   vulnerability    - array of damage types the target takes double damage from.
+     *   naturalRoll      - if provided, used instead of rolling d20. Lets the UI let the player
+     *                      roll manually while the engine owns the math.
+     *   diceRolls        - if provided, array of pre-rolled damage dice (sum used as raw dice
+     *                      total before crit multiplier and modifier). Same rationale.
+     *   bonusDiceRolls   - if provided, pre-rolled bonusDamage dice.
+     *   rng              - optional RNG for deterministic tests.
      *
      * Returns:
      *   {
-     *     attack:  { natural, total, hit, isCrit, isFumble },
-     *     damage:  null | { total, rolls, mod, breakdown, doubled }
+     *     attack: { natural, total, hit, isCrit, isFumble },
+     *     damage: null | {
+     *       total,              // final damage after crit, bonus, resistance/immunity/vulnerability
+     *       base,               // weapon dice + damageBonus (pre-bonus-damage, pre-resistance)
+     *       bonus,              // bonusDamage total (pre-resistance)
+     *       rawMultiplier,      // 0 | 0.5 | 1 | 2 (primary damage-type multiplier)
+     *       components: [{ source, type, amount, multiplier, applied }],
+     *       breakdown           // human-readable string
+     *     }
      *   }
      */
     function resolveAttack(input) {
-        const attackBonus = Number(input.attackBonus) || 0;
+        const attackBonus   = Number(input.attackBonus) || 0;
         const damageFormula = input.damageFormula || '1d4';
-        const damageBonus = Number(input.damageBonus) || 0;
-        const targetAC = Number(input.targetAC) || 10;
-        const rng = input.rng;
+        const damageBonus   = Number(input.damageBonus) || 0;
+        const targetAC      = Number(input.targetAC) || 10;
+        const critThreshold = Number(input.critThreshold) || 20;
+        const critEffect    = input.critEffect || 'double_dice';
+        const rng           = input.rng;
 
-        const atk = rollD20(attackBonus, { rng });
-        const hit = !atk.isFumble && atk.total >= targetAC;
-
-        const attack = {
-            natural: atk.natural,
-            total: atk.total,
-            hit,
-            isCrit: atk.isCrit && hit,
-            isFumble: atk.isFumble
-        };
+        // Attack roll (use pre-rolled natural if provided).
+        let natural;
+        if (typeof input.naturalRoll === 'number') {
+            natural = Math.max(1, Math.min(20, input.naturalRoll | 0));
+        } else {
+            natural = rollDie(20, rng);
+        }
+        const total = natural + attackBonus;
+        const isFumble = natural === 1;
+        const isCritRoll = natural >= critThreshold;
+        const hit = !isFumble && total >= targetAC;
+        const isCrit = hit && isCritRoll;
+        const attack = { natural, total, hit, isCrit, isFumble };
 
         if (!hit) return { attack, damage: null };
 
-        const damage = rollFormula(damageFormula, {
-            doubleDice: attack.isCrit,
-            extraMod: damageBonus,
+        // Base damage (weapon dice + damageBonus). Crit by double_dice doubles the dice
+        // count but not the flat modifier. max_damage replaces dice with max face.
+        // extra_die adds one extra die of the base type (still + modifier once).
+        const damage = computeDamage({
+            damageFormula, damageBonus, critEffect, isCrit,
+            bonusDamage: input.bonusDamage,
+            damageType:  input.damageType,
+            resistance:  input.resistance,
+            immunity:    input.immunity,
+            vulnerability: input.vulnerability,
+            diceRolls:        input.diceRolls,
+            bonusDiceRolls:   input.bonusDiceRolls,
             rng
         });
         return { attack, damage };
+    }
+
+    /**
+     * Damage rollup. Extracted so resolveMonsterAttack + resolveAttack share the same math.
+     */
+    function computeDamage(opts) {
+        const critEffect = opts.critEffect || 'double_dice';
+        const isCrit     = !!opts.isCrit;
+
+        // Resolve base weapon damage.
+        let baseDice;
+        if (Array.isArray(opts.diceRolls) && opts.diceRolls.length) {
+            // Pre-rolled dice provided. Parse the formula to know die count/sides and apply crit doubling.
+            const parsed = parseFormula(opts.damageFormula) || { count: opts.diceRolls.length, sides: 4, mod: 0 };
+            const rolls  = opts.diceRolls.slice(0, parsed.count);
+            let sum = rolls.reduce((s, r) => s + r, 0);
+            let doubled = false;
+            let rollsOut = rolls.slice();
+            if (isCrit) {
+                if (critEffect === 'double_dice') {
+                    // Double the dice sum by re-summing the same rolls (consistent with "rolled doubled" convention).
+                    // Alternative: roll another set. We re-use the sum to stay deterministic for pre-rolled flows.
+                    sum = sum * 2;
+                    doubled = true;
+                } else if (critEffect === 'max_damage') {
+                    sum = parsed.count * parsed.sides;
+                } else if (critEffect === 'extra_die') {
+                    const extra = rollDie(parsed.sides, opts.rng);
+                    sum += extra;
+                    rollsOut.push(extra);
+                }
+            }
+            baseDice = {
+                total: sum + parsed.mod + (Number(opts.damageBonus) || 0),
+                rolls: rollsOut,
+                mod:   parsed.mod + (Number(opts.damageBonus) || 0),
+                doubled,
+                breakdown: `${parsed.count}d${parsed.sides}${doubled ? '×2' : ''}`
+            };
+        } else {
+            // Roll freshly via rollFormula, applying crit math.
+            const parsed = parseFormula(opts.damageFormula) || { count: 1, sides: 4, mod: 0 };
+            const extraMod = Number(opts.damageBonus) || 0;
+            if (isCrit && critEffect === 'max_damage') {
+                baseDice = {
+                    total: parsed.count * parsed.sides + parsed.mod + extraMod,
+                    rolls: new Array(parsed.count).fill(parsed.sides),
+                    mod:   parsed.mod + extraMod,
+                    doubled: false,
+                    breakdown: `${parsed.count}d${parsed.sides} (max)`
+                };
+            } else if (isCrit && critEffect === 'extra_die') {
+                const first  = rollFormula(opts.damageFormula, { rng: opts.rng, extraMod });
+                const extra  = rollDie(parsed.sides, opts.rng);
+                baseDice = {
+                    total: first.total + extra,
+                    rolls: [...first.rolls, extra],
+                    mod:   first.mod,
+                    doubled: false,
+                    breakdown: first.breakdown + ` + ${extra} (crit die)`
+                };
+            } else {
+                baseDice = rollFormula(opts.damageFormula, {
+                    rng: opts.rng,
+                    doubleDice: isCrit && critEffect === 'double_dice',
+                    extraMod
+                });
+            }
+        }
+
+        // Resolve bonus-damage rider (magic weapons — e.g. Lanternblade's "1d4 radiant").
+        let bonus = null;
+        if (opts.bonusDamage && opts.bonusDamage.amount) {
+            if (Array.isArray(opts.bonusDiceRolls) && opts.bonusDiceRolls.length) {
+                const parsed = parseFormula(opts.bonusDamage.amount) || { count: opts.bonusDiceRolls.length, sides: 4, mod: 0 };
+                const rolls  = opts.bonusDiceRolls.slice(0, parsed.count);
+                let sum = rolls.reduce((s, r) => s + r, 0);
+                let rollsOut = rolls.slice();
+                if (isCrit && critEffect === 'double_dice') {
+                    sum = sum * 2;
+                } else if (isCrit && critEffect === 'max_damage') {
+                    sum = parsed.count * parsed.sides;
+                } else if (isCrit && critEffect === 'extra_die') {
+                    const extra = rollDie(parsed.sides, opts.rng);
+                    sum += extra;
+                    rollsOut.push(extra);
+                }
+                bonus = { total: sum + parsed.mod, rolls: rollsOut, formula: opts.bonusDamage.amount };
+            } else {
+                const bonusRoll = rollFormula(opts.bonusDamage.amount, {
+                    rng: opts.rng,
+                    doubleDice: isCrit && critEffect === 'double_dice'
+                });
+                bonus = { total: bonusRoll.total, rolls: bonusRoll.rolls, formula: opts.bonusDamage.amount };
+            }
+        }
+
+        // Resistance/immunity/vulnerability multipliers — primary type for base, bonus type for rider.
+        const primaryType = opts.damageType || null;
+        const bonusType   = opts.bonusDamage && opts.bonusDamage.type || null;
+        const baseMul  = resistanceMultiplier(primaryType, opts.resistance, opts.immunity, opts.vulnerability);
+        const bonusMul = resistanceMultiplier(bonusType,   opts.resistance, opts.immunity, opts.vulnerability);
+        const baseApplied  = Math.floor(baseDice.total  * baseMul);
+        const bonusApplied = bonus ? Math.floor(bonus.total * bonusMul) : 0;
+
+        const components = [{
+            source: 'weapon', type: primaryType,
+            amount: baseDice.total, multiplier: baseMul, applied: baseApplied,
+            rolls:  baseDice.rolls,  breakdown: baseDice.breakdown, doubled: !!baseDice.doubled
+        }];
+        if (bonus) {
+            components.push({
+                source: 'bonus_damage', type: bonusType,
+                amount: bonus.total, multiplier: bonusMul, applied: bonusApplied,
+                rolls:  bonus.rolls, formula: bonus.formula
+            });
+        }
+
+        return {
+            total: baseApplied + bonusApplied,
+            base:  baseDice.total,
+            bonus: bonus ? bonus.total : 0,
+            rawMultiplier: baseMul,
+            doubled: !!baseDice.doubled,
+            components,
+            breakdown: humanDamageBreakdown(components, isCrit)
+        };
+    }
+
+    function humanDamageBreakdown(components, isCrit) {
+        const parts = components.map(c => {
+            const typeStr = c.type ? ` ${c.type}` : '';
+            const mulStr  = c.multiplier === 1 ? '' : ` (×${c.multiplier})`;
+            return `${c.amount}${typeStr}${mulStr}`;
+        });
+        const prefix = isCrit ? 'crit ' : '';
+        return `${prefix}${parts.join(' + ')}`;
+    }
+
+    /**
+     * Return the damage multiplier for `type` given the defender's resist/immune/vuln arrays.
+     * Immunity beats the others (0), vulnerability stacks with resistance (1), resistance alone is 0.5.
+     * Unknown type (null) returns 1.
+     */
+    function resistanceMultiplier(type, resist, immune, vuln) {
+        if (!type) return 1;
+        const t = String(type).toLowerCase();
+        const has = (arr) => Array.isArray(arr) && arr.some(x => String(x).toLowerCase() === t);
+        if (has(immune)) return 0;
+        const r = has(resist);
+        const v = has(vuln);
+        if (r && v) return 1;
+        if (v) return 2;
+        if (r) return 0.5;
+        return 1;
     }
 
     /**
@@ -137,17 +329,33 @@
         const targetAC = Number(input.targetAC) || 10;
         const rng = input.rng;
 
-        const atk = rollD20(attackBonus, { rng });
-        const hit = !atk.isFumble && atk.total >= targetAC;
+        let natural;
+        if (typeof input.naturalRoll === 'number') {
+            natural = Math.max(1, Math.min(20, input.naturalRoll | 0));
+        } else {
+            natural = rollDie(20, rng);
+        }
+        const total = natural + attackBonus;
+        const isFumble = natural === 1;
+        const hit = !isFumble && total >= targetAC;
         const attack = {
-            natural: atk.natural,
-            total: atk.total,
-            hit,
-            isCrit: atk.isCrit && hit,
-            isFumble: atk.isFumble
+            natural, total, hit,
+            isCrit: !isFumble && natural === 20 && hit, // flag only; no damage-doubling for monsters here
+            isFumble
         };
         if (!hit) return { attack, damage: null };
-        const damage = rollFormula(damageFormula, { rng });
+        const damage = computeDamage({
+            damageFormula,
+            damageBonus: 0,
+            critEffect: 'none', // monsters: no crit doubling in this ruleset
+            isCrit: false,
+            damageType:  input.damageType,
+            resistance:  input.resistance,
+            immunity:    input.immunity,
+            vulnerability: input.vulnerability,
+            diceRolls:   input.diceRolls,
+            rng
+        });
         return { attack, damage };
     }
 
@@ -539,6 +747,106 @@
         };
     }
 
+    /**
+     * Given v1 raw `character` + `rules` + `itemsById` and the weapon entry
+     * the player is attacking with, produce the input object that
+     * resolveAttack expects. Pulls ability mod + proficiency bonus,
+     * primary damage type, magic riders (attack_bonus, damage_bonus,
+     * bonus_damage), and the Champion crit-on-19 threshold.
+     *
+     * `weaponChoice` is either:
+     *   - a v1 items-library weapon entry ({ id, weapon: { damage, damage_type, melee, ranged }, magic?, ... }); OR
+     *   - `null`/`undefined`, in which case we pick the first equipped weapon.
+     *
+     * `targetAC` is the defender's AC (caller supplies from the bestiary entry).
+     * `defenderResist` etc. are optional arrays of damage types the target
+     * resists / is immune to / is vulnerable to.
+     */
+    function attackInputsFor(character, rules, itemsById, weaponChoice, targetAC, defenderResist, defenderImmune, defenderVuln) {
+        const formula = rules && rules.character_model && rules.character_model.modifier_formula;
+        const equipment = (character && character.equipment) || [];
+
+        // Resolve the weapon: prefer the caller's choice, else the first equipped weapon.
+        let weapon = weaponChoice;
+        let weaponSlot = null;
+        if (!weapon) {
+            for (const e of equipment) {
+                const item = itemsById && itemsById[e.item_id];
+                if (item && item.weapon) { weapon = item; weaponSlot = e.slot; break; }
+            }
+        } else {
+            const entry = equipment.find(e => e.item_id === weapon.id);
+            if (entry) weaponSlot = entry.slot;
+        }
+        if (!weapon || !weapon.weapon) {
+            // No weapon — caller should fall back to prose. Return minimal inputs.
+            return { attackBonus: 0, damageFormula: '1d4', damageBonus: 0, targetAC: Number(targetAC) || 10, critThreshold: 20, critEffect: 'double_dice' };
+        }
+        const w = weapon.weapon;
+        const isRanged = !!w.ranged && !w.melee;
+
+        // Ability mod: ranged → DEX, melee → STR (per rules.combat.damage.melee_ability / ranged_ability).
+        const meleeAb  = (rules && rules.combat && rules.combat.damage && rules.combat.damage.melee_ability)  || 'str';
+        const rangedAb = (rules && rules.combat && rules.combat.damage && rules.combat.damage.ranged_ability) || 'dex';
+        const abId = isRanged ? rangedAb : meleeAb;
+        const abScore = (character.ability_scores && character.ability_scores[abId]) || 10;
+        const abMod = modifierFor(abScore, formula);
+
+        const profBonus = proficiencyBonusFor(character, rules);
+        const magic = weapon.magic || {};
+        const magicAttack = Number(magic.attack_bonus || 0);
+        const magicDamage = Number(magic.damage_bonus || 0);
+        const bonusDamage = magic.bonus_damage && magic.bonus_damage.amount ? magic.bonus_damage : null;
+
+        const critEffect = (rules && rules.combat && rules.combat.critical_hit && rules.combat.critical_hit.effect) || 'double_dice';
+        const critThreshold = hasClassFeature(character, 'champion_improved_critical') ? 19 : 20;
+
+        return {
+            attackBonus:   abMod + profBonus + magicAttack,
+            damageFormula: w.damage || '1d4',
+            damageBonus:   abMod + magicDamage,
+            damageType:    w.damage_type || null,
+            targetAC:      Number(targetAC) || 10,
+            critThreshold,
+            critEffect,
+            bonusDamage,
+            resistance:    defenderResist || null,
+            immunity:      defenderImmune || null,
+            vulnerability: defenderVuln   || null,
+            // Debug / display fields (callers can use for the callout label; engine ignores).
+            _weaponName:   weapon.name || weapon.id,
+            _weaponSlot:   weaponSlot,
+            _abilityAbbr:  (abId || '').toUpperCase(),
+            _abilityMod:   abMod,
+            _profBonus:    profBonus,
+            _isRanged:     isRanged
+        };
+    }
+
+    /**
+     * Given a v1 bestiary monster + its attack index + the player's derived
+     * AC, produce inputs for resolveMonsterAttack. For monsters, damage
+     * type is the attack's damage_type, and the defender's
+     * resistance/immunity/vulnerability arrays come from the character's
+     * magic items (folded via deriveSheet.magicBonuses).
+     */
+    function monsterAttackInputsFor(monster, attackIndex, targetAC, defenderResist, defenderImmune, defenderVuln) {
+        const attacks = (monster && monster.attacks) || [];
+        const a = attacks[attackIndex] || attacks[0];
+        if (!a) return { attackBonus: 0, damageFormula: '1d4', targetAC: Number(targetAC) || 10 };
+        return {
+            attackBonus:   Number(a.bonus) || 0,
+            damageFormula: a.damage || '1d4',
+            damageType:    a.damage_type || null,
+            targetAC:      Number(targetAC) || 10,
+            resistance:    defenderResist || null,
+            immunity:      defenderImmune || null,
+            vulnerability: defenderVuln   || null,
+            _attackName:   a.name || 'attack',
+            _range:        (a.range || 'melee').toLowerCase()
+        };
+    }
+
     global.RulesEngine = {
         rollDie,
         parseFormula,
@@ -556,6 +864,11 @@
         hpMaxFor,
         acFor,
         sumMagicBonuses,
-        deriveSheet
+        deriveSheet,
+        // Stage 3 combat:
+        computeDamage,
+        resistanceMultiplier,
+        attackInputsFor,
+        monsterAttackInputsFor
     };
 })(typeof window !== 'undefined' ? window : globalThis);
