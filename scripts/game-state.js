@@ -14,6 +14,13 @@
 (function (global) {
     'use strict';
 
+    // Accessor shortcuts for runtime state mutators (save/load, HP/XP/inventory).
+    // The shim builders below take gameData as a parameter; these getters bridge
+    // the runtime mutations to window.gameState/window.gameData.
+    const gs = () => global.gameState;
+    const gd = () => global.gameData;
+    const debugLog = (...a) => { if (global.debugLog) global.debugLog(...a); };
+
     // v1 ability keys are short (str/dex/...); the pre-v1 renderers expect full names.
     const ABILITY_FULL_NAMES = {
         str: 'strength', dex: 'dexterity', con: 'constitution',
@@ -398,8 +405,385 @@
         };
     }
 
+    const XP_LEVELS_DEFAULT = {
+        1: 0, 2: 200, 3: 400, 4: 800, 5: 1600,
+        6: 3200, 7: 6400, 8: 12800, 9: 25600, 10: 51200
+    };
+
+    /** Level thresholds from rules.experience.level_progression when present, else default. Used for XP bar and level-up. */
+    function getXPLevels() {
+        const prog = gd().rules && gd().rules.experience && gd().rules.experience.level_progression;
+        if (prog && typeof prog === 'object' && Object.keys(prog).length > 0) {
+            const out = {};
+            for (const [k, v] of Object.entries(prog)) {
+                const level = parseInt(k, 10);
+                if (!isNaN(level) && typeof v === 'number') out[level] = v;
+            }
+            if (Object.keys(out).length > 0) return out;
+        }
+        return XP_LEVELS_DEFAULT;
+    }
+
+    const SAVE_KEY = 'gm-ai-dungeon-save';
+    const SAVE_VERSION = 1;
+
+    /** Serializable slice of game state for save. */
+    function getStateToSave() {
+        return {
+            character: JSON.parse(JSON.stringify(gs().character)),
+            currentRoom: gs().currentRoom,
+            triggeredEvents: [...(gs().triggeredEvents || [])],
+            conversationHistory: gs().conversationHistory.map(m => ({ role: m.role, content: m.content })),
+            damageToEncounters: { ...(gs().damageToEncounters || {}) },
+            inCombat: !!gs().inCombat,
+            mode: gs().mode || 'exploration',
+            equippedInUse: [...(gs().equippedInUse || [])],
+            lastCombatRoom: gs().lastCombatRoom,
+            encounterHistory: (gs().encounterHistory || []).map(e => ({ ...e })),
+            readiedWeaponName: gs().readiedWeaponName,
+            armorEquipped: !!gs().armorEquipped,
+            lastUserRollType: gs().lastUserRollType
+        };
+    }
+
+    function saveGame() {
+        if (!gs().character || gs().isDead) return;
+        try {
+            const payload = {
+                version: SAVE_VERSION,
+                gamePack: CONFIG.GAME_PACK,
+                moduleTitle: gd().module && gd().module.module ? gd().module.module.title : '',
+                savedAt: Date.now(),
+                state: getStateToSave()
+            };
+            localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+            debugLog('SAVE', 'Game saved');
+        } catch (e) {
+            console.warn('Save failed:', e);
+        }
+    }
+
+    function getSaveMetadata() {
+        try {
+            const raw = localStorage.getItem(SAVE_KEY);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            return data && data.version === SAVE_VERSION ? data : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function hasValidSave() {
+        const meta = getSaveMetadata();
+        return meta && meta.gamePack === CONFIG.GAME_PACK;
+    }
+
+    function loadGame() {
+        const meta = getSaveMetadata();
+        if (!meta || meta.gamePack !== CONFIG.GAME_PACK) return false;
+        const s = meta.state;
+        if (!s || !s.character) return false;
+        gs().character = s.character;
+        gs().currentRoom = s.currentRoom;
+        gs().triggeredEvents = s.triggeredEvents || [];
+        gs().conversationHistory = s.conversationHistory || [];
+        gs().damageToEncounters = s.damageToEncounters || {};
+        gs().inCombat = !!s.inCombat;
+        gs().mode = s.mode || (s.inCombat ? 'combat' : 'exploration');
+        gs().equippedInUse = s.equippedInUse || [];
+        gs().lastCombatRoom = s.lastCombatRoom;
+        gs().encounterHistory = s.encounterHistory || [];
+        gs().readiedWeaponName = s.readiedWeaponName || null;
+        gs().armorEquipped = !!s.armorEquipped;
+        gs().lastUserRollType = s.lastUserRollType || null;
+        gs().isDead = false;
+        gs().pendingLevelUpAck = null;
+        debugLog('SAVE', 'Game loaded');
+        return true;
+    }
+
+    const MAX_LEVEL = 10;
+
+    /** Hit die size for level-up HP (from character hit_dice e.g. "3d10" -> 10, or class default). */
+    function getHitDieSize() {
+        const hd = gd().character && gd().character.combat_stats
+            && gd().character.combat_stats.hit_points
+            && gd().character.combat_stats.hit_points.hit_dice
+            && gd().character.combat_stats.hit_points.hit_dice.total;
+        if (hd && typeof hd === 'string') {
+            const m = hd.match(/d(\d+)/i);
+            if (m) return parseInt(m[1], 10);
+        }
+        const cls = (gs().character && gs().character.class || '').toLowerCase();
+        if (cls.includes('wizard') || cls.includes('sorcerer')) return 6;
+        if (cls.includes('fighter') || cls.includes('paladin') || cls.includes('ranger')) return 10;
+        if (cls.includes('cleric') || cls.includes('druid') || cls.includes('bard') || cls.includes('rogue')) return 8;
+        return 8;
+    }
+
+    /** Process level-up: if XP meets next threshold and level < 10, add level and HP. */
+    function processLevelUp() {
+        const char = gs().character;
+        if (!char || char.level >= MAX_LEVEL) return;
+        const xpLevels = getXPLevels();
+        while (char.level < MAX_LEVEL && xpLevels[char.level + 1] != null && char.xp >= xpLevels[char.level + 1]) {
+            const sides = getHitDieSize();
+            const roll = Math.floor(Math.random() * sides) + 1;
+            const conMod = (char.abilities && char.abilities.con && char.abilities.con.modifier) || 0;
+            const gain = Math.max(1, roll + conMod);
+            char.level += 1;
+            char.maxHp += gain;
+            char.hp += gain;
+            gs().pendingLevelUpAck = { level: char.level, hpGain: gain };
+            addSystemMessage(`Level up! You are now level ${char.level}. Gained ${gain} HP (${roll}${conMod >= 0 ? '+' : ''}${conMod} CON).`);
+            debugLog('STATE', `Level up to ${char.level}, +${gain} HP`);
+        }
+    }
+
+    /**
+     * Total modifier from active conditions for this roll. Used so the app enforces condition effects on dice.
+     * @param {boolean} isAttackRoll - true for attack rolls, false for ability/skill checks
+     * @param {string|null} abilityKey - for checks: 'str'|'dex'|'con'|'int'|'wis'|'cha' (wounded only applies to str/dex/con)
+     * @returns {number} modifier to add to the roll (negative = penalty)
+     */
+    function getConditionModifierForRoll(isAttackRoll, abilityKey) {
+        const char = gs().character;
+        const conditions = char && char.conditions ? char.conditions : [];
+        const condDefs = gd().rules && gd().rules.combat && gd().rules.combat.conditions;
+        if (!condDefs || typeof condDefs !== 'object') return 0;
+        let total = 0;
+        conditions.forEach(c => {
+            const id = (c.id || c.name || c).toLowerCase();
+            const def = condDefs[id];
+            if (!def || typeof def !== 'object') return;
+            const level = c.level != null ? c.level : 1;
+            if (isAttackRoll) {
+                if (typeof def.attack_penalty === 'number') total += def.attack_penalty;
+                if (typeof def.attack_penalty_per_level === 'number') total += def.attack_penalty_per_level * level;
+            } else {
+                const abilities = def.check_penalty_abilities;
+                if (abilities && Array.isArray(abilities) && abilityKey && !abilities.includes(abilityKey.toLowerCase())) return;
+                if (typeof def.check_penalty === 'number') total += def.check_penalty;
+                if (typeof def.check_penalty_per_level === 'number') total += def.check_penalty_per_level * level;
+            }
+        });
+        return total;
+    }
+
+    function modifyHP(amount) {
+        debugLog('STATE', `Modifying HP by ${amount}`);
+        gs().character.hp = Math.max(0, Math.min(gs().character.maxHp, gs().character.hp + amount));
+        updateCharacterDisplay();
+        if (gs().character.hp === 0) {
+            gs().inCombat = false;
+            gs().mode = 'exploration';
+            gs().lastCombatRoom = gs().currentRoom;
+            saveGame(); // save state just before marking dead so "Load save" restores to last moment
+            gs().isDead = true;
+            addSystemMessage("You have died! Your adventure ends here.");
+            disableInput(true);
+        } else {
+            saveGame();
+        }
+    }
+    
+    function addXP(amount) {
+        debugLog('STATE', `Adding ${amount} XP`);
+        gs().character.xp += amount;
+        processLevelUp();
+        updateCharacterDisplay();
+        saveGame();
+    }
+    
+    function addToInventory(itemName, quantity = 1) {
+        debugLog('STATE', `Adding to inventory: ${itemName} x${quantity}`);
+        const existing = gs().character.inventory.find(i => i.name === itemName);
+        if (existing) {
+            if (typeof existing.quantity === 'number') {
+                existing.quantity += quantity;
+            } else {
+                const match = existing.quantity.match(/(\d+)/);
+                if (match) {
+                    const current = parseInt(match[1]);
+                    existing.quantity = `${current + quantity}gp`;
+                }
+            }
+        } else {
+            gs().character.inventory.push({ name: itemName, quantity });
+        }
+        updateCharacterDisplay();
+        saveGame();
+    }
+    
+    function removeFromInventory(itemName, quantity = 1) {
+        debugLog('STATE', `Removing from inventory: ${itemName} x${quantity}`);
+        const item = gs().character.inventory.find(i => i.name === itemName);
+        if (item) {
+            if (typeof item.quantity === 'number') {
+                item.quantity = Math.max(0, item.quantity - quantity);
+            } else if (typeof item.quantity === 'string' && item.name === 'Gold') {
+                const m = item.quantity.match(/(\d+)/);
+                if (m) {
+                    const current = parseInt(m[1], 10);
+                    const next = Math.max(0, current - quantity);
+                    item.quantity = next > 0 ? `${next}gp` : '0gp';
+                }
+            }
+        }
+        updateCharacterDisplay();
+        saveGame();
+    }
+
+    /** Deduct gold; returns true if the player had enough and was deducted. */
+    function deductGold(amount) {
+        if (amount <= 0) return true;
+        const item = gs().character.inventory.find(i => i.name === 'Gold');
+        if (!item) return false;
+        const m = (item.quantity || '').toString().match(/(\d+)/);
+        const current = m ? parseInt(m[1], 10) : 0;
+        if (current < amount) return false;
+        item.quantity = (current - amount) > 0 ? `${current - amount}gp` : '0gp';
+        updateCharacterDisplay();
+        saveGame();
+        return true;
+    }
+
+    /** Current gold amount (number). */
+    function getGold() {
+        const item = gs().character.inventory.find(i => i.name === 'Gold');
+        if (!item) return 0;
+        const m = (item.quantity || '').toString().match(/(\d+)/);
+        return m ? parseInt(m[1], 10) : 0;
+    }
+
+    /** Default specs for common weapons/armor when not in character data. Name (key) normalized to lowercase. */
+    const DEFAULT_EQUIPMENT_SPECS = {
+        longsword: { name: 'Longsword', damage: '1d8', damage_type: 'slashing', range: 'melee', properties: ['versatile (1d10)'] },
+        shortsword: { name: 'Shortsword', damage: '1d6', damage_type: 'piercing', range: 'melee' },
+        dagger: { name: 'Dagger', damage: '1d4', damage_type: 'piercing', range: 'melee', properties: ['finesse', 'light', 'thrown 20/60'] },
+        shortbow: { name: 'Shortbow', damage: '1d6', damage_type: 'piercing', range: '80/320', properties: ['ammunition', 'two-handed'] },
+        longbow: { name: 'Longbow', damage: '1d8', damage_type: 'piercing', range: '150/600', properties: ['ammunition', 'heavy', 'two-handed'] },
+        'chain mail': { name: 'Chain Mail', type: 'armor', ac: 16, properties: ['heavy'] },
+        'leather armor': { name: 'Leather Armor', type: 'armor', ac: 11, properties: [] },
+        'studded leather': { name: 'Studded Leather', type: 'armor', ac: 12, properties: [] },
+        shield: { name: 'Shield', type: 'armor', ac: 2, properties: [] }
+    };
+
+    /** Build catalog of equipment specs from gd() + defaults (name -> spec). Used for find/buy parsing. */
+    function getEquipmentCatalog() {
+        const catalog = new Map();
+        const add = (name, spec) => {
+            if (name && spec) catalog.set(String(name).trim().toLowerCase(), { ...spec, name: spec.name || name });
+        };
+        const data = gd().character && gd().character.equipment;
+        if (data) {
+            for (const item of [...(data.worn || []), ...(data.wielded || []), ...(data.carried || [])]) {
+                const n = (item.name || '').trim().toLowerCase();
+                if (!n) continue;
+                if (item.damage) add(n, { name: item.name, damage: item.damage, damage_type: item.damage_type, range: item.range || 'melee', properties: item.properties });
+                else if ((item.type || '').toLowerCase() === 'armor') add(n, { name: item.name, type: 'armor', ac: item.ac, properties: item.properties || [] });
+            }
+        }
+        for (const [k, v] of Object.entries(DEFAULT_EQUIPMENT_SPECS)) {
+            if (!catalog.has(k)) catalog.set(k, typeof v.name !== 'undefined' ? v : { ...v, name: k });
+        }
+        return catalog;
+    }
+
+    /** Add a weapon or armor to character equipment (from find/buy). Spec: weapon { name, damage, damage_type?, range?, properties? } or armor { name, type:'armor', ac, properties? }. */
+    function addEquipmentItem(spec) {
+        if (!spec || !spec.name) return;
+        const isArmor = (spec.type || '').toLowerCase() === 'armor';
+        const isWeapon = !!spec.damage;
+        if (!isWeapon && !isArmor) return;
+        const typeInfo = isWeapon ? getWeaponTypeInfo(spec) : { type: null, range: null };
+        let stats = '';
+        if (isWeapon) {
+            const base = `${spec.damage} ${spec.damage_type || ''}`.trim();
+            stats = typeInfo.type === 'ranged' && typeInfo.range
+                ? `${base} (ranged ${typeInfo.range})`
+                : `${base} (${typeInfo.type || 'melee'})`;
+        } else {
+            stats = Array.isArray(spec.properties) ? spec.properties.join(' - ') : (spec.properties || '');
+        }
+        const eq = {
+            name: spec.name,
+            stats,
+            equipped: false,
+            isWeapon,
+            isArmor,
+            weaponType: typeInfo.type,
+            weaponRange: typeInfo.range
+        };
+        if (isArmor && spec.ac != null) eq.ac = spec.ac;
+        if (isWeapon) {
+            eq.damage = spec.damage;
+            eq.damage_type = spec.damage_type || '';
+            eq.range = spec.range || (typeInfo.range ? String(typeInfo.range) : 'melee');
+            eq.properties = spec.properties;
+        }
+        gs().character.equipment.push(eq);
+        updateCharacterDisplay();
+        saveGame();
+        debugLog('STATE', `Added equipment: ${spec.name}`);
+    }
+
+    /** Add a condition by id (from rules.combat.conditions). Id is case-insensitive; stored as lowercase. */
+    function addCondition(id) {
+        if (!id || typeof id !== 'string') return;
+        const normId = id.trim().toLowerCase();
+        if (!normId) return;
+        const info = getConditionInfo(normId);
+        if (!info.effect_summary && !info.effect_detail) {
+            const ids = getConditionIdsFromRules();
+            if (ids.length && !ids.includes(normId)) return;
+        }
+        const existing = gs().character.conditions.find(c => (c.id || c.name || '').toLowerCase() === normId);
+        if (existing) return;
+        gs().character.conditions.push({ id: normId });
+        debugLog('STATE', `Condition added: ${normId}`);
+        updateCharacterDisplay();
+        saveGame();
+    }
+
+    /** Remove a condition by id. */
+    function removeCondition(id) {
+        if (!id || typeof id !== 'string') return;
+        const normId = id.trim().toLowerCase();
+        const before = gs().character.conditions.length;
+        gs().character.conditions = gs().character.conditions.filter(
+            c => (c.id || c.name || String(c)).toLowerCase() !== normId
+        );
+        if (gs().character.conditions.length < before) {
+            debugLog('STATE', `Condition removed: ${normId}`);
+            updateCharacterDisplay();
+            saveGame();
+        }
+    }
+
+
     global.GameState = {
         init,
+        getXPLevels,
+        saveGame,
+        loadGame,
+        getSaveMetadata,
+        hasValidSave,
+        getStateToSave,
+        modifyHP,
+        addXP,
+        addToInventory,
+        removeFromInventory,
+        deductGold,
+        getGold,
+        addEquipmentItem,
+        getEquipmentCatalog,
+        addCondition,
+        removeCondition,
+        processLevelUp,
+        getHitDieSize,
+        getConditionModifierForRoll,
         _modifierFor: modifierFor,
         _hpMax: hpMax,
         _resolveItem: resolveItem,
@@ -408,4 +792,25 @@
         _buildShimmedBestiary:  buildShimmedBestiary,
         _buildShimmedModule:    buildShimmedModule
     };
+
+    // Legacy globals for still-inline callers. Retired as their callers move out.
+    global.getXPLevels                  = getXPLevels;
+    global.saveGame                     = saveGame;
+    global.loadGame                     = loadGame;
+    global.getSaveMetadata              = getSaveMetadata;
+    global.hasValidSave                 = hasValidSave;
+    global.getStateToSave               = getStateToSave;
+    global.modifyHP                     = modifyHP;
+    global.addXP                        = addXP;
+    global.addToInventory               = addToInventory;
+    global.removeFromInventory          = removeFromInventory;
+    global.deductGold                   = deductGold;
+    global.getGold                      = getGold;
+    global.addEquipmentItem             = addEquipmentItem;
+    global.getEquipmentCatalog          = getEquipmentCatalog;
+    global.addCondition                 = addCondition;
+    global.removeCondition              = removeCondition;
+    global.processLevelUp               = processLevelUp;
+    global.getHitDieSize                = getHitDieSize;
+    global.getConditionModifierForRoll  = getConditionModifierForRoll;
 })(typeof window !== 'undefined' ? window : globalThis);
