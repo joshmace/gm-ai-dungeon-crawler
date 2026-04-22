@@ -42,6 +42,175 @@
         return Object.assign({}, shared, modItems);
     }
 
+    // --- Stage 4: v1-aware check / save context ---------------------------
+
+    /**
+     * Parse optional advantage / disadvantage suffix from a roll-request
+     * string. Accepts "Dexterity, advantage", "Perception , disadvantage",
+     * etc. Returns { base, advantage, disadvantage }.
+     */
+    function stripAdvantageSuffix(rollType) {
+        const raw = String(rollType || '');
+        const m = raw.match(/^\s*(.+?)\s*,\s*(advantage|disadvantage|adv|disadv)\s*$/i);
+        if (!m) return { base: raw.trim(), advantage: false, disadvantage: false };
+        const flag = m[2].toLowerCase();
+        return {
+            base: m[1].trim(),
+            advantage:    flag === 'advantage' || flag === 'adv',
+            disadvantage: flag === 'disadvantage' || flag === 'disadv'
+        };
+    }
+
+    const ABILITY_KEYS = {
+        str: 'str', strength: 'str',
+        dex: 'dex', dexterity: 'dex',
+        con: 'con', constitution: 'con',
+        int: 'int', intelligence: 'int',
+        wis: 'wis', wisdom: 'wis',
+        cha: 'cha', charisma: 'cha'
+    };
+
+    /**
+     * Classify a roll-request label against the active v1 rules pack.
+     * Returns one of:
+     *   { kind: 'ability',          key: 'dex', ... }
+     *   { kind: 'skill',            key: 'perception', ... }
+     *   { kind: 'save-per-ability', key: 'con', ... } (when the label ends in "save")
+     *   { kind: 'save-categorical', key: 'death', name: 'Death Ray or Poison', ... }
+     * or null when no match against the pack.
+     */
+    function classifyV1Check(label) {
+        const v = gd()._v1;
+        if (!v || !v.rules) return null;
+        const rules = v.rules;
+        const clean = String(label || '').trim();
+        if (!clean) return null;
+        const lower = clean.toLowerCase();
+
+        // Categorical saves: Three Knots declares id + name pairs.
+        const savesCfg = rules.character_model && rules.character_model.saves;
+        if (savesCfg && savesCfg.type === 'categorical' && Array.isArray(savesCfg.categories)) {
+            const strippedSaveWord = lower.replace(/\s*save\s*$/, '').trim();
+            for (const cat of savesCfg.categories) {
+                if (!cat) continue;
+                const id = String(cat.id || '').toLowerCase();
+                const name = String(cat.name || '').toLowerCase();
+                if (id === lower || id === strippedSaveWord) {
+                    return { kind: 'save-categorical', key: cat.id, name: cat.name || cat.id };
+                }
+                if (name && (name === lower || name === strippedSaveWord)) {
+                    return { kind: 'save-categorical', key: cat.id, name: cat.name };
+                }
+            }
+        }
+
+        // "<ability> save" for per_ability packs.
+        const saveMatch = lower.match(/^\s*(str|strength|dex|dexterity|con|constitution|int|intelligence|wis|wisdom|cha|charisma)\s+save\s*$/);
+        if (saveMatch && savesCfg && savesCfg.type !== 'categorical') {
+            const abId = ABILITY_KEYS[saveMatch[1]];
+            if (abId) return { kind: 'save-per-ability', key: abId };
+        }
+
+        // Plain ability.
+        const abId = ABILITY_KEYS[lower];
+        if (abId) {
+            const abs = (rules.character_model && rules.character_model.abilities) || [];
+            if (abs.some(a => a && a.id === abId)) return { kind: 'ability', key: abId };
+        }
+
+        // Skill id / name.
+        const skills = (rules.character_model && rules.character_model.skills) || [];
+        for (const s of skills) {
+            if (!s) continue;
+            if (String(s.id || '').toLowerCase() === lower) return { kind: 'skill', key: s.id };
+            if (String(s.name || '').toLowerCase() === lower) return { kind: 'skill', key: s.id };
+        }
+        return null;
+    }
+
+    /**
+     * Build the Stage 4 dice context for an ability / skill / save roll.
+     * Returns:
+     *   {
+     *     method, modifier, target, adEnabled,
+     *     critSuccessOn, critFailureOn,
+     *     label, abbr, abilityId,
+     *     kind, key,
+     *     saveType    // for saves only: 'per_ability' | 'categorical'
+     *   }
+     * or null when v1 data is missing or the label doesn't classify.
+     */
+    function v1CheckContextFor(rollType) {
+        const v = gd()._v1;
+        if (!v || !v.character || !v.rules) return null;
+        const cls = classifyV1Check(rollType);
+        if (!cls) return null;
+        const items = v1ItemsIndex();
+        const rules = v.rules;
+        const checksCfg = (rules.resolution && rules.resolution.checks) || {};
+        const adEnabled = !!checksCfg.advantage_disadvantage;
+        const critSuccessOn = checksCfg.crit_success || null;
+        const critFailureOn = checksCfg.crit_failure || null;
+
+        if (cls.kind === 'ability' || cls.kind === 'skill') {
+            const inp = RulesEngine.checkInputsFor(v.character, rules, items, cls.kind, cls.key);
+            if (!inp) return null;
+            return {
+                method: inp.method, modifier: inp.modifier, target: inp.target,
+                adEnabled: inp.adEnabled, critSuccessOn: inp.critSuccessOn, critFailureOn: inp.critFailureOn,
+                label: inp._label, abbr: inp._abbr,
+                abilityId: inp._abilityId,
+                kind: cls.kind, key: cls.key
+            };
+        }
+
+        if (cls.kind === 'save-per-ability') {
+            const inp = RulesEngine.checkInputsFor(v.character, rules, items, 'ability', cls.key);
+            if (!inp) return null;
+            // Saves add proficiency + magic.save_bonus on top of the ability mod.
+            const magic = RulesEngine.sumMagicBonuses(v.character, items).saveBonus || {};
+            const blanket = Number(magic.all) || 0;
+            const profs = (v.character.saves && v.character.saves.proficient) || [];
+            const prof = Array.isArray(profs) && profs.includes(cls.key)
+                ? RulesEngine.proficiencyBonusFor(v.character, rules) : 0;
+            const saveBonus = blanket + (Number(magic[cls.key]) || 0);
+            return {
+                method: inp.method,
+                modifier: (inp.modifier || 0) + prof + saveBonus,
+                target: null,
+                adEnabled, critSuccessOn, critFailureOn,
+                label: `${inp._abbr} save`,
+                abbr: inp._abbr,
+                abilityId: inp._abilityId,
+                kind: 'save',
+                key: cls.key,
+                saveType: 'per_ability'
+            };
+        }
+
+        if (cls.kind === 'save-categorical') {
+            const values = (v.character.saves && v.character.saves.values) || {};
+            const base = Number(values[cls.key]);
+            if (!Number.isFinite(base)) return null;
+            const magic = RulesEngine.sumMagicBonuses(v.character, items).saveBonus || {};
+            const blanket = Number(magic.all) || 0;
+            const target = base + blanket + (Number(magic[cls.key]) || 0);
+            return {
+                method: checksCfg.method === 'roll_under_score' ? 'roll_under_score' : 'roll_high_vs_dc',
+                modifier: 0,
+                target,
+                adEnabled, critSuccessOn, critFailureOn,
+                label: `${cls.name || cls.key} save`,
+                abbr: (cls.name || cls.key).slice(0, 3).toUpperCase(),
+                abilityId: null,
+                kind: 'save',
+                key: cls.key,
+                saveType: 'categorical'
+            };
+        }
+        return null;
+    }
+
     /**
      * Find the v1 items-library entry for the player's currently-fighting
      * weapon. Prefers gs().readiedWeaponName when the name matches an
@@ -216,7 +385,11 @@
     
     /** Resolve dice for a roll request. Returns { type:'weapon'|'custom'|'d20', ... } */
     function getDiceForRollRequest(rollType) {
-        const t = (rollType || '').trim().toLowerCase();
+        const rawTrimmed = (rollType || '').trim();
+        // Strip advantage/disadvantage suffix for classification; remember the flag.
+        const adSplit = stripAdvantageSuffix(rawTrimmed);
+        const base = adSplit.base;
+        const t = base.toLowerCase();
         if (t === 'damage') {
             return { type: 'weapon', label: getEquippedWeaponDamage().label };
         }
@@ -265,8 +438,20 @@
                 maxFace: 8
             };
         }
-        // d20 for abilities/skills
-        return { type: 'd20', ability: t };
+        // d20 for abilities/skills/saves. Stage 4: attach the v1 check context
+        // (method, modifier or target, adv/disadv gating) so showDiceSection
+        // and processDiceRoll can branch on roll-high vs roll-under without
+        // re-classifying the label later.
+        const v1Check = v1CheckContextFor(base);
+        const advantage = adSplit.advantage && (!v1Check || v1Check.adEnabled);
+        const disadvantage = adSplit.disadvantage && (!v1Check || v1Check.adEnabled);
+        return {
+            type: 'd20',
+            ability: base,
+            advantage,
+            disadvantage,
+            v1Check
+        };
     }
 
     /** Parse "1d8" or "2d6" and return { dice, modifier, label } for display and rolling. */
@@ -371,21 +556,37 @@
             diceInput.max = String(dice.maxFace);
         } else {
             const isAttack = contextType === 'attack';
-            const abilityInfo = getAbilityModifierForRoll(dice.ability);
-            const modStr = abilityInfo && abilityInfo.modifier != null ? signed(abilityInfo.modifier) : '';
+            const advantage    = !!dice.advantage;
+            const disadvantage = !!dice.disadvantage;
+            const advLabel = advantage ? ' (advantage)' : disadvantage ? ' (disadvantage)' : '';
+            const rollBtnBase = advantage || disadvantage ? 'Roll 2d20' : 'Roll 1d20';
             if (isAttack) {
                 const atk = getAttackModifierForRoll(rt);
+                const abilityInfo = getAbilityModifierForRoll(dice.ability);
                 const totalMod = atk ? atk.modifier : (abilityInfo ? abilityInfo.modifier : 0);
                 const labelPart = atk && atk.label ? atk.label : (abilityInfo && abilityInfo.label ? abilityInfo.label : '');
-                rollPrompt.textContent = labelPart ? `Roll for Attack (1d20 ${labelPart}).` : `Roll for Attack (1d20${modStr ? ` ${modStr}` : ''}).`;
-                rollBtn.textContent = `Roll 1d20 (${signed(totalMod)})`;
+                const modStr = signed(totalMod);
+                rollPrompt.textContent = labelPart ? `Roll for Attack (1d20 ${labelPart})${advLabel}.` : `Roll for Attack (1d20 ${modStr})${advLabel}.`;
+                rollBtn.textContent = `${rollBtnBase} (${modStr})`;
+            } else if (dice.v1Check) {
+                // Stage 4: v1 path. Prompt / button render method-aware labels.
+                const ctx = dice.v1Check;
+                if (ctx.method === 'roll_under_score') {
+                    rollPrompt.textContent = `Roll for ${ctx.label} (1d20 ≤ ${ctx.target})${advLabel}.`;
+                    rollBtn.textContent = `${rollBtnBase} (≤ ${ctx.target})`;
+                } else {
+                    const modStr = signed(ctx.modifier || 0);
+                    rollPrompt.textContent = `Roll for ${ctx.label} (1d20 ${modStr})${advLabel}.`;
+                    rollBtn.textContent = `${rollBtnBase} (${modStr})`;
+                }
             } else {
-                // Prefer the ability/skill name from abilityInfo (e.g. "Dexterity",
-                // "Perception"); fall back to the raw roll-type text, then to
-                // the generic "Ability Check" when nothing else resolves.
+                // Pre-Stage-4 fallback: legacy shim path. Reads the character
+                // sheet's pre-computed modifiers via the inline getAbilityModifierForRoll.
+                const abilityInfo = getAbilityModifierForRoll(dice.ability);
+                const modStr = abilityInfo && abilityInfo.modifier != null ? signed(abilityInfo.modifier) : '';
                 const label = (abilityInfo && abilityInfo.label) || (rt || 'Ability Check');
-                rollPrompt.textContent = `Roll for ${label} (1d20${modStr ? ` ${modStr}` : ''}).`;
-                rollBtn.textContent = `Roll 1d20 (${modStr || '0'})`;
+                rollPrompt.textContent = `Roll for ${label} (1d20${modStr ? ` ${modStr}` : ''})${advLabel}.`;
+                rollBtn.textContent = `${rollBtnBase} (${modStr || '0'})`;
             }
             diceInput.placeholder = '1-20';
             diceInput.min = '1';
@@ -507,8 +708,22 @@
                 : `${ctx.label} (${rollsStr}) = ${total}`;
             processDiceRoll(total, ctx, { customBreakdown: breakdown });
         } else {
-            const d20 = Math.floor(Math.random() * 20) + 1;
-            processDiceRoll(d20, ctx);
+            // Stage 4: adv/disadv rolls two d20s and picks the favored face.
+            // For roll-high: advantage keeps the higher, disadvantage the lower.
+            // For roll-under: advantage keeps the lower, disadvantage the higher.
+            const method = (ctx.v1Check && ctx.v1Check.method) || 'roll_high_vs_dc';
+            if (ctx.advantage || ctx.disadvantage) {
+                const a = Math.floor(Math.random() * 20) + 1;
+                const b = Math.floor(Math.random() * 20) + 1;
+                const hi = Math.max(a, b), lo = Math.min(a, b);
+                const picked = method === 'roll_under_score'
+                    ? (ctx.advantage ? lo : hi)
+                    : (ctx.advantage ? hi : lo);
+                processDiceRoll(picked, ctx, { adRolls: [a, b], adKind: ctx.advantage ? 'advantage' : 'disadvantage' });
+            } else {
+                const d20 = Math.floor(Math.random() * 20) + 1;
+                processDiceRoll(d20, ctx);
+            }
         }
     }
 
@@ -571,17 +786,48 @@
         } else {
             gs().lastD20Natural = roll;
             gs().lastRollWasAttack = isAttackRoll(ctx);
-            const abilityInfo = ctx.ability ? getAbilityModifierForRoll(ctx.ability) : null;
-            if (abilityInfo != null && abilityInfo.modifier != null) {
-                totalToSend = roll + abilityInfo.modifier;
-                const modStr = abilityInfo.modifier >= 0 ? ` + ${abilityInfo.modifier}` : ` - ${Math.abs(abilityInfo.modifier)}`;
-                message = `You rolled d20: <span class="dice-roll">${roll} (${abilityInfo.label}${modStr}) = ${totalToSend}</span>`;
+            // Stage 4: v1 path. For roll-under packs `totalToSend` is just the
+            // natural face; the rules pack compares it to the target. For roll-
+            // high packs `totalToSend` is the natural + modifier as before.
+            const v1Check = ctx && ctx.v1Check;
+            if (v1Check) {
+                const method = v1Check.method;
+                const label = v1Check.label || (ctx.ability || 'check');
+                const advSuffix = options.adKind ? ` (${options.adKind})` : '';
+                const otherRoll = options.adRolls && options.adRolls.find(n => n !== roll);
+                const adTrail = options.adRolls ? ` — rolled [${options.adRolls.join(', ')}] kept ${roll}` : '';
+                if (method === 'roll_under_score') {
+                    totalToSend = roll;
+                    message = `You rolled d20${advSuffix}: <span class="dice-roll">${roll} (${label} ≤ ${v1Check.target})${adTrail}</span>`;
+                } else {
+                    const mod = v1Check.modifier || 0;
+                    totalToSend = roll + mod;
+                    const modStr = mod >= 0 ? ` + ${mod}` : ` - ${Math.abs(mod)}`;
+                    message = `You rolled d20${advSuffix}: <span class="dice-roll">${roll}${mod !== 0 ? modStr : ''} (${label}) = ${totalToSend}${adTrail}</span>`;
+                }
             } else {
-                totalToSend = roll;
-                message = `You rolled d20: <span class="dice-roll">${roll}</span>`;
+                const abilityInfo = ctx.ability ? getAbilityModifierForRoll(ctx.ability) : null;
+                if (abilityInfo != null && abilityInfo.modifier != null) {
+                    totalToSend = roll + abilityInfo.modifier;
+                    const modStr = abilityInfo.modifier >= 0 ? ` + ${abilityInfo.modifier}` : ` - ${Math.abs(abilityInfo.modifier)}`;
+                    message = `You rolled d20: <span class="dice-roll">${roll} (${abilityInfo.label}${modStr}) = ${totalToSend}</span>`;
+                } else {
+                    totalToSend = roll;
+                    message = `You rolled d20: <span class="dice-roll">${roll}</span>`;
+                }
             }
-            if (roll === 20) rollMessageSuffix = ' Natural 20 (critical success).';
-            else if (roll === 1) rollMessageSuffix = ' Natural 1 (critical failure).';
+            // Crit-success / crit-failure callouts are driven by the rules pack
+            // in the v1 path; fall back to the nat-20 / nat-1 default otherwise.
+            const critSucc = v1Check && v1Check.critSuccessOn;
+            const critFail = v1Check && v1Check.critFailureOn;
+            const matches = (label) => label === 'nat_20' ? roll === 20 : label === 'nat_1' ? roll === 1 : false;
+            if (v1Check) {
+                if (matches(critSucc)) rollMessageSuffix = ` Natural ${roll} (critical success).`;
+                else if (matches(critFail)) rollMessageSuffix = ` Natural ${roll} (critical failure).`;
+            } else {
+                if (roll === 20) rollMessageSuffix = ' Natural 20 (critical success).';
+                else if (roll === 1) rollMessageSuffix = ' Natural 1 (critical failure).';
+            }
         }
         
         // Build mechanics callout (Section 2 format) and apply state from callouts
@@ -752,11 +998,67 @@
                 gs().pendingAttackResolution = null;
             }
         } else if (rollType === 'ability' && ctx.type !== 'weapon') {
-            const abilityInfo = ctx.ability ? getAbilityModifierForRoll(ctx.ability) : null;
-            const abLabel = (abilityInfo && abilityInfo.label) ? abilityInfo.label.replace(/\s*\(.*\)/, '').toUpperCase().slice(0, 3) : 'CHK';
-            const modVal = abilityInfo && abilityInfo.modifier != null ? abilityInfo.modifier : 0;
-            const callout = `Ability Roll 1d20: ${roll} (${signed(modVal)}) = ${totalToSend} (${abLabel})\nResult: ${totalToSend} (compare to DC in narrative)`;
-            addMechanicsCallout(callout);
+            // Stage 4: v1 path emits method-aware callouts and, when the
+            // engine can judge (roll-under with target, or any check with a
+            // DC supplied by a hazard/feature flow), appends SUCCESS/FAILURE
+            // both to the callout and to the message sent back to the GM.
+            const v1Check = ctx && ctx.v1Check;
+            if (v1Check) {
+                const label = v1Check.label || 'Check';
+                const adTrail = options.adRolls
+                    ? ` (${options.adKind}: rolled [${options.adRolls.join(', ')}])`
+                    : '';
+                // Hazards / features (Stage 4c) stash dc on the pending
+                // context so the engine can judge. Plain GM roll requests
+                // leave dc unset and we report the total only.
+                const dc = v1Check.dc != null ? Number(v1Check.dc) : null;
+                const resolved = RulesEngine.resolveCheck({
+                    method: v1Check.method,
+                    modifier: v1Check.modifier || 0,
+                    target: v1Check.target,
+                    dc: Number.isFinite(dc) ? dc : undefined,
+                    critSuccessOn: v1Check.critSuccessOn || undefined,
+                    critFailureOn: v1Check.critFailureOn || undefined,
+                    naturalRoll: roll
+                });
+
+                let callout;
+                let rollMessageOverride = null;
+                if (v1Check.method === 'roll_under_score') {
+                    const outcomeWord = resolved.success ? 'SUCCESS' : 'FAILURE';
+                    const critNote = resolved.isCrit ? ' (critical success)' : resolved.isFumble ? ' (critical failure)' : '';
+                    callout = `${label}${adTrail}: rolled ${roll} ≤ ${v1Check.target} — ${outcomeWord}${critNote}`;
+                    rollMessageOverride = `I rolled ${roll} (${label}, 1d20 ≤ ${v1Check.target}) — ${outcomeWord}${critNote}.`;
+                } else {
+                    const modStr = signed(v1Check.modifier || 0);
+                    const headline = `${label} Roll 1d20${adTrail}: ${roll} (${modStr}) = ${resolved.total}`;
+                    if (Number.isFinite(dc)) {
+                        const outcomeWord = resolved.success ? 'SUCCESS' : 'FAILURE';
+                        const critNote = resolved.isCrit ? ' (critical success)' : resolved.isFumble ? ' (critical failure)' : '';
+                        callout = `${headline}\n${resolved.total} vs DC ${dc} — ${outcomeWord}${critNote}`;
+                        rollMessageOverride = `I rolled ${resolved.total} (${label}, 1d20 ${modStr}) vs DC ${dc} — ${outcomeWord}${critNote}.`;
+                    } else {
+                        callout = `${headline}\nResult: ${resolved.total} (compare to DC in narrative)`;
+                    }
+                }
+                addMechanicsCallout(callout);
+
+                // Stash the rewritten message on pendingRollContext so the
+                // rollMessage builder below picks it up. We avoid reusing
+                // `autoResolvedMessage` here because that switch flips the
+                // combat-flow prompt into the attack-resolved branch, which
+                // mis-steers the GM for ability / skill / save rolls.
+                if (rollMessageOverride) {
+                    gs()._v1RollMessageOverride = rollMessageOverride;
+                }
+            } else {
+                // Pre-Stage-4 fallback: legacy shim path with no v1 context.
+                const abilityInfo = ctx.ability ? getAbilityModifierForRoll(ctx.ability) : null;
+                const abLabel = (abilityInfo && abilityInfo.label) ? abilityInfo.label.replace(/\s*\(.*\)/, '').toUpperCase().slice(0, 3) : 'CHK';
+                const modVal = abilityInfo && abilityInfo.modifier != null ? abilityInfo.modifier : 0;
+                const callout = `Ability Roll 1d20: ${roll} (${signed(modVal)}) = ${totalToSend} (${abLabel})\nResult: ${totalToSend} (compare to DC in narrative)`;
+                addMechanicsCallout(callout);
+            }
         }
         
         // Mechanics callouts are sufficient; do not duplicate with system-message for attack/damage/ability
@@ -764,7 +1066,11 @@
         if (!addedCallout) addSystemMessage(message);
         hideDiceSection();
         
-        const rollMessage = autoResolvedMessage || `I rolled a ${totalToSend != null ? totalToSend : roll}.${rollMessageSuffix}`;
+        const v1RollMessage = gs()._v1RollMessageOverride || null;
+        gs()._v1RollMessageOverride = null;
+        const rollMessage = autoResolvedMessage
+            || v1RollMessage
+            || `I rolled a ${totalToSend != null ? totalToSend : roll}.${rollMessageSuffix}`;
         if (rollType === 'damage' && ctx.type === 'weapon') gs().lastUserMessageWasDiceRoll = true; // skip parsing monster damage from GM narrative (we applied it from callout)
         if (autoResolvedMessage) {
             // Attack auto-resolved (hit or miss): prompt uses 'resolved' branch — narrate, then monster turn.
