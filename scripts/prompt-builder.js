@@ -24,51 +24,106 @@
 
     // --- RULESET block ------------------------------------------------------
 
+    /**
+     * Pull the v1 rules object if available. The shim preserves the same
+     * reference under gameData.rules as it does under gameData._v1.rules
+     * for the extra legacy paths, but during Stage 3 the v1 fields we
+     * read here (combat, resolution, difficulty, conditions[]) match
+     * the v1 shape directly on gameData.rules.
+     */
+    function v1Rules() {
+        const gd = global.gameData || {};
+        return (gd._v1 && gd._v1.rules) || gd.rules || null;
+    }
+
     function buildRulesetBlockForPrompt() {
-        const r = global.gameData && global.gameData.rules;
+        const r = v1Rules();
         if (!r) return '';
         const lines = [];
-        lines.push(`System: ${r.system || 'OSR'}. Honor these mechanics; do not substitute your own numbers or rules.`);
+
+        // Header + design philosophy.
+        const systemLabel = r.name || r.id || 'OSR';
+        lines.push(`System: ${systemLabel}. Honor these mechanics; do not substitute your own numbers or rules.`);
         if (r.design_philosophy) lines.push(`Design philosophy: ${r.design_philosophy}`);
-        const dc = r.core_mechanics && r.core_mechanics.ability_checks && r.core_mechanics.ability_checks.dc_scale;
-        if (dc && typeof dc === 'object') {
-            const dcStr = Object.entries(dc).map(([k, v]) => `${k} DC ${v}`).join(', ');
-            lines.push(`Ability/skill check DCs (use these exactly): ${dcStr}.`);
+
+        // Checks — direction (roll-high vs roll-under) and adv/disadv flag.
+        const checks = r.resolution && r.resolution.checks;
+        if (checks) {
+            const dice = checks.dice || '1d20';
+            if (checks.method === 'roll_under_score') {
+                lines.push(`Checks: roll ${dice}; succeed on a roll ≤ the target (ability score or save target). Natural 1 = critical success, natural 20 = critical failure.`);
+            } else {
+                lines.push(`Checks: roll ${dice} + modifier; succeed on a total ≥ the DC. Natural 20 = critical success, natural 1 = critical failure.`);
+            }
+            if (checks.advantage_disadvantage) {
+                lines.push(`Advantage / disadvantage: when the GM calls for it, use [ROLL_REQUEST: <ability|skill>, advantage] or [ROLL_REQUEST: <ability|skill>, disadvantage]. The app rolls 2d20 and keeps the high (advantage) or low (disadvantage).`);
+            } else {
+                lines.push(`Advantage / disadvantage: NOT supported in this ruleset — never append ", advantage" or ", disadvantage" to a [ROLL_REQUEST].`);
+            }
         }
-        if (r.core_mechanics && r.core_mechanics.ability_checks) {
-            const ac = r.core_mechanics.ability_checks;
-            if (ac.roll)          lines.push(`Checks: ${ac.roll}.`);
-            if (ac.when_to_roll)  lines.push(`When to roll: ${ac.when_to_roll}.`);
+
+        // Difficulty ladder — roll-high emits DC numbers; roll-under emits target modifiers.
+        const scale = r.difficulty && Array.isArray(r.difficulty.scale) ? r.difficulty.scale : [];
+        if (scale.length) {
+            const isUnder = checks && checks.method === 'roll_under_score';
+            if (isUnder) {
+                const parts = scale.map(t => {
+                    const m = Number(t.modifier) || 0;
+                    const sign = m >= 0 ? '+' : '';
+                    return `${t.name || t.id} (${sign}${m} to target)`;
+                });
+                lines.push(`Difficulty tiers (target adjustments): ${parts.join(', ')}.`);
+            } else {
+                const parts = scale.map(t => `${t.name || t.id} DC ${t.dc != null ? t.dc : '?'}`);
+                lines.push(`Difficulty tiers (use these DCs exactly): ${parts.join(', ')}.`);
+            }
         }
+        if (r.difficulty && r.difficulty.auto_success) lines.push(`Auto-success: ${r.difficulty.auto_success}`);
+        if (r.difficulty && r.difficulty.auto_failure) lines.push(`Auto-failure: ${r.difficulty.auto_failure}`);
+
+        // Combat — attack direction, damage formula, crit, initiative.
         if (r.combat) {
-            if (r.combat.attack_roll) {
-                const ar = r.combat.attack_roll;
-                lines.push(`Attack: melee ${ar.melee || '1d20+STR+prof'}, ranged ${ar.ranged || '1d20+DEX+prof'}. Hit if roll >= target AC.`);
+            const attackRes = r.combat.attack && r.combat.attack.resolution;
+            const hasProf = Array.isArray(r.progression && r.progression.level_table)
+                && r.progression.level_table.some(row => typeof row.proficiency_bonus === 'number');
+            const profPart = hasProf ? ' + proficiency' : '';
+            if (attackRes === 'roll_high_vs_ac' || !attackRes) {
+                lines.push(`Attack: d20 + ability modifier${profPart} vs target AC (hit if total ≥ AC). Melee uses ${(r.combat.damage && r.combat.damage.melee_ability || 'str').toUpperCase()}; ranged uses ${(r.combat.damage && r.combat.damage.ranged_ability || 'dex').toUpperCase()}. The app resolves attacks end-to-end; never narrate numbers.`);
             }
             if (r.combat.damage) {
-                lines.push(`Damage: ${r.combat.damage.roll || 'weapon die + ability modifier'}. Crit: natural 20 (app handles double dice + mod). Natural 1 = auto miss.`);
+                lines.push(`Damage: ${r.combat.damage.formula || 'weapon_die_plus_ability_mod'}.`);
             }
-            if (r.combat.hit_points && r.combat.hit_points.at_zero) {
-                lines.push(`At 0 HP: ${r.combat.hit_points.at_zero}.`);
+            const crit = r.combat.critical_hit;
+            if (crit) {
+                const trig = crit.trigger === 'nat_19_or_20' ? 'natural 19 or 20' : 'natural 20';
+                const eff  = crit.effect === 'max_damage' ? 'maximized damage dice'
+                           : crit.effect === 'extra_die'  ? 'one extra damage die'
+                           : 'doubled damage dice';
+                lines.push(`Critical hit: ${trig} → ${eff}. The app applies this; never narrate the math.`);
+            }
+            if (r.combat.initiative && r.combat.initiative.type) {
+                const init = r.combat.initiative.type;
+                const label = init === 'player_first' ? 'the player acts first unless ambushed'
+                            : init === 'side_based'   ? 'side-based (player side goes first unless ambushed)'
+                            : init;
+                lines.push(`Initiative: ${label}.`);
             }
         }
-        if (r.optional_rules && typeof r.optional_rules === 'object') {
-            const enabled = Object.entries(r.optional_rules)
-                .filter(([, v]) => v && v.enabled === true)
-                .map(([k]) => k);
-            if (enabled.length) lines.push(`Optional rules in effect: ${enabled.join(', ')}.`);
-        }
-        if (r.combat && r.combat.conditions && typeof r.combat.conditions === 'object') {
-            const condList = Object.entries(r.combat.conditions).map(([id, c]) => {
-                const summary = typeof c === 'object' && c.effect_summary
-                    ? c.effect_summary
-                    : (typeof c === 'string' ? c : id);
-                return `${id}: ${summary}`;
+
+        // HP at zero — drives the death overlay vs unconscious state.
+        const atZero = r.resources && r.resources.hit_points && r.resources.hit_points.at_zero;
+        if (atZero) lines.push(`At 0 HP: ${atZero}.`);
+
+        // Conditions — list id + short effect so the GM can apply them via [CONDITION: add id].
+        const conds = Array.isArray(r.conditions) ? r.conditions : [];
+        if (conds.length) {
+            const condList = conds.map(c => {
+                const summary = c.effect_summary || c.effect || c.description || c.name || c.id;
+                return `${c.id}: ${summary}`;
             }).join('; ');
-            if (condList) {
-                lines.push(`Conditions (apply exactly as specified; use [CONDITION: add id] or [CONDITION: remove id] so the app can track): ${condList}`);
-            }
+            lines.push(`Conditions (apply exactly as specified; use [CONDITION: add id] / [CONDITION: remove id] so the app can track): ${condList}`);
         }
+
         return lines.join('\n');
     }
 
@@ -213,13 +268,29 @@
             }).join('; ')
             : 'none';
 
-        const abilityChecks = gd.rules && gd.rules.core_mechanics && gd.rules.core_mechanics.ability_checks;
-        const autoSuccess = abilityChecks ? abilityChecks.auto_success : 'tasks within normal capability';
-        const autoFail    = abilityChecks ? abilityChecks.auto_failure : 'impossible or lacking resources';
-        const dcScale = abilityChecks && abilityChecks.dc_scale;
-        const dcsStr = (dcScale && typeof dcScale === 'object')
-            ? Object.entries(dcScale).map(([k, v]) => `${k} ${v}`).join(', ')
-            : 'Easy 10, Medium 15, Hard 20';
+        // v1 difficulty ladder + auto-success / auto-failure prose. Fall back to
+        // the pre-v1 core_mechanics path for the shim, then to standard OSR.
+        const rules = (gd._v1 && gd._v1.rules) || gd.rules;
+        const isUnderRules = rules && rules.resolution && rules.resolution.checks && rules.resolution.checks.method === 'roll_under_score';
+        let dcsStr;
+        if (rules && rules.difficulty && Array.isArray(rules.difficulty.scale) && rules.difficulty.scale.length) {
+            dcsStr = rules.difficulty.scale.map(t => isUnderRules
+                ? `${t.name || t.id} ${Number(t.modifier) >= 0 ? '+' : ''}${Number(t.modifier) || 0} to target`
+                : `${t.name || t.id} ${t.dc != null ? t.dc : '?'}`
+            ).join(', ');
+        } else {
+            const abilityChecksLegacy = gd.rules && gd.rules.core_mechanics && gd.rules.core_mechanics.ability_checks;
+            const legacyScale = abilityChecksLegacy && abilityChecksLegacy.dc_scale;
+            dcsStr = (legacyScale && typeof legacyScale === 'object')
+                ? Object.entries(legacyScale).map(([k, v]) => `${k} ${v}`).join(', ')
+                : 'Easy 10, Medium 15, Hard 20';
+        }
+        const autoSuccess = (rules && rules.difficulty && rules.difficulty.auto_success)
+            || (gd.rules && gd.rules.core_mechanics && gd.rules.core_mechanics.ability_checks && gd.rules.core_mechanics.ability_checks.auto_success)
+            || 'tasks within normal capability';
+        const autoFail = (rules && rules.difficulty && rules.difficulty.auto_failure)
+            || (gd.rules && gd.rules.core_mechanics && gd.rules.core_mechanics.ability_checks && gd.rules.core_mechanics.ability_checks.auto_failure)
+            || 'impossible or lacking resources';
 
         const levelUpBlock = gs.pendingLevelUpAck ? `\n## LEVEL-UP — ACKNOWLEDGE IN YOUR RESPONSE\nThe player just reached **level ${gs.pendingLevelUpAck.level}** and gained **${gs.pendingLevelUpAck.hpGain} max HP**. In your response you MUST:\n1. Congratulate the player on leveling up.\n2. Briefly explain what improved: they are now level ${gs.pendingLevelUpAck.level}, and their max HP increased by ${gs.pendingLevelUpAck.hpGain} (from the level-up roll + CON).\nThen continue with the scene as normal. (This reminder is one-time only.)\n` : '';
 
