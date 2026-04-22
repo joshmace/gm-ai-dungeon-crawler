@@ -284,9 +284,25 @@
         for (const k of MODULE_ENVELOPE_FIELDS) {
             if (mod[k] !== undefined) envelope[k] = mod[k];
         }
+        // Legacy code reads encounter.monster_ref at the top level; v1 nests it
+        // under encounter.groups[0].monster_ref. Surface groups[0] up so the
+        // pre-v1 renderers (monster panel, attack flow, prompt builder) resolve
+        // their lookups. A later stage replaces those callers with v1-aware ones.
+        const shimmedRooms = {};
+        for (const [roomId, room] of Object.entries(mod.rooms || {})) {
+            const shimmedRoom = { ...room };
+            if (Array.isArray(room.encounters)) {
+                shimmedRoom.encounters = room.encounters.map(enc => {
+                    const first = Array.isArray(enc.groups) && enc.groups.length ? enc.groups[0] : null;
+                    const monsterRef = enc.monster_ref || (first && first.monster_ref) || null;
+                    return { ...enc, monster_ref: monsterRef };
+                });
+            }
+            shimmedRooms[roomId] = shimmedRoom;
+        }
         return {
             module:               envelope,
-            rooms:                mod.rooms || {},
+            rooms:                shimmedRooms,
             module_bestiary:      mod.module_bestiary || null,
             module_items:         mod.module_items || null,
             completion_condition: mod.completion_condition || null
