@@ -442,7 +442,12 @@
             encounterHistory: (gs().encounterHistory || []).map(e => ({ ...e })),
             readiedWeaponName: gs().readiedWeaponName,
             armorEquipped: !!gs().armorEquipped,
-            lastUserRollType: gs().lastUserRollType
+            lastUserRollType: gs().lastUserRollType,
+            // Stage 4: hazard state rides with the save so fire-once hazards
+            // stay resolved across reloads. Only the state table is persisted;
+            // the in-flight queue + active plan are reconstructed from a fresh
+            // trigger call after load.
+            hazardState: JSON.parse(JSON.stringify(gs().hazardState || {}))
         };
     }
 
@@ -497,6 +502,7 @@
         gs().readiedWeaponName = s.readiedWeaponName || null;
         gs().armorEquipped = !!s.armorEquipped;
         gs().lastUserRollType = s.lastUserRollType || null;
+        gs().hazardState = s.hazardState ? JSON.parse(JSON.stringify(s.hazardState)) : {};
         gs().isDead = false;
         gs().pendingLevelUpAck = null;
         debugLog('SAVE', 'Game loaded');

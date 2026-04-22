@@ -201,6 +201,20 @@
             if (pendingMonsterOutcomeLine) addNarration(pendingMonsterOutcomeLine);
             disableInput(false);
         }
+
+        // Stage 4: fire room-entry hazards when the room has changed during
+        // this response. Runs AFTER narration / roll prompt so the designer
+        // reads the GM's room description before the hazard UI appears.
+        // on_enter AND on_traverse hazards in the new room both fire here;
+        // Stage 5 will refine on_traverse once connection clicks become
+        // structured. Defer a tick so callAIGM's DOM writes settle first.
+        const newRoom = gs().currentRoom;
+        if (newRoom && newRoom !== previousRoom && global.UI && global.UI.hazards) {
+            setTimeout(() => {
+                global.UI.hazards.triggerHazards(newRoom, 'on_enter');
+                global.UI.hazards.triggerHazards(newRoom, 'on_traverse');
+            }, 0);
+        }
     }
     
     /** Parse "goblin takes 5 damage" / "hits the goblin for 5" and update tracked monster HP. Checks all rooms so we record damage even if currentRoom was wrong. */

@@ -181,6 +181,11 @@
         gs().equippedInUse = [];
         gs().lastCombatRoom = null;
         gs().encounterHistory = [];
+        // Stage 4: hazard dispatcher state. A fresh game has no triggered
+        // hazards; load/save carries these forward in game-state.js.
+        gs().hazardState = {};
+        gs().hazardQueue = [];
+        gs().activeHazard = null;
         gs().commandHistory = [];
         gs().commandHistoryIndex = -1;
         gs().commandHistoryDraft = '';
@@ -331,6 +336,17 @@
         } else {
             addSystemMessage('Game loaded.');
             addResumeContext();
+        }
+        // Stage 4: fire any on_enter hazards in the starting room. Defer a tick
+        // so the welcome narration lands first. The dispatcher is a no-op for
+        // modules whose starting room has no hazards (Gauntlet's hall_of_initiation).
+        if (global.UI && global.UI.hazards) {
+            setTimeout(() => {
+                const roomId = gs().currentRoom;
+                if (!roomId) return;
+                global.UI.hazards.triggerHazards(roomId, 'on_enter');
+                global.UI.hazards.triggerHazards(roomId, 'on_traverse');
+            }, 0);
         }
         document.getElementById('playerInput').focus();
         const copyBtn = document.getElementById('copyNarrativeBtn');

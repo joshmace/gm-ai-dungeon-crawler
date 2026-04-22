@@ -605,6 +605,17 @@
         gs().waitingForRoll = false;
         gs().pendingRollContext = null;
         disableInput(false);
+        // Stage 4: if a hazard queue was waiting on this roll to finish, kick
+        // it off. Defer a tick so the DOM settles and any pending call chain
+        // (addMechanicsCallout / callAIGM) reaches its idle state first.
+        if (global.UI && global.UI.hazards && global.UI.hazards.advanceQueue) {
+            setTimeout(() => {
+                if (gs().waitingForRoll || gs().activeHazard) return;
+                if (gs().hazardQueue && gs().hazardQueue.length) {
+                    global.UI.hazards.advanceQueue();
+                }
+            }, 0);
+        }
     }
 
     function getProficiencyBonus() {
@@ -1064,8 +1075,31 @@
         // Mechanics callouts are sufficient; do not duplicate with system-message for attack/damage/ability
         const addedCallout = rollType === 'attack' || rollType === 'damage' || rollType === 'ability';
         if (!addedCallout) addSystemMessage(message);
+
+        // Stage 4: if this roll was driven by a hazard (or later a feature),
+        // the dispatcher owns the next step. Skip the GM round-trip.
+        const hazardDispatch = ctx && ctx.hazardDispatch;
+        if (hazardDispatch && rollType === 'ability') {
+            hideDiceSection();
+            const v1Check = ctx.v1Check || {};
+            const resolved = RulesEngine.resolveCheck({
+                method: v1Check.method || 'roll_high_vs_dc',
+                modifier: v1Check.modifier || 0,
+                target: v1Check.target,
+                dc: v1Check.dc != null ? Number(v1Check.dc) : undefined,
+                critSuccessOn: v1Check.critSuccessOn || undefined,
+                critFailureOn: v1Check.critFailureOn || undefined,
+                naturalRoll: roll
+            });
+            gs()._v1RollMessageOverride = null;
+            if (global.UI && global.UI.hazards && global.UI.hazards.onCheckResolved) {
+                global.UI.hazards.onCheckResolved(resolved, ctx);
+            }
+            return;
+        }
+
         hideDiceSection();
-        
+
         const v1RollMessage = gs()._v1RollMessageOverride || null;
         gs()._v1RollMessageOverride = null;
         const rollMessage = autoResolvedMessage
