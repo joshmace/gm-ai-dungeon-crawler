@@ -110,6 +110,8 @@
             /** Conversation turns sent with each request. Lower = less input cost. Easily configurable via Debug Panel → API / Usage. */
             MAX_HISTORY_TURNS: 10
         };
+        // Stage 1e: expose to extracted modules.
+        window.CONFIG = CONFIG;
 
         /** Condition id (lowercase) -> Font Awesome icon classes. Add/change icons here for each condition from rules.combat.conditions. */
         const CONDITION_ICONS = {
@@ -2108,107 +2110,6 @@
             callAIGM();
         }
 
-        // ============================================
-        // CONVERSATION HISTORY MANAGEMENT
-        // ============================================
-        
-        function pruneConversationHistory() {
-            if (gameState.conversationHistory.length > CONFIG.MAX_HISTORY_TURNS) {
-                debugLog('HISTORY', `Pruning conversation history (${gameState.conversationHistory.length} turns)`);
-                const intro = gameState.conversationHistory.slice(0, 2);
-                const recent = gameState.conversationHistory.slice(-(CONFIG.MAX_HISTORY_TURNS - 2));
-                gameState.conversationHistory = [...intro, ...recent];
-                debugLog('HISTORY', `History pruned to ${gameState.conversationHistory.length} turns`);
-            }
-        }
-
-        // ============================================
-        // AI GM INTEGRATION
-        // ============================================
-        
-        async function callAIGM() {
-            disableInput(true);
-            const loader = addLoadingIndicator();
-            
-            // Prune history before making call
-            pruneConversationHistory();
-            
-            try {
-                const systemPrompt = buildSystemPrompt();
-                if (gameState.pendingLevelUpAck) gameState.pendingLevelUpAck = null;
-                const messages = [...gameState.conversationHistory];
-                
-                debugLog('AI', 'Calling AI GM', { 
-                    historyLength: messages.length,
-                    currentRoom: gameState.currentRoom 
-                });
-                
-                const response = await fetch(CONFIG.API_ENDPOINT, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: CONFIG.MODEL,
-                        max_tokens: CONFIG.MAX_TOKENS,
-                        system: systemPrompt,
-                        messages: messages,
-                        stream: !!CONFIG.STREAM
-                    })
-                });
-
-                if (!response.ok) {
-                    const responseText = await response.text();
-                    let detail = responseText;
-                    try {
-                        const err = JSON.parse(responseText);
-                        detail = err.error?.message || err.message || (err.error && typeof err.error === 'string' ? err.error : responseText);
-                    } catch (e) { /* use responseText as detail */ }
-                    throw new Error(`API error: ${response.status} - ${detail}`);
-                }
-
-                let aiResponse;
-                const contentType = response.headers.get('content-type') || '';
-                if (CONFIG.STREAM && contentType.includes('text/event-stream')) {
-                    aiResponse = await readAnthropicStream(response);
-                } else {
-                    const data = await response.json();
-                    aiResponse = data.content[0].text;
-                }
-                removeLoadingIndicator();
-                removeStreamingNarration();
-
-                debugLog('AI', 'Received AI response', { length: aiResponse.length });
-
-                gameState.conversationHistory.push({
-                    role: "assistant",
-                    content: aiResponse
-                });
-
-                processAIResponse(aiResponse);
-                
-            } catch (error) {
-                removeLoadingIndicator();
-                removeStreamingNarration();
-                console.error('AI GM Error:', error);
-                
-                let errorMsg = 'Unknown error';
-                if (error.message.includes('Failed to fetch')) {
-                    errorMsg = 'Server not running. Start server.js first!';
-                } else if (error.message.includes('API error: 401')) {
-                    errorMsg = 'Invalid API key in server.js';
-                } else if (error.message.includes('API error: 429')) {
-                    errorMsg = 'Rate limit exceeded. Wait a moment.';
-                } else if (error.message.includes('API error: 400')) {
-                    errorMsg = error.message.replace('API error: 400 - ', 'Bad request (400): ');
-                } else {
-                    errorMsg = error.message;
-                }
-                
-                addErrorMessage(errorMsg);
-                disableInput(false);
-            }
-        }
 
         function buildSystemPrompt() {
             const char = gameState.character;
