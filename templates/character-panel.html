@@ -43,9 +43,23 @@
       <div class="section-header">Abilities</div>
       <div class="ability-scores" id="abilityScores"></div>
 
-      <!-- Skills -->
-      <div class="section-header">Skills</div>
+      <!-- Saves (per_ability or categorical, branched by rules pack) -->
+      <div class="section-header" id="savesHeader">Saves</div>
+      <div class="saves-list" id="savesList"></div>
+
+      <!-- Skills (hidden when rules pack declares no skills) -->
+      <div class="section-header" id="skillsHeader">Skills</div>
       <div class="skills-list" id="skillsList"></div>
+    </div>
+  </div>
+
+  <!-- Class Features + Feature Resources (both hidden when empty) -->
+  <div class="notched" id="classFeaturesSection">
+    <div class="notched">
+      <div class="section-header" id="classFeaturesHeader">Class Features</div>
+      <div class="class-features-list" id="classFeaturesList"></div>
+      <div class="section-header" id="featureResourcesHeader">Resources</div>
+      <div class="feature-resources-list" id="featureResourcesList"></div>
     </div>
   </div>
 

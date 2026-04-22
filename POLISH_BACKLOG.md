@@ -40,20 +40,6 @@ Each entry: one-line description + where it was surfaced + suggested approach.
   features). Delete `ensureCombatRoomHasEncounters` then. Don't patch
   in the shim — it would be fragile.
 
-### Ability-check dice prompt doesn't name the ability
-
-- **Surfaced:** Stage 1e-vi smoke test (2026-04-22).
-- **Behavior:** Dice UI shows `Roll for Ability Check (1d20 +0)` when the
-  GM asks for, say, a Dexterity check. Modifier is correct; the ability
-  name isn't.
-- **Root cause:** the prompt template in `showDiceSection` is hardcoded
-  to `"Roll for Ability Check"`. `abilityInfo.label` already contains
-  the readable name ("Dexterity", "Perception", etc.) — it just isn't
-  interpolated into the prompt.
-- **Fix direction:** one-liner — swap `Roll for Ability Check` for
-  `Roll for ${abilityInfo.label || 'Ability Check'}`. Safe to do
-  standalone or as part of Stage 2 character-panel work.
-
 ### Healing-potion flow is prompt-brittle
 
 - **Surfaced:** Stage 1e-vii smoke test (2026-04-22).
@@ -70,3 +56,39 @@ Each entry: one-line description + where it was surfaced + suggested approach.
   with `on_use: heal_player` — the app parses the player action and
   applies both effects, no GM coordination required. Don't bandaid
   the regex.
+
+### L&B `resources.hit_points.max_formula` contradicts `progression.hp_gain_per_level`
+
+- **Surfaced:** Stage 2a derivation smoke test (2026-04-22).
+- **Behavior:** Aldric's authored `hp_current: 28` is consistent with the
+  `average_class_hd_plus_con` formula (`10 + 2×6 + 3×2 = 28`), but
+  `rules_lantern_and_blade.json → resources.hit_points.max_formula` says
+  `"class_hd_plus_con"` which yields `3×10 + 3×2 = 36`. Result: the panel
+  will show "28/36" on a freshly-loaded character, implying damage that
+  never happened.
+- **Root cause:** the pack declares two formulas that disagree.
+  `progression.hp_gain_per_level: "average_class_hd_plus_con"` is the
+  per-level rule; `resources.hit_points.max_formula: "class_hd_plus_con"`
+  is the derived-max rule. `deriveSheet`/the shim read the latter.
+- **Fix direction:** change `rules_lantern_and_blade.json → resources.hit_points.max_formula`
+  to `"average_class_hd_plus_con"` so it matches the per-level rule.
+  One-line data-pack edit — not a code change. Same check applies to any
+  future pack that declares both keys.
+
+---
+
+## Landed during Stage 2 (2026-04-22)
+
+The following items were called out in the Stage 2 briefing and shipped as
+part of the character-panel rewrite:
+
+- **Ability scores back alongside modifiers.** The `.ability-value` rule
+  was hidden (`display: none`) in the CSS. Restored to a two-line layout
+  (score on top, modifier underneath the abbreviation).
+- **Saves section visible in the panel.** The template had no Saves
+  anchor before Stage 2. `per_ability` shows six rows with a prof dot and
+  derived total; `categorical` shows one row per declared category with
+  the authored numeric target.
+- **Ability-check dice prompt names the ability.** `showDiceSection`
+  interpolates `abilityInfo.label` into the prompt ("Roll for Dexterity
+  (1d20 +0)") instead of the generic "Ability Check".

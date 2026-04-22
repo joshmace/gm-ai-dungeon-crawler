@@ -1,20 +1,28 @@
 /* AI Dungeon Crawler — UI.character
  *
- * Left-panel character sheet + death overlay. Owns all DOM mutation for
- * the sheet: abilities, skills, HP/AC/XP, conditions, equipped items,
- * pack inventory. Also exposes getEffectiveAC (used by prompt builder)
- * and getConditionInfo / getConditionIdsFromRules (used by sheet +
- * response parser).
+ * Left-panel character sheet + death overlay. Owns DOM mutation for the
+ * sheet: abilities, saves, skills, equipment, pack, class features /
+ * feature resources, HP/AC/XP, conditions.
+ *
+ * Stage 2 rewrite: abilities, saves, skills, class features, and feature
+ * resources render directly from the v1 raw character via
+ * RulesEngine.deriveSheet. That lets the panel adapt to either rules pack
+ * shape — per_ability vs. categorical saves, table_5e vs. table_bx
+ * modifiers, full vs. empty skill list, optional proficiency bonus, magic
+ * bonuses stacked on equipped items.
+ *
+ * HP / AC / XP / gold / conditions / equipment / pack still render from
+ * the runtime pre-v1 shape (gs().character) because the rest of the app
+ * (prompt-builder, ui-dice, response-parser, game-state mutators) keeps
+ * reading and writing through that shape. Stage 3+ migrate those modules;
+ * when all consumers are rewritten, the runtime shape retires and this
+ * file renders purely from derived data.
  *
  * Reads window.gameState, window.gameData, window.CONDITION_ICONS,
  * window.CONDITION_ICON_DEFAULT. Calls still-inline helpers via globals:
- * getXPLevels, updateMonsterPanel (now in UI.encounters),
- * normalizeNarrativeFormatting / addSystemMessage / addResumeContext
- * (UI.narrative), hasValidSave / loadGame / initializeGameStateFromData
- * / finishGameStart (still-inline function declarations, on window).
- *
- * Each function is also exposed as a top-level global so still-inline
- * callers keep working.
+ * getXPLevels, updateMonsterPanel, normalizeNarrativeFormatting,
+ * addSystemMessage, addResumeContext, hasValidSave, loadGame,
+ * initializeGameStateFromData, finishGameStart.
  *
  * Attaches to window.UI.character.
  */
@@ -24,6 +32,28 @@
     const doc = () => global.document;
     const gs  = () => global.gameState;
     const gd  = () => global.gameData;
+
+    /**
+     * Raw v1 character + rules + items are stored by pack-loader under
+     * gameData._v1. When the shim goes away (stage 7) gameData.character /
+     * .rules / .items become v1 directly and this helper simplifies.
+     */
+    function v1() { return gd() && gd()._v1; }
+
+    function itemsIndex() {
+        const v = v1();
+        if (!v) return {};
+        const shared = (v.items && v.items.items) || {};
+        const modItems = (v.module && v.module.module_items && v.module.module_items.items) || {};
+        // Module items override shared (schema convention: module scope first, library second).
+        return Object.assign({}, shared, modItems);
+    }
+
+    function currentSheet() {
+        const v = v1();
+        if (!v || !v.character || !v.rules) return null;
+        return global.RulesEngine.deriveSheet(v.character, v.rules, itemsIndex());
+    }
 
     /** Return condition info from rules (object { name, effect_summary, effect_detail, type } or legacy string). */
     function getConditionInfo(id) {
@@ -39,8 +69,8 @@
         }
         return {
             name:            c.name || id,
-            effect_summary:  c.effect_summary || '',
-            effect_detail:   c.effect_detail || c.effect_summary || '',
+            effect_summary:  c.effect_summary || c.effect || c.description || '',
+            effect_detail:   c.effect_detail   || c.effect || c.description || c.effect_summary || '',
             type:            c.type || 'debuff'
         };
     }
@@ -51,49 +81,163 @@
         return cond && typeof cond === 'object' ? Object.keys(cond) : [];
     }
 
-    function initializeCharacterSheet() {
-        const char = gs().character;
-        doc().getElementById('charName').textContent = char.name;
-        doc().getElementById('charClass').textContent = `${char.class} - Lvl ${char.level}`;
+    // --- Derived sections ------------------------------------------------
 
-        const abilitiesHTML = Object.entries(char.abilities).map(([key, value]) => `
-            <div class="ability-score">
-                <div class="ability-name">${key.toUpperCase()}</div>
-                <div class="ability-value">${value.score}</div>
-                <div class="ability-modifier">${value.modifier >= 0 ? '+' : ''}${value.modifier}</div>
-            </div>
-        `).join('');
-        doc().getElementById('abilityScores').innerHTML = abilitiesHTML;
-
-        const skillsHTML = Object.entries(char.skills).map(([key, value]) => `
-            <div class="skill-item">
-                <span class="skill-name">${key.charAt(0).toUpperCase() + key.slice(1)}</span>
-                <span class="skill-modifier">+${value}</span>
-            </div>
-        `).join('');
-        doc().getElementById('skillsList').innerHTML = skillsHTML;
-
-        updateCharacterDisplay();
+    function renderAbilities(sheet) {
+        const el = doc().getElementById('abilityScores');
+        if (!el) return;
+        const html = sheet.abilities.map(a => {
+            const modStr = (a.modifier >= 0 ? '+' : '') + a.modifier;
+            return `
+                <div class="ability-score" title="${a.name}">
+                    <div class="ability-name">${a.abbr}</div>
+                    <div class="ability-value">${a.score}</div>
+                    <div class="ability-modifier">${modStr}</div>
+                </div>
+            `;
+        }).join('');
+        el.innerHTML = html;
     }
 
-    /** AC from armor if worn, otherwise 10 + DEX (unarmored). Prefers gameState equipment (found/bought armor). */
-    function getEffectiveAC() {
-        const char = gs().character;
-        if (!char || !char.abilities) return char ? char.ac : 10;
-        if (!gs().armorEquipped) return 10 + char.abilities.dex.modifier;
-        const fromState = char.equipment && char.equipment.find(e => e.isArmor && e.equipped);
-        if (fromState && fromState.ac != null) return fromState.ac;
-        const worn = gd().character && gd().character.equipment && gd().character.equipment.worn;
-        const armor = worn && worn.find(w => (w.type || '').toLowerCase() === 'armor');
-        return (armor && armor.ac != null) ? armor.ac : char.ac;
+    function renderSaves(sheet) {
+        const listEl   = doc().getElementById('savesList');
+        const headerEl = doc().getElementById('savesHeader');
+        if (!listEl) return;
+
+        const saves = sheet.saves;
+        if (!saves || !saves.type || !saves.rows.length) {
+            if (headerEl) headerEl.classList.add('panel-hidden');
+            listEl.classList.add('panel-hidden');
+            listEl.innerHTML = '';
+            return;
+        }
+        if (headerEl) headerEl.classList.remove('panel-hidden');
+        listEl.classList.remove('panel-hidden');
+
+        let html = '';
+        if (saves.type === 'per_ability') {
+            html = saves.rows.map(r => {
+                const total = r.total;
+                const totalStr = (total >= 0 ? '+' : '') + total;
+                const dot = r.proficient
+                    ? '<span class="prof-dot" title="Proficient"></span>'
+                    : '<span class="prof-dot hollow" title="Not proficient"></span>';
+                return `
+                    <div class="save-item" title="${r.name} save">
+                        <span class="save-name">${dot}${r.abbr}</span>
+                        <span class="save-modifier">${totalStr}</span>
+                    </div>
+                `;
+            }).join('');
+        } else { // categorical
+            html = saves.rows.map(r => {
+                const target = r.target != null ? r.target : '—';
+                return `
+                    <div class="save-item" title="${r.name}">
+                        <span class="save-name">${r.name}</span>
+                        <span class="save-modifier">${target}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+        listEl.innerHTML = html;
     }
 
-    function updateCharacterDisplay() {
+    function renderSkills(sheet) {
+        const listEl   = doc().getElementById('skillsList');
+        const headerEl = doc().getElementById('skillsHeader');
+        if (!listEl) return;
+
+        if (!sheet.skills || sheet.skills.empty || sheet.skills.rows.length === 0) {
+            if (headerEl) headerEl.classList.add('panel-hidden');
+            listEl.classList.add('panel-hidden');
+            listEl.innerHTML = '';
+            return;
+        }
+        if (headerEl) headerEl.classList.remove('panel-hidden');
+        listEl.classList.remove('panel-hidden');
+
+        const html = sheet.skills.rows.map(r => {
+            const totalStr = (r.total >= 0 ? '+' : '') + r.total;
+            const dot = r.proficient
+                ? '<span class="prof-dot" title="Proficient"></span>'
+                : '<span class="prof-dot hollow" title="Not proficient"></span>';
+            const tip = `${r.name} (${(r.abilityAbbr || '').toUpperCase()})`;
+            return `
+                <div class="skill-item" title="${tip}">
+                    <span class="skill-name">${dot}${r.name}</span>
+                    <span class="skill-modifier">${totalStr}</span>
+                </div>
+            `;
+        }).join('');
+        listEl.innerHTML = html;
+    }
+
+    function renderClassFeaturesAndResources(sheet) {
+        const section       = doc().getElementById('classFeaturesSection');
+        const featsHeader   = doc().getElementById('classFeaturesHeader');
+        const featsList     = doc().getElementById('classFeaturesList');
+        const resHeader     = doc().getElementById('featureResourcesHeader');
+        const resList       = doc().getElementById('featureResourcesList');
+        if (!section) return;
+
+        const feats = sheet.classFeatures || [];
+        const resources = sheet.featureResources || [];
+        const hasFeats = feats.length > 0;
+        const hasRes   = resources.length > 0;
+
+        if (!hasFeats && !hasRes) {
+            section.classList.add('panel-hidden');
+            return;
+        }
+        section.classList.remove('panel-hidden');
+
+        if (hasFeats) {
+            if (featsHeader) featsHeader.classList.remove('panel-hidden');
+            featsList.classList.remove('panel-hidden');
+            featsList.innerHTML = feats.map(f => {
+                const desc = (f.description || '').replace(/\s+/g, ' ');
+                return `
+                    <div class="class-feature-item" title="${(f.description || '').replace(/"/g, '&quot;')}">
+                        <div class="class-feature-name">${f.name || f.id}</div>
+                        <div class="class-feature-desc">${desc}</div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            if (featsHeader) featsHeader.classList.add('panel-hidden');
+            featsList.classList.add('panel-hidden');
+            featsList.innerHTML = '';
+        }
+
+        if (hasRes) {
+            if (resHeader) resHeader.classList.remove('panel-hidden');
+            resList.classList.remove('panel-hidden');
+            resList.innerHTML = resources.map(r => {
+                const recharge = r.recharge ? r.recharge.replace(/_/g, ' ') : '';
+                return `
+                    <div class="feature-resource-item" title="${(r.name || r.id)} — recharges on ${recharge || '—'}">
+                        <span class="feature-resource-name">${r.name || r.id}</span>
+                        <span class="feature-resource-count">${r.current}/${r.max}</span>
+                        ${recharge ? `<span class="feature-resource-recharge">${recharge}</span>` : ''}
+                    </div>
+                `;
+            }).join('');
+        } else {
+            if (resHeader) resHeader.classList.add('panel-hidden');
+            resList.classList.add('panel-hidden');
+            resList.innerHTML = '';
+        }
+    }
+
+    // --- Runtime sections (HP/AC/XP/conditions/equipment/pack) -----------
+
+    function renderHeaderAndStats() {
         const char = gs().character;
+        if (!char) return;
         const ac = getEffectiveAC();
         doc().getElementById('hpDisplay').textContent = `${char.hp}/${char.maxHp}`;
         doc().getElementById('acDisplay').textContent = ac;
-        // Refresh the header every tick so level-ups update the "Lvl N" text.
         const classEl = doc().getElementById('charClass');
         if (classEl) classEl.textContent = `${char.class} - Lvl ${char.level}`;
 
@@ -107,7 +251,9 @@
 
         const xpProgress = char.xp - currentLevelXP;
         const xpNeeded   = nextLevelXP - currentLevelXP;
-        const progressPercent = Math.min(100, (xpProgress / xpNeeded) * 100);
+        const progressPercent = xpNeeded > 0
+            ? Math.max(0, Math.min(100, (xpProgress / xpNeeded) * 100))
+            : 100;
 
         doc().getElementById('xpProgressText').textContent =
             `${char.xp.toLocaleString()} / ${nextLevelXP.toLocaleString()}`;
@@ -122,8 +268,6 @@
             modeEl.className = 'mode-indicator mode-' + mode;
         }
 
-        // Debug room indicator: visible only in DEBUG_MODE so playtesters can see
-        // what room the engine thinks they're in when the GM's narration drifts.
         const debugRoomEl = doc().getElementById('debugRoomIndicator');
         if (debugRoomEl) {
             const cfg = global.CONFIG || {};
@@ -134,11 +278,14 @@
                 debugRoomEl.classList.remove('visible');
             }
         }
+    }
 
-        // Conditions: icon + tooltip.
+    function renderConditions() {
+        const char = gs().character;
+        if (!char) return;
         const icons = global.CONDITION_ICONS || {};
         const iconDefault = global.CONDITION_ICON_DEFAULT || '';
-        const conditionsHTML = char.conditions.length === 0
+        const conditionsHTML = (!char.conditions || char.conditions.length === 0)
             ? ''
             : char.conditions.map(condition => {
                 const id = (condition.id || condition.name || condition).toString().toLowerCase();
@@ -154,9 +301,13 @@
         if (conditionsHTML && global.FontAwesome && global.FontAwesome.dom && typeof global.FontAwesome.dom.i2svg === 'function') {
             global.FontAwesome.dom.i2svg({ node: conditionsEl });
         }
+    }
 
+    function renderEquipment() {
+        const char = gs().character;
+        if (!char) return;
         // Equipped strip: armor, weapons, items-in-use (torch etc.)
-        const equippedItems = [...char.equipment, ...(gs().equippedInUse || [])];
+        const equippedItems = [...(char.equipment || []), ...(gs().equippedInUse || [])];
         const equippedHTML = equippedItems.map(item => {
             let typeClass = '';
             let icon = '';
@@ -183,9 +334,12 @@
         if (global.FontAwesome && global.FontAwesome.dom && typeof global.FontAwesome.dom.i2svg === 'function') {
             global.FontAwesome.dom.i2svg({ node: equippedEl });
         }
+    }
 
-        // Pack: backpack items with quantities. Gold always first.
-        const sortedInventory = [...char.inventory].sort((a, b) =>
+    function renderPack() {
+        const char = gs().character;
+        if (!char) return;
+        const sortedInventory = [...(char.inventory || [])].sort((a, b) =>
             (a.name === 'Gold' ? -1 : 0) - (b.name === 'Gold' ? -1 : 0));
         const packHTML = sortedInventory.map(item => {
             const qty = item.quantity;
@@ -203,6 +357,54 @@
         if (global.FontAwesome && global.FontAwesome.dom && typeof global.FontAwesome.dom.i2svg === 'function') {
             global.FontAwesome.dom.i2svg({ node: packEl });
         }
+    }
+
+    /** AC from armor if worn, otherwise 10 + DEX (unarmored). Uses the v1-derived AC when the sheet is available. */
+    function getEffectiveAC() {
+        const char = gs().character;
+        if (!char) return 10;
+        if (!gs().armorEquipped) {
+            const dexMod = char.abilities && char.abilities.dex ? char.abilities.dex.modifier : 0;
+            return 10 + dexMod;
+        }
+        const sheet = currentSheet();
+        if (sheet && typeof sheet.ac === 'number') return sheet.ac;
+        // Fallback: runtime-found armor, else static char.ac.
+        if (char.abilities) {
+            const fromState = char.equipment && char.equipment.find(e => e.isArmor && e.equipped);
+            if (fromState && fromState.ac != null) return fromState.ac;
+        }
+        return char.ac != null ? char.ac : 10;
+    }
+
+    // --- Public entry points --------------------------------------------
+
+    function initializeCharacterSheet() {
+        const char = gs().character;
+        doc().getElementById('charName').textContent = char.name;
+        doc().getElementById('charClass').textContent = `${char.class} - Lvl ${char.level}`;
+
+        const sheet = currentSheet();
+        if (sheet) {
+            renderAbilities(sheet);
+            renderSaves(sheet);
+            renderSkills(sheet);
+            renderClassFeaturesAndResources(sheet);
+        }
+        updateCharacterDisplay();
+    }
+
+    /**
+     * Re-render sections that depend on runtime state (HP/AC/XP/conditions
+     * /equipment/pack). Derived sections (abilities/saves/skills/features)
+     * are static per pack-load — they're set by initializeCharacterSheet
+     * and don't re-run here. That keeps this hot path cheap.
+     */
+    function updateCharacterDisplay() {
+        renderHeaderAndStats();
+        renderConditions();
+        renderEquipment();
+        renderPack();
         if (global.updateMonsterPanel) global.updateMonsterPanel();
     }
 
@@ -269,7 +471,8 @@
         getEffectiveAC,
         updateCharacterDisplay,
         showDeathOverlay,
-        hideDeathOverlay
+        hideDeathOverlay,
+        currentSheet
     };
 
     // Legacy globals for still-inline callers.

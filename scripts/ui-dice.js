@@ -246,8 +246,11 @@
                 rollPrompt.textContent = labelPart ? `Roll for Attack (1d20 ${labelPart}).` : `Roll for Attack (1d20${modStr ? ` ${modStr}` : ''}).`;
                 rollBtn.textContent = `Roll 1d20 (${signed(totalMod)})`;
             } else {
-                const label = abilityInfo && abilityInfo.label ? abilityInfo.label : (rt || 'Check');
-                rollPrompt.textContent = `Roll for Ability Check (1d20${modStr ? ` ${modStr}` : ''}).`;
+                // Prefer the ability/skill name from abilityInfo (e.g. "Dexterity",
+                // "Perception"); fall back to the raw roll-type text, then to
+                // the generic "Ability Check" when nothing else resolves.
+                const label = (abilityInfo && abilityInfo.label) || (rt || 'Ability Check');
+                rollPrompt.textContent = `Roll for ${label} (1d20${modStr ? ` ${modStr}` : ''}).`;
                 rollBtn.textContent = `Roll 1d20 (${modStr || '0'})`;
             }
             diceInput.placeholder = '1-20';
