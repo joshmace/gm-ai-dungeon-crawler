@@ -249,14 +249,23 @@
             ? xpLevels[nextLevel]
             : (xpLevels[10] != null ? xpLevels[10] * 2 : 999999);
 
-        const xpProgress = char.xp - currentLevelXP;
-        const xpNeeded   = nextLevelXP - currentLevelXP;
+        // XP bar + text use band-relative math: how much the player has earned
+        // within the current level's band, out of the band's total. That keeps
+        // the bar and the text in the same reference frame — otherwise the
+        // text (1,150 / 2,700) reads like ~42% while the bar (250 / 1,800)
+        // sits at ~14% and the two disagree at every load.
+        const xpProgress = Math.max(0, char.xp - currentLevelXP);
+        const xpNeeded   = Math.max(0, nextLevelXP - currentLevelXP);
         const progressPercent = xpNeeded > 0
             ? Math.max(0, Math.min(100, (xpProgress / xpNeeded) * 100))
             : 100;
 
-        doc().getElementById('xpProgressText').textContent =
-            `${char.xp.toLocaleString()} / ${nextLevelXP.toLocaleString()}`;
+        const xpTextEl = doc().getElementById('xpProgressText');
+        if (xpTextEl) {
+            xpTextEl.textContent = char.level >= 10 && xpLevels[10] != null
+                ? `${char.xp.toLocaleString()} XP (max level)`
+                : `${xpProgress.toLocaleString()} / ${xpNeeded.toLocaleString()}`;
+        }
         doc().getElementById('xpBarFill').style.width = `${progressPercent}%`;
 
         const headerEl = doc().getElementById('characterHeader');
