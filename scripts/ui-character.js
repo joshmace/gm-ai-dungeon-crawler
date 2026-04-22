@@ -93,6 +93,9 @@
         const ac = getEffectiveAC();
         doc().getElementById('hpDisplay').textContent = `${char.hp}/${char.maxHp}`;
         doc().getElementById('acDisplay').textContent = ac;
+        // Refresh the header every tick so level-ups update the "Lvl N" text.
+        const classEl = doc().getElementById('charClass');
+        if (classEl) classEl.textContent = `${char.class} - Lvl ${char.level}`;
 
         const xpLevels = global.getXPLevels ? global.getXPLevels() : {};
         const currentLevel = char.level;

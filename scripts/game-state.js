@@ -238,15 +238,25 @@
         const conditionsDict = {};
         for (const c of (rules.conditions || [])) conditionsDict[c.id] = c;
 
+        // Pre-v1 getXPLevels() expects a dict {1: 0, 2: 2000, ...}. v1 stores
+        // the table as an array of {level, xp_required}. Convert so the
+        // XP-bar + processLevelUp code uses real thresholds, not the fallback.
+        const xpDict = {};
+        const levelTable = (rules.progression && rules.progression.level_table) || [];
+        for (const row of levelTable) {
+            if (row && typeof row.level === 'number' && typeof row.xp_required === 'number') {
+                xpDict[row.level] = row.xp_required;
+            }
+        }
+
         return {
             ...rules,
             combat: {
                 ...(rules.combat || {}),
                 conditions: conditionsDict
             },
-            // Pre-v1: rules.experience.level_progression is the XP table.
             experience: {
-                level_progression: (rules.progression && rules.progression.level_table) || []
+                level_progression: xpDict
             },
             // Pre-v1: rules.core_mechanics.ability_checks carried the DC ladder.
             // Point it at v1 rules.difficulty so downstream reads resolve.
