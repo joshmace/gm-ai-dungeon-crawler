@@ -264,6 +264,7 @@
                     gs().mode = 'combat';
                 }
             }
+            updateCharacterDisplay();
         }
     }
 
@@ -422,6 +423,7 @@
                     debugLog('PARSE', 'Combat ended: all enemies defeated (explicit tag)');
                 }
             }
+            updateCharacterDisplay();
         }
 
         out.text = text.replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, ' ');

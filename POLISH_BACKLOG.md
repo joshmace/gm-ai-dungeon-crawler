@@ -10,6 +10,91 @@ Each entry: one-line description + where it was surfaced + suggested approach.
 
 ## Open items
 
+### GM narrates stale door/room counts after partial exploration (Gauntlet)
+
+- **Surfaced:** Stage 3 smoke test (2026-04-22). Designer visited First Arms
+  only, then returned to the Hall of Initiation. GM narrated: "The Hall of
+  Initiation waits, silent and patient. Three doors remain: herb, breath,
+  and blade." Seven other chambers were in fact unvisited.
+- **Root cause:** the module's completion condition ("walk each door once")
+  is only encoded as prose in the module guidance. The GM has to track
+  visited vs unvisited from conversation history, and drifts on longer runs.
+  The layout block in the prompt does not mark rooms as visited or unvisited
+  yet (that's a Stage 5 deliverable when rooms/connections become structured
+  UI with state).
+- **Fix direction:** Stage 5 — surface `gameState.module.visited_rooms[]` in
+  the LAYOUT_BLOCK and annotate each room's connections with their current
+  state (visited / unvisited / locked / hidden). Once the prompt ships that
+  per-turn, GM drift on room counts goes away.
+
+### Line chamber blocked as "already walked" on first visit (Gauntlet)
+
+- **Surfaced:** Stage 3 smoke test (2026-04-22). After visiting First Arms
+  and returning to Hall, the designer attempted to enter The Line and the
+  GM blocked them: "You've already walked the Chamber of the Line — the
+  door with the sigil of three standing figures. WALK EACH DOOR ONCE."
+- **Root cause:** same class of problem as the preceding item — the GM's
+  model of which doors have been walked is hallucinated from conversation
+  history, not driven by app state. Here it's off in the opposite direction
+  (marking The Line as walked when it wasn't).
+- **Fix direction:** Stage 5. When the layout block carries per-connection
+  state and `visited_rooms[]` is authoritative, the GM has no room to
+  misremember. Same fix as the previous item.
+
+### Cross-room combat re-entry when extra attack issued after combat ends
+
+- **Surfaced:** Stage 3 smoke test (2026-04-22, Crow's Hollow). Ren fought
+  two goblins in the study. They rendered as a single "Goblin Scavengers"
+  stat block and were defeated as one target; [COMBAT: off] fired. When
+  Ren attacked "the other goblin", combat re-entered — but against the
+  Warden's Lieutenant Orick Havel in the Warden's Crypt room, not the
+  remaining goblin.
+- **Root cause 1 (single-block encounter):** pre-v1 rendering collapses
+  every encounter group into one entry. Per-instance HP is explicitly a
+  Stage 5 deliverable — `gameState.module.encounters[id].instances[]`
+  should track each goblin separately with its own HP bar.
+- **Root cause 2 (cross-room teleport):** when `[COMBAT: on]` fires and
+  the current room has no active encounters (because the study's sole
+  encounter is already defeated), `ensureCombatRoomHasEncounters()` in
+  `scripts/ui-encounters.js` falls back to the first alphabetically-sorted
+  room with encounters — in Crow's Hollow that's the Warden's Crypt boss.
+  Pre-existing behavior; the original "Combat jumps to wrong room" item
+  is a duplicate.
+- **Fix direction:** Stage 5 rewrites encounter instance tracking and
+  retires `ensureCombatRoomHasEncounters`. For the cross-room fallback
+  specifically: when combat triggers in a room with no active encounter,
+  the correct move is to surface an error callout ("no active enemy in
+  current room") and keep the player put, not to reassign currentRoom.
+
+### Card-game / prose rewards don't update inventory (Crow's Hollow)
+
+- **Surfaced:** Stage 3 smoke test (2026-04-22). Ren played a card game
+  during a social encounter and the GM narrated "you win 5 gold coins",
+  but the pack's Gold line didn't increment.
+- **Root cause:** the tag contract only surfaces rewards on encounter
+  defeat (via `encounter.rewards` wired in Stage 3) and on searchable/
+  interactive features (Stage 5). Ad-hoc prose rewards from NPC or
+  non-encounter interactions have no tag surface; the GM would need to
+  emit something like `[REWARD: gold 5]` or `[GOLD: +5]` for the app to
+  apply it.
+- **Fix direction:** add a `[REWARD: ...]` tag family in Stage 5 or Stage
+  6 when reward resolution moves into JS. Spec'd shape: `[REWARD: gold N]`,
+  `[REWARD: item <item_id> [xN]]`, `[REWARD: xp N]`. Prompt additions to
+  instruct the GM to emit these whenever they narrate a reward the app
+  should apply. Until then, these prose rewards are manual.
+
+### Damage callout should show dice face × 2 separately on crit
+
+- **Surfaced:** Stage 3 smoke test (2026-04-22) — addressed partially by
+  the Stage 3-post callout rewrite (the damage callout now reads "Damage
+  Roll 1d8: 5 ×2 = 10 (+ 3) = 13 slashing" on crit). Follow-up polish
+  that's still open: the pre-crit total and post-crit total are both shown
+  on one line; a designer might prefer dice face / post-crit face / total
+  on their own lines, or a small dice-icon badge.
+- **Fix direction:** polish pass — pick a visual treatment (indented
+  breakdown block, dice icons, monospace columns) and apply to the
+  `formatEngineDamageCallout` helper in `scripts/ui-dice.js`.
+
 ### Streaming narration re-renders on completion
 
 - **Surfaced:** Stage 1e-ii smoke test (2026-04-22).

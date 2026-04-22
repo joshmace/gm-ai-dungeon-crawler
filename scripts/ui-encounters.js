@@ -138,6 +138,7 @@
         const fallback = getFirstRoomIdWithEncounters();
         if (fallback) {
             gs().currentRoom = fallback;
+            if (global.updateCharacterDisplay) global.updateCharacterDisplay();
             debugLog('PARSE', `Combat started but current room had no active encounters; set currentRoom to ${fallback} for monster panel`);
         }
     }

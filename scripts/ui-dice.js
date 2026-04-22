@@ -74,11 +74,69 @@
     }
 
     /**
-     * Build engine inputs for the active attack: pulls the v1 character,
-     * rules, items, and the target monster's defensive arrays. Falls back
-     * to a legacy inline-math shape if v1 data isn't available (the shim
-     * path, which the remaining pre-v1 consumers still live on).
+     * Stage 3c callout helper: build a readable multi-line damage callout
+     * from the engine's computeDamage output. Surfaces the dice face, the
+     * modifier, crit doubling, the magic rider, resistance/immunity/vuln
+     * multipliers, and the grand total. Called from the 'damage' branch
+     * below when the engine path fires.
      */
+    function formatEngineDamageCallout(engineInputs, pendingAtk, damage, diceFaceRoll, bonusDiceFace) {
+        const signed = (n) => (n >= 0 ? '+ ' + n : '- ' + Math.abs(n));
+        const isCritDouble = pendingAtk.isCrit && engineInputs.critEffect === 'double_dice';
+        const lines = [];
+
+        // Weapon line:
+        //   No crit, no mod:   "Damage Roll 1d8: 7 slashing"
+        //   No crit, +mod:     "Damage Roll 1d8: 7 (+ 3) = 10 slashing"
+        //   Crit, +mod:        "Damage Roll 1d8: 7 ×2 = 14 (+ 3) = 17 slashing"
+        //   Crit, no mod:      "Damage Roll 1d8: 7 ×2 = 14 slashing"
+        const dmgBonus = engineInputs.damageBonus || 0;
+        const c0 = damage.components[0];
+        const weaponType = c0.type ? ` ${c0.type}` : '';
+        const doubledDice = isCritDouble ? diceFaceRoll * 2 : diceFaceRoll;
+        let weaponLine;
+        if (isCritDouble && dmgBonus !== 0) {
+            weaponLine = `Damage Roll ${engineInputs.damageFormula}: ${diceFaceRoll} ×2 = ${doubledDice} (${signed(dmgBonus)}) = ${c0.amount}${weaponType}`;
+        } else if (isCritDouble) {
+            weaponLine = `Damage Roll ${engineInputs.damageFormula}: ${diceFaceRoll} ×2 = ${c0.amount}${weaponType}`;
+        } else if (dmgBonus !== 0) {
+            weaponLine = `Damage Roll ${engineInputs.damageFormula}: ${diceFaceRoll} (${signed(dmgBonus)}) = ${c0.amount}${weaponType}`;
+        } else {
+            weaponLine = `Damage Roll ${engineInputs.damageFormula}: ${diceFaceRoll}${weaponType}`;
+        }
+        lines.push(weaponLine);
+        if (c0.multiplier !== 1) {
+            const mulLabel = c0.multiplier === 0 ? 'immune — 0' : `×${c0.multiplier} = ${c0.applied}`;
+            lines.push(`  ${c0.type || 'damage'} ${mulLabel}`);
+        }
+
+        // Bonus-damage line (magic rider). Riders don't carry a flat modifier
+        // in v1, so the format is simpler:
+        //   No crit:   "Bonus 1d4 radiant: 4"
+        //   Crit:      "Bonus 1d4 radiant: 4 ×2 = 8"
+        if (damage.components[1]) {
+            const c1 = damage.components[1];
+            const bonusType = c1.type ? ` ${c1.type}` : '';
+            const riderFace = (typeof bonusDiceFace === 'number' && bonusDiceFace > 0)
+                ? bonusDiceFace
+                : (c1.rolls && c1.rolls.length ? c1.rolls.reduce((s, r) => s + r, 0) : c1.amount);
+            const riderFormula = c1.formula || (engineInputs.bonusDamage && engineInputs.bonusDamage.amount) || 'damage';
+            const riderLine = isCritDouble
+                ? `Bonus ${riderFormula}${bonusType}: ${riderFace} ×2 = ${c1.amount}`
+                : `Bonus ${riderFormula}${bonusType}: ${c1.amount}`;
+            lines.push(riderLine);
+            if (c1.multiplier !== 1) {
+                const mulLabel = c1.multiplier === 0 ? 'immune — 0' : `×${c1.multiplier} = ${c1.applied}`;
+                lines.push(`  ${c1.type || 'damage'} ${mulLabel}`);
+            }
+        }
+
+        // Total line — only when there's more than one component or a multiplier.
+        const needsTotal = damage.components.length > 1 || damage.components.some(c => c.multiplier !== 1);
+        if (needsTotal) lines.push(`Total: ${damage.total} damage`);
+
+        return lines.join('\n');
+    }
     function buildAttackInputsForCurrentFight(monster, targetAC) {
         const v = gd()._v1;
         const weapon = findV1Weapon();
@@ -583,10 +641,10 @@
             let damageTypeStr = '';
             let totalDamage;
             let diceNatural;
-            let damageBreakdownText = '';
+            let engineDamage = null;
             if (pending) {
                 const inputs = atk.engineInputs;
-                const damage = RulesEngine.computeDamage({
+                engineDamage = RulesEngine.computeDamage({
                     damageFormula: inputs.damageFormula,
                     damageBonus:   inputs.damageBonus,
                     critEffect:    inputs.critEffect,
@@ -598,8 +656,7 @@
                     vulnerability: inputs.vulnerability,
                     diceRolls:     [roll]
                 });
-                totalDamage = damage.total;
-                damageBreakdownText = damage.breakdown;
+                totalDamage = engineDamage.total;
                 damageTypeStr = inputs.damageType || '';
                 diceNatural   = atk.isCrit && inputs.critEffect === 'double_dice' ? roll * 2 : roll;
                 totalToSend = totalDamage;
@@ -639,11 +696,19 @@
                 }
             }
             const typeSuffix = damageTypeStr ? ` (${damageTypeStr})` : '';
-            // When the engine produced a rich breakdown (bonus damage / resistance), surface it.
-            // Otherwise emit the classic "NdM: natural ± mod = total" callout.
-            const callout = (pending && damageBreakdownText && (damageBreakdownText.includes('+') || damageBreakdownText.includes('×')))
-                ? `Damage: ${damageBreakdownText} = ${totalDamage}${typeSuffix}${hpLine}`
-                : `Damage Roll ${diceExpr}: ${diceNatural} (${signed(modVal)}) = ${totalDamage}${typeSuffix}${hpLine}`;
+            // Engine-driven damage → multi-line callout surfaces dice face,
+            // modifier, crit doubling, magic rider, and resistance multiplier.
+            // Fallback path (custom dice, unchained) keeps the classic one-liner.
+            let callout;
+            if (pending && engineDamage) {
+                const riderFace = engineDamage.components[1] && engineDamage.components[1].rolls
+                    ? engineDamage.components[1].rolls.reduce((s, r) => s + r, 0)
+                    : null;
+                const breakdown = formatEngineDamageCallout(atk.engineInputs, atk, engineDamage, roll, riderFace);
+                callout = `${breakdown}${hpLine}`;
+            } else {
+                callout = `Damage Roll ${diceExpr}: ${diceNatural} (${signed(modVal)}) = ${totalDamage}${typeSuffix}${hpLine}`;
+            }
             addMechanicsCallout(callout);
             // XP and treasure callout always after damage callout (Section 2.4)
             if (defeatedEncForReward) {
