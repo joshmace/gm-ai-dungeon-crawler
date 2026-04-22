@@ -31,6 +31,82 @@
         return getWeaponTypeInfo(weapon).type === 'ranged';
     }
 
+    // --- Stage 3c: v1-aware weapon / items helpers ----------------------
+
+    /** Merged v1 items index: module-scoped overrides library. */
+    function v1ItemsIndex() {
+        const v = gd()._v1;
+        if (!v) return {};
+        const shared   = (v.items && v.items.items) || {};
+        const modItems = (v.module && v.module.module_items && v.module.module_items.items) || {};
+        return Object.assign({}, shared, modItems);
+    }
+
+    /**
+     * Find the v1 items-library entry for the player's currently-fighting
+     * weapon. Prefers gs().readiedWeaponName when the name matches an
+     * equipped (or packed) item; falls back to the first equipped weapon.
+     * Returns null when no v1 character data is available.
+     */
+    function findV1Weapon() {
+        const v = gd()._v1;
+        if (!v || !v.character) return null;
+        const items = v1ItemsIndex();
+        const readied = (gs().readiedWeaponName || '').toLowerCase();
+        const tryMatch = (entries) => {
+            for (const e of (entries || [])) {
+                const it = items[e.item_id];
+                if (!it || !it.weapon) continue;
+                if (readied && it.name && it.name.toLowerCase() === readied) return it;
+            }
+            return null;
+        };
+        const equippedHit = tryMatch(v.character.equipment);
+        if (equippedHit) return equippedHit;
+        const packHit = tryMatch(v.character.pack);
+        if (packHit) return packHit;
+        // Fallback: first equipped weapon.
+        for (const e of (v.character.equipment || [])) {
+            const it = items[e.item_id];
+            if (it && it.weapon) return it;
+        }
+        return null;
+    }
+
+    /**
+     * Build engine inputs for the active attack: pulls the v1 character,
+     * rules, items, and the target monster's defensive arrays. Falls back
+     * to a legacy inline-math shape if v1 data isn't available (the shim
+     * path, which the remaining pre-v1 consumers still live on).
+     */
+    function buildAttackInputsForCurrentFight(monster, targetAC) {
+        const v = gd()._v1;
+        const weapon = findV1Weapon();
+        if (v && v.character && v.rules && weapon) {
+            const resist = (monster && monster.damage_resistance)  || null;
+            const immune = (monster && monster.damage_immunity)    || null;
+            const vuln   = (monster && monster.damage_vulnerability) || null;
+            return RulesEngine.attackInputsFor(v.character, v.rules, v1ItemsIndex(), weapon, targetAC, resist, immune, vuln);
+        }
+        // Legacy fallback: read the shimmed attack/damage modifiers.
+        const weaponObj = getReadiedWeaponObject();
+        const atkMod = getAttackModifierForRoll('attack');
+        const dmg    = getEquippedWeaponDamage();
+        return {
+            attackBonus:   (atkMod && atkMod.modifier) || 0,
+            damageFormula: (weaponObj && weaponObj.damage) || '1d4',
+            damageBonus:   dmg.modifier,
+            damageType:    (weaponObj && weaponObj.damage_type) || null,
+            targetAC:      Number(targetAC) || 10,
+            critThreshold: 20,
+            critEffect:    'double_dice',
+            bonusDamage:   null,
+            resistance:    null, immunity: null, vulnerability: null,
+            _weaponName:   (weaponObj && weaponObj.name) || 'weapon',
+            _isRanged:     isRangedWeapon(weaponObj)
+        };
+    }
+
     /** Get weapon type (melee/ranged) and range. Works on character equipment or monster attack. */
     function getWeaponTypeInfo(weapon) {
         if (!weapon) return { type: 'melee', range: null };
@@ -453,24 +529,29 @@
         // Build mechanics callout (Section 2 format) and apply state from callouts
         const signed = (n) => (n >= 0 ? `+ ${n}` : `- ${Math.abs(n)}`);
         if (rollType === 'attack' && ctx.type !== 'weapon') {
+            // Stage 3c: route the attack hit stage through RulesEngine.
+            // The player has already rolled `roll` (the natural d20). We pass
+            // it as naturalRoll so the engine evaluates hit/crit/fumble but
+            // doesn't re-roll. Damage rolls happen on the next click (engine
+            // handles that via computeDamage in the damage branch).
             const enc = getFirstActiveEncounterInCurrentRoom();
             const monster = enc ? resolveMonster(enc.monster_ref) : null;
-            const ac = monster && (monster.ac != null) ? monster.ac : (gd().character && gd().character.combat_stats ? gd().character.combat_stats.armor_class : 13);
-            const hit = totalToSend >= ac;
-            const weaponObj = getReadiedWeaponObject();
-            const weaponLabel = weaponObj ? `${(weaponObj.name || 'weapon').toLowerCase().replace(/\s+/g, ' ')}/${isRangedWeapon(weaponObj) ? 'ranged' : 'melee'}` : 'melee';
-            const modForCallout = (ctx.ability ? getAbilityModifierForRoll(ctx.ability) : getAttackModifierForRoll('attack'));
-            const modVal = modForCallout && modForCallout.modifier != null ? modForCallout.modifier : 0;
-            const callout = `Attack Roll 1d20: ${roll} (${signed(modVal)}) = ${totalToSend} (${weaponLabel})\n${hit ? 'HIT' : 'MISS'}: ${totalToSend} vs AC ${ac}`;
-            addMechanicsCallout(callout);
-            const forcedMiss = (roll === 1);
-            const isHit = !forcedMiss && hit;
+            const ac = monster && (monster.ac != null) ? monster.ac
+                : (gd().character && gd().character.combat_stats ? gd().character.combat_stats.armor_class : 13);
 
-            // Rules engine: on a hit, prompt the player to roll damage (same UI as before), but stash the
-            // attack context so the damage submission composes a single combined user message — no separate
-            // GM round-trip between attack and damage. On a miss, send the miss to the GM immediately.
-            if (isHit && enc && weaponObj) {
-                const isCrit = roll === 20;
+            const inputs = buildAttackInputsForCurrentFight(monster, ac);
+            const result = RulesEngine.resolveAttack({ ...inputs, naturalRoll: roll });
+            const isHit    = result.attack.hit;
+            const isCrit   = result.attack.isCrit;
+            const isFumble = result.attack.isFumble;
+            totalToSend = result.attack.total;
+
+            const weaponLabel = `${(inputs._weaponName || 'weapon').toLowerCase().replace(/\s+/g, ' ')}/${inputs._isRanged ? 'ranged' : 'melee'}`;
+            const outcomeLabel = isHit ? (isCrit ? 'CRITICAL HIT' : 'HIT') : (isFumble ? 'FUMBLE' : 'MISS');
+            const callout = `Attack Roll 1d20: ${roll} (${signed(inputs.attackBonus)}) = ${totalToSend} (${weaponLabel})\n${outcomeLabel}: ${totalToSend} vs AC ${ac}`;
+            addMechanicsCallout(callout);
+
+            if (isHit && enc && inputs._weaponName) {
                 const mon = resolveMonster(enc.monster_ref);
                 const encName = enc.name || (mon && mon.name) || 'Enemy';
                 gs().pendingAttackResolution = {
@@ -478,33 +559,70 @@
                     encounterName: encName,
                     attackTotal: totalToSend,
                     attackAC: ac,
-                    isCrit
+                    isCrit,
+                    // Stash engine inputs so the damage click can compose the damage call deterministically.
+                    engineInputs: inputs
                 };
-                // d20 tracking is what triggers the crit path in the damage branch; keep it set.
                 gs().lastD20Natural = roll;
                 gs().lastRollWasAttack = true;
-                // Show the damage prompt directly; the player's damage click will then produce the combined GM message.
                 showDiceSection('Roll Damage', 'Damage');
                 return;
             } else if (!isHit) {
-                autoResolvedMessage = `I attacked. Attack ${totalToSend} vs AC ${ac} — MISS. Narrate the miss; do not request a damage roll.`;
+                autoResolvedMessage = `I attacked. Attack ${totalToSend} vs AC ${ac} — ${isFumble ? 'FUMBLE' : 'MISS'}. Narrate the ${isFumble ? 'fumble' : 'miss'}; do not request a damage roll.`;
             }
         } else if (rollType === 'damage' && (ctx.type === 'weapon' || ctx.type === 'custom')) {
-            const w = ctx.type === 'weapon' ? getEquippedWeaponDamage() : null;
-            const weaponObj = ctx.type === 'weapon' ? getReadiedWeaponObject() : null;
-            const damageType = (weaponObj && weaponObj.damage_type) ? weaponObj.damage_type : (ctx.type === 'custom' ? '' : 'slashing');
-            const diceExpr = w ? (w.count === 1 ? `1d${w.sides}` : `${w.count}d${w.sides}`) : (ctx.label || '');
-            const modVal = w ? w.modifier : (ctx.modifier || 0);
-            const isCritDmg = options.isCriticalHit && ctx.type === 'weapon';
-            const diceNatural = isCritDmg ? roll * 2 : roll;
+            // Stage 3c: route chained damage through RulesEngine.computeDamage
+            // using the cached attack inputs. For un-chained / custom damage
+            // (e.g. healing potions, misc formulas), fall back to the pre-3c
+            // inline math — those paths don't need resistance / bonus-damage.
+            const atk  = gs().pendingAttackResolution;
+            const pending = ctx.type === 'weapon' && atk && atk.engineInputs;
+            const w          = ctx.type === 'weapon' ? getEquippedWeaponDamage() : null;
+            const weaponObj  = ctx.type === 'weapon' ? getReadiedWeaponObject() : null;
+            const isCritDmg  = options.isCriticalHit && ctx.type === 'weapon';
+            let damageTypeStr = '';
+            let totalDamage;
+            let diceNatural;
+            let damageBreakdownText = '';
+            if (pending) {
+                const inputs = atk.engineInputs;
+                const damage = RulesEngine.computeDamage({
+                    damageFormula: inputs.damageFormula,
+                    damageBonus:   inputs.damageBonus,
+                    critEffect:    inputs.critEffect,
+                    isCrit:        atk.isCrit,
+                    bonusDamage:   inputs.bonusDamage,
+                    damageType:    inputs.damageType,
+                    resistance:    inputs.resistance,
+                    immunity:      inputs.immunity,
+                    vulnerability: inputs.vulnerability,
+                    diceRolls:     [roll]
+                });
+                totalDamage = damage.total;
+                damageBreakdownText = damage.breakdown;
+                damageTypeStr = inputs.damageType || '';
+                diceNatural   = atk.isCrit && inputs.critEffect === 'double_dice' ? roll * 2 : roll;
+                totalToSend = totalDamage;
+            } else {
+                // Fallback path: no cached attack (legacy / custom dice / unchained damage).
+                damageTypeStr = (weaponObj && weaponObj.damage_type) ? weaponObj.damage_type : (ctx.type === 'custom' ? '' : 'slashing');
+                diceNatural = isCritDmg ? roll * 2 : roll;
+                totalDamage = totalToSend; // totalToSend was computed in the weapon branch above
+            }
+            const diceExpr = pending
+                ? atk.engineInputs.damageFormula
+                : (w ? (w.count === 1 ? `1d${w.sides}` : `${w.count}d${w.sides}`) : (ctx.label || ''));
+            const modVal = pending
+                ? atk.engineInputs.damageBonus
+                : (w ? w.modifier : (ctx.modifier || 0));
+
             let hpLine = '';
-            // Only apply damage to encounter for weapon rolls (not custom e.g. healing)
-            let defeatedEncForReward = null; // used after damage callout so XP/treasure callout comes second
+            let defeatedEncForReward = null;
             if (ctx.type === 'weapon') {
                 const enc = getFirstActiveEncounterInCurrentRoom();
                 if (enc) {
                     const hpBefore = getEncounterHP(enc).current;
-                    gs().damageToEncounters[enc.id] = (gs().damageToEncounters[enc.id] || 0) + totalToSend;
+                    gs().damageToEncounters[enc.id] = (gs().damageToEncounters[enc.id] || 0) + totalDamage;
                     gs().inCombat = true;
                     gs().mode = 'combat';
                     const hpInfo = getEncounterHP(enc);
@@ -520,8 +638,12 @@
                     if (hpBefore > 0 && hpInfo.defeated && enc.on_death) defeatedEncForReward = enc;
                 }
             }
-            const typeSuffix = damageType ? ` (${damageType})` : '';
-            const callout = `Damage Roll ${diceExpr}: ${diceNatural} (${signed(modVal)}) = ${totalToSend}${typeSuffix}${hpLine}`;
+            const typeSuffix = damageTypeStr ? ` (${damageTypeStr})` : '';
+            // When the engine produced a rich breakdown (bonus damage / resistance), surface it.
+            // Otherwise emit the classic "NdM: natural ± mod = total" callout.
+            const callout = (pending && damageBreakdownText && (damageBreakdownText.includes('+') || damageBreakdownText.includes('×')))
+                ? `Damage: ${damageBreakdownText} = ${totalDamage}${typeSuffix}${hpLine}`
+                : `Damage Roll ${diceExpr}: ${diceNatural} (${signed(modVal)}) = ${totalDamage}${typeSuffix}${hpLine}`;
             addMechanicsCallout(callout);
             // XP and treasure callout always after damage callout (Section 2.4)
             if (defeatedEncForReward) {
@@ -550,18 +672,18 @@
             // Rules engine: if this damage roll was chained from an auto-resolved attack hit,
             // compose a combined user message so the GM narrates the full HIT+damage outcome in one turn.
             if (ctx.type === 'weapon' && gs().pendingAttackResolution) {
-                const atk = gs().pendingAttackResolution;
+                const atk2 = gs().pendingAttackResolution;
                 const enc = getFirstActiveEncounterInCurrentRoom()
                     || (gd().module && gd().module.rooms && gd().module.rooms[gs().currentRoom]
-                        && (gd().module.rooms[gs().currentRoom].encounters || []).find(e => e.id === atk.encounterId));
+                        && (gd().module.rooms[gs().currentRoom].encounters || []).find(e => e.id === atk2.encounterId));
                 const hpInfo = enc ? getEncounterHP(enc) : null;
                 const status = hpInfo && hpInfo.defeated
-                    ? `${atk.encounterName} is defeated`
+                    ? `${atk2.encounterName} is defeated`
                     : hpInfo
-                        ? `${atk.encounterName} is still standing (${hpInfo.current}/${hpInfo.max} HP)`
-                        : `${atk.encounterName}`;
-                const critNote = atk.isCrit ? ' (critical hit)' : '';
-                autoResolvedMessage = `I attacked ${atk.encounterName}. Attack ${atk.attackTotal} vs AC ${atk.attackAC} — HIT${critNote} for ${totalToSend} damage. ${status}. The app has resolved the attack and applied damage; narrate the outcome and, if any enemy remains, proceed to the monster's turn.`;
+                        ? `${atk2.encounterName} is still standing (${hpInfo.current}/${hpInfo.max} HP)`
+                        : `${atk2.encounterName}`;
+                const critNote = atk2.isCrit ? ' (critical hit)' : '';
+                autoResolvedMessage = `I attacked ${atk2.encounterName}. Attack ${atk2.attackTotal} vs AC ${atk2.attackAC} — HIT${critNote} for ${totalDamage} damage. ${status}. The app has resolved the attack and applied damage; narrate the outcome and, if any enemy remains, proceed to the monster's turn.`;
                 gs().pendingAttackResolution = null;
             }
         } else if (rollType === 'ability' && ctx.type !== 'weapon') {

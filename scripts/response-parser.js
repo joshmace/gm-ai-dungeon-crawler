@@ -42,6 +42,15 @@
     const gd = () => global.gameData;
     const doc = () => global.document;
 
+    /** Merged v1 items index (module-scope overrides library) for magic-bonus lookups. */
+    function v1ItemsIndexForParser() {
+        const v = gd()._v1;
+        if (!v) return {};
+        const shared   = (v.items && v.items.items) || {};
+        const modItems = (v.module && v.module.module_items && v.module.module_items.items) || {};
+        return Object.assign({}, shared, modItems);
+    }
+
     function processAIResponse(response) {
         debugLog('AI', 'Processing AI response');
         const previousRoom = gs().currentRoom;
@@ -54,30 +63,64 @@
         const pendingMonsterCallouts = [];
         let pendingMonsterOutcomeLine = null;
 
-        // Monster attack: compute rolls and strip tags; defer adding callouts until after GM narration.
+        // Monster attack: route through RulesEngine.resolveMonsterAttack so
+        // the same math (d20 + bonus vs AC, damage with type-based resistance
+        // / immunity / vulnerability) governs both sides. Defer adding callouts
+        // until after GM narration so display order reads GM → callouts → outcome.
         if (/\[MONSTER_ATTACK\]/i.test(scene.cleanText)) {
             const enc = getFirstActiveEncounterInCurrentRoom();
-            const monsterName = enc ? (enc.name || (resolveMonster(enc.monster_ref) && resolveMonster(enc.monster_ref).name) || 'Monster') : 'Monster';
-            const attackInfo = getMonsterAttackInfoForCurrentRoom();
-            const bonus = attackInfo ? attackInfo.bonus : 0;
-            const weaponName = attackInfo ? attackInfo.weaponName : 'attack';
-            const rangeLabel = (attackInfo && attackInfo.range && attackInfo.range !== 'melee') ? 'ranged' : 'melee';
-            const d20 = Math.floor(Math.random() * 20) + 1;
-            const total = d20 + bonus;
+            const monster = enc ? resolveMonster(enc.monster_ref) : null;
+            const monsterName = enc ? (enc.name || (monster && monster.name) || 'Monster') : 'Monster';
             const playerAC = getEffectiveAC();
-            const hit = total >= playerAC;
-            pendingMonsterCallouts.push(`Attack Roll 1d20: ${d20} (${bonus >= 0 ? '+' : ''}${bonus}) = ${total} (${weaponName}/${rangeLabel})`);
-            pendingMonsterCallouts.push(hit ? `HIT: ${total} vs AC ${playerAC}` : `MISS: ${total} vs AC ${playerAC}`);
-            if (hit) {
-                let formula = getMonsterDamageFormulaForCurrentRoom();
-                if (!formula) formula = getMonsterDamageFormulaFromAnyRoom();
-                if (!formula) formula = '1d6';
-                const dmgResult = rollDiceFormula(formula);
-                pendingMonsterCallouts.push(`${monsterName}: ${dmgResult.breakdown} (to you)`);
-                modifyHP(-dmgResult.total);
+
+            // Pull the player's v1-equipped damage resistance/immunity/vulnerability arrays.
+            const v = gd()._v1 || {};
+            let playerResist = null, playerImmune = null, playerVuln = null;
+            if (v.character && v.rules) {
+                const items = v1ItemsIndexForParser();
+                const magic = RulesEngine.sumMagicBonuses(v.character, items);
+                playerResist = (magic.damageResist.length ? magic.damageResist : null);
+                playerImmune = (magic.damageImmune.length ? magic.damageImmune : null);
+                playerVuln   = (magic.damageVuln.length   ? magic.damageVuln   : null);
+            }
+
+            const inputs = RulesEngine.monsterAttackInputsFor(
+                monster, 0, playerAC,
+                playerResist, playerImmune, playerVuln
+            );
+            const weaponName = inputs._attackName || 'attack';
+            const rangeLabel = inputs._range === 'melee' ? 'melee' : 'ranged';
+
+            // Fallback: no bestiary attack declared — skip to a 1d6 default so we never crash.
+            if (!inputs.damageFormula) inputs.damageFormula = '1d6';
+
+            const result = RulesEngine.resolveMonsterAttack(inputs);
+            const natural = result.attack.natural;
+            const total   = result.attack.total;
+            const bonus   = inputs.attackBonus;
+
+            pendingMonsterCallouts.push(
+                `Attack Roll 1d20: ${natural} (${bonus >= 0 ? '+' : ''}${bonus}) = ${total} (${weaponName}/${rangeLabel})`
+            );
+            pendingMonsterCallouts.push(
+                result.attack.hit ? `HIT: ${total} vs AC ${playerAC}` : `MISS: ${total} vs AC ${playerAC}`
+            );
+            if (result.attack.hit) {
+                const dmg = result.damage;
+                const typeSuffix = inputs.damageType ? ` ${inputs.damageType}` : '';
+                // Surface resistance/immunity in the callout when it actually moved the number.
+                const breakdown = dmg.rawMultiplier === 1
+                    ? `${inputs.damageFormula} = ${dmg.total}${typeSuffix}`
+                    : dmg.rawMultiplier === 0
+                        ? `${inputs.damageFormula} (${dmg.base})${typeSuffix} × 0 = 0 (immune)`
+                        : `${inputs.damageFormula} (${dmg.base})${typeSuffix} × ${dmg.rawMultiplier} = ${dmg.total}`;
+                pendingMonsterCallouts.push(`${monsterName}: ${breakdown} (to you)`);
+                if (dmg.total > 0) modifyHP(-dmg.total);
                 monsterDamageAlreadyApplied = true;
-                pendingMonsterOutcomeLine = 'The blow lands and wounds you. Your turn — what do you do?';
-                debugLog('PARSE', `Monster attack hit; damage: ${dmgResult.breakdown}`);
+                pendingMonsterOutcomeLine = dmg.total > 0
+                    ? 'The blow lands and wounds you. Your turn — what do you do?'
+                    : 'The blow lands but your wards turn it aside. Your turn — what do you do?';
+                debugLog('PARSE', `Monster attack hit; damage: ${breakdown}`);
             } else {
                 pendingMonsterOutcomeLine = 'The attack misses. Your turn — what do you do?';
             }
