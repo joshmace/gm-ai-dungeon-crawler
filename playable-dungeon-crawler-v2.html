@@ -213,10 +213,22 @@
             
             teleportToRoom(roomId) {
                 if (gameData.module.rooms[roomId]) {
+                    const prev = gameState.currentRoom;
                     gameState.currentRoom = roomId;
                     const room = gameData.module.rooms[roomId];
                     addSystemMessage(`[DEBUG] Teleported to ${room.name}`);
                     addNarration(room.description);
+                    // Stage 4: fire on_enter / on_traverse hazards for the new
+                    // room so testing the hazard dispatcher doesn't require
+                    // walking through the full module. Matches the production
+                    // room-change hook in scripts/response-parser.js.
+                    if (prev !== roomId && window.UI && window.UI.hazards) {
+                        setTimeout(() => {
+                            window.UI.hazards.triggerHazards(roomId, 'on_enter');
+                        }, 0);
+                    }
+                    if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
+                    if (typeof saveGame === 'function') saveGame();
                 } else {
                     addSystemMessage(`[DEBUG] Room ${roomId} not found`);
                 }
