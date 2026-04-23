@@ -159,6 +159,7 @@
         const displayResponse = scene.cleanText
             .replace(/\[COMBAT:\s*(on|off|true|false|yes|no)\]/gi, '')
             .replace(/\[MODE:\s*(travel|exploration)\]/gi, '')
+            .replace(/\[ROOM:\s*[a-z0-9_]+\]/gi, '')
             .replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, '')
             .trim();
         
@@ -450,25 +451,43 @@
         if (!rooms || !text) return;
         const t = text.toLowerCase();
         const normalized = t.replace(/\bmoral chamber\b/g, 'morale chamber');
-        const movementWord = /\b(?:enter|reach|arrive|step into|are now in|find yourself in|head (?:in)?to|go (?:in)?to)\b/.test(t);
-        if (!movementWord) return;
+
+        // Stage 4: explicit [ROOM: <id>] tag is authoritative. Takes priority
+        // over the heuristic so a GM who emits it can't be second-guessed by
+        // a false positive in the prose.
+        const tagMatch = text.match(/\[ROOM:\s*([a-z0-9_]+)\s*\]/i);
+        if (tagMatch) {
+            const targetId = tagMatch[1];
+            if (rooms[targetId] && targetId !== gs().currentRoom) {
+                gs().currentRoom = targetId;
+                updateCharacterDisplay();
+                debugLog('PARSE', `Room changed to: ${targetId} (${rooms[targetId].name}) via [ROOM:] tag`);
+            }
+            return;
+        }
+
+        // Heuristic path. Stage 4 broadens the matcher: the old gate required
+        // a movement word AND a room name, which missed phrasings like "the
+        // door swings wide" or "the dart-plates lie before you". Now we
+        // accept an unambiguous room-name match on its own, with a light
+        // reference-filter so "you remember the Chamber of X" doesn't teleport.
+        const movementWord = /\b(?:enter|reach|arrive|step(?:s|ped)?\s+(?:in(?:to)?|through|across|onto|up|down)|walk(?:s|ed)?\s+(?:in|into|through)|move(?:s|d)?\s+(?:in|into|through)|cross(?:es|ed)?|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through))\b/.test(t);
+        const referenceHint = /\b(?:remember(?:ed)?|think(?:ing)?\s+of|behind\s+you|the\s+door\s+to)\b/;
         for (const [roomId, room] of Object.entries(rooms)) {
             if (!room) continue;
             if (roomId === gs().currentRoom) continue;
             const roomName = (room.name || '').toLowerCase();
             const roomIdPhrase = roomId.replace(/_/g, ' ').toLowerCase();
-            if (roomName && normalized.includes(roomName)) {
-                gs().currentRoom = roomId;
-                updateCharacterDisplay();
-                debugLog('PARSE', `Room changed to: ${roomId} (${room.name})`);
-                return;
-            }
-            if (roomIdPhrase && normalized.includes(roomIdPhrase)) {
-                gs().currentRoom = roomId;
-                updateCharacterDisplay();
-                debugLog('PARSE', `Room changed to: ${roomId} (id phrase "${roomIdPhrase}")`);
-                return;
-            }
+            const hasName = roomName && normalized.includes(roomName);
+            const hasIdPhrase = roomIdPhrase && normalized.includes(roomIdPhrase);
+            if (!hasName && !hasIdPhrase) continue;
+            // Accept if (a) the text contains a movement word, OR (b) the room
+            // name is in the text and the text doesn't read like a reference.
+            if (!movementWord && referenceHint.test(t)) continue;
+            gs().currentRoom = roomId;
+            updateCharacterDisplay();
+            debugLog('PARSE', `Room changed to: ${roomId} (${room.name}) — ${hasName ? 'name match' : 'id-phrase match'}${movementWord ? ', movement cue' : ''}`);
+            return;
         }
     }
     
