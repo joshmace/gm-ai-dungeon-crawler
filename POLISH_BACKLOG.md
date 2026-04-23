@@ -10,37 +10,6 @@ Each entry: one-line description + where it was surfaced + suggested approach.
 
 ## Open items
 
-### GM narrates stale door/room counts after partial exploration (Gauntlet)
-
-- **Surfaced:** Stage 3 smoke test (2026-04-22). Designer visited First Arms
-  only, then returned to the Hall of Initiation. GM narrated: "The Hall of
-  Initiation waits, silent and patient. Three doors remain: herb, breath,
-  and blade." Seven other chambers were in fact unvisited.
-- **Root cause:** the module's completion condition ("walk each door once")
-  is only encoded as prose in the module guidance. The GM has to track
-  visited vs unvisited from conversation history, and drifts on longer runs.
-  The layout block in the prompt does not mark rooms as visited or unvisited
-  yet (that's a Stage 5 deliverable when rooms/connections become structured
-  UI with state).
-- **Fix direction:** Stage 5 — surface `gameState.module.visited_rooms[]` in
-  the LAYOUT_BLOCK and annotate each room's connections with their current
-  state (visited / unvisited / locked / hidden). Once the prompt ships that
-  per-turn, GM drift on room counts goes away.
-
-### Line chamber blocked as "already walked" on first visit (Gauntlet)
-
-- **Surfaced:** Stage 3 smoke test (2026-04-22). After visiting First Arms
-  and returning to Hall, the designer attempted to enter The Line and the
-  GM blocked them: "You've already walked the Chamber of the Line — the
-  door with the sigil of three standing figures. WALK EACH DOOR ONCE."
-- **Root cause:** same class of problem as the preceding item — the GM's
-  model of which doors have been walked is hallucinated from conversation
-  history, not driven by app state. Here it's off in the opposite direction
-  (marking The Line as walked when it wasn't).
-- **Fix direction:** Stage 5. When the layout block carries per-connection
-  state and `visited_rooms[]` is authoritative, the GM has no room to
-  misremember. Same fix as the previous item.
-
 ### Cross-room combat re-entry when extra attack issued after combat ends
 
 - **Surfaced:** Stage 3 smoke test (2026-04-22, Crow's Hollow). Ren fought
@@ -175,6 +144,72 @@ Each entry: one-line description + where it was surfaced + suggested approach.
   to `"average_class_hd_plus_con"` so it matches the per-level rule.
   One-line data-pack edit — not a code change. Same check applies to any
   future pack that declares both keys.
+
+---
+
+## Landed during Stage 5 (2026-04-23)
+
+Stage 5 delivered structured connections, feature cards, effect dispatch,
+and feature prerequisites. Along the way the following POLISH_BACKLOG
+items closed structurally:
+
+- **GM narrates stale door/room counts after partial exploration** —
+  `gameState.visitedRooms[]` now rides with the save; every compact
+  room in LAYOUT_BLOCK is annotated `(visited)` or `(unvisited)` and
+  each detailed exit shows the target's flag. Connection state
+  (`open` / `LOCKED`) also surfaces per exit. The GM has no room to
+  misremember which doors have been walked.
+- **Line chamber blocked as "already walked" on first visit** — same
+  root cause, same structural fix. Visited flag is authoritative.
+- **System prompt re-budget for Stage 5 growth** — pre-Stage-5 trim
+  shrank the template from 18.4k → 12.1k chars (34% reduction); the
+  new LAYOUT_BLOCK additions (structured exits + per-feature detail +
+  visited flags) land the total around 15-17k on Gauntlet mid-play.
+  Yellow zone, well short of red.
+
+Stage 5 deliverables (for the record):
+
+- **RulesEngine additions:** `prereqsMet`, `applyEffect`,
+  `featureCheckInputs`, `findFeatureById`, `findConnectionByKey`.
+  Pure functions; callers pass the state slice to mutate.
+- **GameState additions:** `featureState{}` + `connectionsModified{}` +
+  `visitedRooms[]` runtime state (all three ride with the save).
+  `buildModuleState()` assembles the unified view for engine helpers.
+  `markRoomVisited(id)` + `applyReward(reward, gameData)` as helpers.
+- **UI.connections:** exit-button strip into `#connectionsStrip`. All
+  three v1 authoring forms supported (simple, structured open, locked
+  chip, hidden). Runtime overrides from `applyEffect` take precedence.
+  Click → `"I go through <label>."` routed through submitAction.
+- **UI.features:** feature cards into `#featureCards`. Four sub-types
+  implemented (lore / searchable / interactive / puzzle). Searchable
+  and puzzle check-gated flows route through `featureDispatch` → ui-dice
+  → `onCheckResolved`. Puzzle narrative solves via `[FEATURE_SOLVED: <id>]`
+  tag (parsed in response-parser); both narrative and check-gated
+  solves converge on `markSolved` which fires `on_success` effects + reward.
+  Prereqs evaluated via `RulesEngine.prereqsMet`; unmet features render
+  dim with authored `prereq_hint`.
+- **UI.dice:** `featureDispatch` branch parallel to `hazardDispatch`.
+- **Room-entry wiring:** single `onRoomEntry(roomId)` coordinator in
+  main.js, called from game-start / response-parser / test.teleportToRoom.
+  Marks visited → renders cards → renders connections → fires on_enter
+  hazards.
+- **PromptBuilder LAYOUT_BLOCK:** v1 features block grouped by sub-type;
+  puzzle 'SOLVE HINT (GM only)' surfaces `solution.description` + the
+  `[FEATURE_SOLVED:]` tag instruction; PREREQ UNMET flag for locked
+  features + `prereq_hint` mirrored verbatim.
+- **Dev helpers:** `test.activateFeature`, `test.unlockConnection`,
+  `test.revealConnection`, `test.solveFeature`.
+- **Debug trail:** new `FEATURE`, `CONNECTION`, `EFFECT` categories now
+  populate the ring-buffered debug log for Copy Session Report diagnosis.
+
+Regression gates (Gauntlet):
+- **Hidden Word → Oathblade:** the prompt's SOLVE HINT gives the GM the
+  answer ("SILENCE") + accept-variants. When the player types "silence"
+  in the puzzle input, the GM emits `[FEATURE_SOLVED: hidden_word_riddle]`,
+  `activate_feature` fires on `oathblade_rack` (unlocked), and 50 XP is
+  awarded. Re-entering the Oathblade chamber shows the searchable card
+  with the Search button enabled; clicking yields `wardens_oathblade`
+  to Aldric's pack.
 
 ---
 
