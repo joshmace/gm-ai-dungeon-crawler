@@ -326,11 +326,28 @@
             return `${w.name} (${w.damage} ${w.damage_type}, ${typeStr})`;
         }).join('; ') || 'none';
 
+        // Stage 4 follow-up: render the player's active conditions with the
+        // FULL authored effect text (not the shim's effect_summary), so the
+        // GM sees the actual mechanical effect on every turn and can apply
+        // adv/disadv correctly on its next [ROLL_REQUEST:]. The RULESET_BLOCK
+        // lists every authored condition compactly; this block is just the
+        // ones currently active on the player.
+        const v1Rules = (gd._v1 && gd._v1.rules) || null;
+        const v1Conditions = (v1Rules && Array.isArray(v1Rules.conditions)) ? v1Rules.conditions : [];
+        const conditionDefById = {};
+        for (const c of v1Conditions) if (c && c.id) conditionDefById[String(c.id).toLowerCase()] = c;
         const conditionsStr = char.conditions && char.conditions.length
             ? char.conditions.map(c => {
-                const info = global.getConditionInfo(c.id || c.name || c);
-                return `${info.name} (${info.effect_summary})`;
-            }).join('; ')
+                const id = String((c.id || c.name || c) || '').toLowerCase();
+                const def = conditionDefById[id];
+                if (def) {
+                    const name = def.name || id;
+                    const effect = (def.effect || def.description || '').replace(/\s+/g, ' ').trim();
+                    return `${name} — ${effect}`;
+                }
+                const info = global.getConditionInfo ? global.getConditionInfo(id) : { name: id, effect_summary: '' };
+                return `${info.name || id} (${info.effect_summary || ''})`;
+            }).join(' | ')
             : 'none';
 
         // v1 difficulty ladder + auto-success / auto-failure prose. Fall back to
