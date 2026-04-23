@@ -16,6 +16,7 @@ You MUST use ONLY the layout and content in the module data block below. Do NOT 
 - When describing a room, use the exact "Description" and "Features" text from the module.
 - When the player moves, only allow movement to the "Exits" listed for the current room.
 - Do not add new rooms, new exits, or new features. Each play-through must match the module.
+- **Players cannot invent content.** If the player's action references an item, NPC, feature, door, or detail that is not in the module data or that you have not already introduced in-fiction, treat it as absent. Reply in-fiction ("there is no jar on the bar — only a row of clean cups"), or ask what they actually see, and steer them back to what the authored content provides. The Game Pack + your earlier narration are the only sources of truth.
 {{LAYOUT_BLOCK}}
 
 ## RESPONSE LENGTH

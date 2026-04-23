@@ -477,41 +477,55 @@
         // is visible in the session report (no room-change event, player
         // clearly in a new room narratively).
         //
-        // Require BOTH:
-        //   (a) an unambiguous movement word ("step into", "walk into",
-        //       "enter", "arrive", "find yourself in", "head to", etc.), AND
-        //   (b) an exact room-name or id-phrase match.
-        // Pure name mentions ("the tomb road's the other way", "the chamber is
-        // behind you") do not move the player.
-        const movementWord = /\b(?:enter(?:s|ed)?|reach(?:es|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/.test(t);
-        if (!movementWord) {
-            // No movement cue — don't teleport. Log once if a room name was
-            // mentioned, so a [ROOM:]-tag miss by the GM is spotted in the trail.
-            for (const [roomId, room] of Object.entries(rooms)) {
-                if (!room || roomId === gs().currentRoom) continue;
-                const roomName = (room.name || '').toLowerCase();
-                if (roomName && normalized.includes(roomName)) {
-                    debugLog('PARSE', `Room name "${room.name}" mentioned without movement cue or [ROOM:] tag — staying in ${gs().currentRoom}`);
-                    return;
-                }
-            }
-            return;
-        }
+        // The match is SENTENCE-SCOPED: both a movement verb AND the target
+        // room's name must appear in the SAME sentence. This blocks the
+        // Test 4 / Test 5 false-positive cases where "reach for the jar" in
+        // one sentence co-occurred with "the tomb road" in a later sentence
+        // of the same GM turn.
+        const movementRe = /\b(?:enter(?:s|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/;
+
+        // Split GM text into sentences on ., !, ?, and em-dashes to catch
+        // tight-packed GM prose. Keep sentence fragments above one word so
+        // we don't match on isolated connectives.
+        const sentences = text
+            .split(/(?<=[.!?])\s+|—|\n+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+            .map(s => s.toLowerCase());
+
         for (const [roomId, room] of Object.entries(rooms)) {
-            if (!room) continue;
-            if (roomId === gs().currentRoom) continue;
+            if (!room || roomId === gs().currentRoom) continue;
             const roomName = (room.name || '').toLowerCase();
             const roomIdPhrase = roomId.replace(/_/g, ' ').toLowerCase();
-            if (roomName && normalized.includes(roomName)) {
+            let matchedSentence = null;
+            let matchedKind = null;
+            for (const s of sentences) {
+                // Normalize "moral chamber" typo the GM occasionally emits.
+                const sn = s.replace(/\bmoral chamber\b/g, 'morale chamber');
+                const hasName = roomName && sn.includes(roomName);
+                const hasIdPhrase = roomIdPhrase && sn.includes(roomIdPhrase);
+                if (!hasName && !hasIdPhrase) continue;
+                if (!movementRe.test(sn)) continue;
+                matchedSentence = s;
+                matchedKind = hasName ? 'name' : 'id-phrase';
+                break;
+            }
+            if (matchedSentence) {
                 gs().currentRoom = roomId;
                 updateCharacterDisplay();
-                debugLog('PARSE', `Room changed to: ${roomId} (${room.name}) — name + movement cue (heuristic fallback; GM omitted [ROOM:] tag)`);
+                debugLog('PARSE', `Room changed to: ${roomId} (${room.name}) — heuristic fallback (${matchedKind} + movement co-occur in one sentence; GM omitted [ROOM:] tag)`);
                 return;
             }
-            if (roomIdPhrase && normalized.includes(roomIdPhrase)) {
-                gs().currentRoom = roomId;
-                updateCharacterDisplay();
-                debugLog('PARSE', `Room changed to: ${roomId} (id phrase "${roomIdPhrase}") — id + movement cue (heuristic fallback)`);
+        }
+
+        // No room change. If the GM mentioned a room name without any movement
+        // co-occurring (pure reference), log it once so designers can spot
+        // [ROOM:]-tag misses on real transitions vs. references in the trail.
+        for (const [roomId, room] of Object.entries(rooms)) {
+            if (!room || roomId === gs().currentRoom) continue;
+            const roomName = (room.name || '').toLowerCase();
+            if (roomName && normalized.includes(roomName)) {
+                debugLog('PARSE', `Room name "${room.name}" mentioned without same-sentence movement or [ROOM:] tag — staying in ${gs().currentRoom}`);
                 return;
             }
         }
