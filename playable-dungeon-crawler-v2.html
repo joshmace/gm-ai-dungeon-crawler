@@ -177,6 +177,12 @@
             lastUserMessageWasDiceRoll: false,
             /** Last roll type: 'resolved' (attack auto-resolved by rules engine) | 'ability' | null (free-form). Drives the current-step hint in the combat prompt. */
             lastUserRollType: null,
+            /** Stage 5: runtime feature state. Deltas from authored initial state, keyed by feature id. */
+            featureState: {},
+            /** Stage 5: runtime connection overrides. Keyed by connection key; { state, revealed? }. */
+            connectionsModified: {},
+            /** Stage 5: ordered list of room ids visited this game. Drives visited-flag rendering in the prompt + UI. */
+            visitedRooms: [],
         };
         // Stage 1e: expose to extracted modules.
         window.gameState = gameState;

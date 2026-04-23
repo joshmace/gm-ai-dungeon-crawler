@@ -447,7 +447,14 @@
             // stay resolved across reloads. Only the state table is persisted;
             // the in-flight queue + active plan are reconstructed from a fresh
             // trigger call after load.
-            hazardState: JSON.parse(JSON.stringify(gs().hazardState || {}))
+            hazardState: JSON.parse(JSON.stringify(gs().hazardState || {})),
+            // Stage 5: feature deltas, connection overrides, visited rooms.
+            // Deltas-only shape means first-time entries still fire on_enter
+            // hazards on load, puzzle solves stay solved, revealed doors stay
+            // revealed, and the prompt's visited-flag stays accurate.
+            featureState:        JSON.parse(JSON.stringify(gs().featureState || {})),
+            connectionsModified: JSON.parse(JSON.stringify(gs().connectionsModified || {})),
+            visitedRooms:        (gs().visitedRooms || []).slice()
         };
     }
 
@@ -503,6 +510,10 @@
         gs().armorEquipped = !!s.armorEquipped;
         gs().lastUserRollType = s.lastUserRollType || null;
         gs().hazardState = s.hazardState ? JSON.parse(JSON.stringify(s.hazardState)) : {};
+        // Stage 5: rehydrate feature deltas + connection overrides + visited rooms.
+        gs().featureState        = s.featureState        ? JSON.parse(JSON.stringify(s.featureState))        : {};
+        gs().connectionsModified = s.connectionsModified ? JSON.parse(JSON.stringify(s.connectionsModified)) : {};
+        gs().visitedRooms        = Array.isArray(s.visitedRooms) ? s.visitedRooms.slice() : [];
         gs().isDead = false;
         gs().pendingLevelUpAck = null;
         debugLog('SAVE', 'Game loaded');
@@ -753,6 +764,152 @@
         saveGame();
     }
 
+    // ------------------------------------------------------------
+    // Stage 5 — module runtime state + reward dispatch
+    //
+    // Callers ask GameState for a unified moduleState view, pass it to
+    // RulesEngine.prereqsMet / applyEffect, and then re-render the
+    // affected panels. buildModuleState derives the `encounters` map
+    // from damageToEncounters + authored encounter HP so prereq
+    // evaluators that gate on encounter defeat work without a separate
+    // encounter-state store (Stage 3 shim model stays authoritative).
+    // ------------------------------------------------------------
+
+    /**
+     * Assemble the moduleState view the RulesEngine Stage 5 helpers expect.
+     * Returns a live reference to gs().featureState and gs().connectionsModified
+     * (so applyEffect's mutations persist), plus a derived encounters map
+     * built from damageToEncounters + the room's authored encounter HP.
+     */
+    function buildModuleState() {
+        if (!gs().featureState) gs().featureState = {};
+        if (!gs().connectionsModified) gs().connectionsModified = {};
+        if (!Array.isArray(gs().visitedRooms)) gs().visitedRooms = [];
+
+        const encounters = {};
+        const rooms = (gd().module && gd().module.rooms) || {};
+        const damage = gs().damageToEncounters || {};
+        for (const room of Object.values(rooms)) {
+            for (const enc of (room.encounters || [])) {
+                if (!enc || !enc.id) continue;
+                const maxHp = (() => {
+                    try { return (global.getEncounterHP && global.getEncounterHP(enc).max) || 0; }
+                    catch (e) { return 0; }
+                })();
+                const dmg = Number(damage[enc.id] || 0);
+                const defeated = maxHp > 0 && dmg >= maxHp;
+                encounters[enc.id] = { defeated, resolved: defeated };
+            }
+        }
+
+        return {
+            features:            gs().featureState,
+            connectionsModified: gs().connectionsModified,
+            visitedRooms:        gs().visitedRooms,
+            encounters
+        };
+    }
+
+    /**
+     * Record a room entry. Idempotent — first visit appends; later visits
+     * are no-ops. Used by room-change wiring so the prompt + UI can
+     * annotate "visited / unvisited" per connection.
+     */
+    function markRoomVisited(roomId) {
+        if (!roomId) return false;
+        if (!Array.isArray(gs().visitedRooms)) gs().visitedRooms = [];
+        if (gs().visitedRooms.includes(roomId)) return false;
+        gs().visitedRooms.push(roomId);
+        debugLog('STATE', `Room visited: ${roomId}`);
+        saveGame();
+        return true;
+    }
+
+    /** Roll a dice formula string or return the integer unchanged. */
+    function rollFormulaNumericLocal(spec) {
+        if (typeof spec === 'number') return spec;
+        if (typeof spec !== 'string') return 0;
+        const re = global.RulesEngine;
+        if (re && re.rollFormula) {
+            const parsed = re.parseFormula && re.parseFormula(spec);
+            if (parsed) return re.rollFormula(spec).total;
+        }
+        const n = parseInt(spec, 10);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    /**
+     * Apply a v1 reward (or an array of rewards) to the character. Surfaces
+     * each application as a mechanics callout so the designer can see what
+     * the engine awarded; mutates character state + pack. Supported types:
+     *
+     *   { type: "xp",   amount: <number|formula> }
+     *   { type: "gold", amount: <number|formula> }
+     *   { type: "item", item_id: "<id>", quantity?: <int> }
+     *
+     * xp_sources including "treasure_recovered" doubles gold rewards into
+     * XP, per the Three Knots authoring convention; other packs ignore it.
+     */
+    function applyReward(reward, gameData) {
+        if (!reward) return;
+        if (Array.isArray(reward)) {
+            reward.forEach(r => applyReward(r, gameData));
+            return;
+        }
+        const type = reward.type;
+        const callout = global.addMechanicsCallout || (() => {});
+
+        if (type === 'xp') {
+            const amt = rollFormulaNumericLocal(reward.amount);
+            if (amt > 0 && global.addXP) global.addXP(amt);
+            callout(`Reward: +${amt} XP`);
+            debugLog('EFFECT', `reward xp +${amt}`);
+            return;
+        }
+
+        if (type === 'gold') {
+            const amt = rollFormulaNumericLocal(reward.amount);
+            if (amt > 0) global.addToInventory('Gold', amt);
+            callout(`Reward: +${amt} gold`);
+            debugLog('EFFECT', `reward gold +${amt}`);
+            // Packs that declare treasure_recovered in xp_sources award
+            // gold-as-XP (Three Knots convention).
+            const v1 = gameData && gameData._v1;
+            const xpSources = (v1 && v1.rules && v1.rules.progression && v1.rules.progression.xp_sources) || [];
+            if (amt > 0 && Array.isArray(xpSources) && xpSources.includes('treasure_recovered')) {
+                if (global.addXP) global.addXP(amt);
+                callout(`Reward: +${amt} XP (treasure recovered)`);
+                debugLog('EFFECT', `reward xp (from gold) +${amt}`);
+            }
+            return;
+        }
+
+        if (type === 'item') {
+            const itemId = reward.item_id;
+            const qty = reward.quantity || 1;
+            const v1 = gameData && gameData._v1;
+            const modItems = (v1 && v1.module && v1.module.module_items && v1.module.module_items.items) || {};
+            const libItems = (v1 && v1.items && v1.items.items) || {};
+            const item = modItems[itemId] || libItems[itemId];
+            const name = (item && item.name) || itemId || 'Item';
+
+            // Mirror into the v1 pack so Stage 6's items pipeline finds it.
+            if (v1 && v1.character) {
+                if (!Array.isArray(v1.character.pack)) v1.character.pack = [];
+                const existing = v1.character.pack.find(p => p && p.item_id === itemId);
+                if (existing) existing.quantity = (existing.quantity || 1) + qty;
+                else v1.character.pack.push({ item_id: itemId, quantity: qty });
+            }
+            // Mirror into the legacy inventory so the character panel shows it today.
+            if (global.addToInventory) global.addToInventory(name, qty);
+            callout(`Reward: ${name}${qty > 1 ? ` x${qty}` : ''}`);
+            debugLog('EFFECT', `reward item ${itemId} x${qty}`);
+            return;
+        }
+
+        debugLog('EFFECT', `reward unknown type: ${type}`);
+    }
+
     /** Remove a condition by id. */
     function removeCondition(id) {
         if (!id || typeof id !== 'string') return;
@@ -790,6 +947,10 @@
         processLevelUp,
         getHitDieSize,
         getConditionModifierForRoll,
+        // Stage 5:
+        buildModuleState,
+        markRoomVisited,
+        applyReward,
         _modifierFor: modifierFor,
         _hpMax: hpMax,
         _resolveItem: resolveItem,
@@ -819,4 +980,8 @@
     global.processLevelUp               = processLevelUp;
     global.getHitDieSize                = getHitDieSize;
     global.getConditionModifierForRoll  = getConditionModifierForRoll;
+    // Stage 5 legacy globals.
+    global.buildModuleState             = buildModuleState;
+    global.markRoomVisited              = markRoomVisited;
+    global.applyReward                  = applyReward;
 })(typeof window !== 'undefined' ? window : globalThis);

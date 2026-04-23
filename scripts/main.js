@@ -207,6 +207,11 @@
         gs().hazardState = {};
         gs().hazardQueue = [];
         gs().activeHazard = null;
+        // Stage 5: module runtime state (feature deltas, connection overrides, visited rooms).
+        // A fresh game starts with authored state; load/save carries these forward too.
+        gs().featureState = {};
+        gs().connectionsModified = {};
+        gs().visitedRooms = [];
         gs().commandHistory = [];
         gs().commandHistoryIndex = -1;
         gs().commandHistoryDraft = '';
