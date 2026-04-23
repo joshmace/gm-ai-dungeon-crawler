@@ -257,6 +257,19 @@
                     addSystemMessage(`[DEBUG] Condition removed: ${id}`);
                 }
             },
+
+            // Direct dice-section invocation for testing Stage 4 adv/disadv
+            // without depending on the GM to emit the suffix. Example:
+            //   test.rollRequest('Perception, advantage')
+            //   test.rollRequest('Athletics, disadvantage')
+            //   test.rollRequest('CON save')
+            //   test.rollRequest('Dexterity')            // roll-under packs
+            rollRequest(label) {
+                if (typeof showDiceSection === 'function') {
+                    addSystemMessage(`[DEBUG] Forced [ROLL_REQUEST: ${label}]`);
+                    showDiceSection(`Roll ${label}:`, label);
+                }
+            },
             
             clearHistory() {
                 gameState.conversationHistory = [];

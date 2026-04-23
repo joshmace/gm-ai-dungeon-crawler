@@ -10,6 +10,41 @@ Each entry: one-line description + where it was surfaced + suggested approach.
 
 ## Open items
 
+### GM doesn't emit `, advantage` / `, disadvantage` suffix from authored conditions (Stage 4)
+
+- **Surfaced:** Stage 4 Test 6 smoke (2026-04-23). With Aldric poisoned
+  (L&B authored effect: "Disadvantage on attack rolls and ability checks"),
+  the GM emitted plain `[ROLL_REQUEST: X]` without the `, disadvantage`
+  suffix. The engine path is correct when the suffix IS present (verified
+  by `test.rollRequest('X, disadvantage')` in-browser plus Stage 4a unit
+  tests); the break is in prompt compliance.
+- **Root cause:** the RULESET_BLOCK lists conditions compactly but the
+  CURRENT GAME STATE Conditions line doesn't remind the GM to consult
+  them on every roll request.
+- **Fix direction:** in `prompt-builder.buildSystemPrompt`, render the
+  player's current conditions with their full authored effect and add an
+  explicit instruction ("Before emitting `[ROLL_REQUEST:]`, check the
+  player's active conditions — if any impose advantage/disadvantage on the
+  relevant roll type, append the suffix to the tag.") Belt-and-suspenders
+  option for when v1.1 adds structured condition effect tags: engine-side,
+  have `checkInputsFor` inspect `character.conditions` and return
+  `imposesDisadvantage` / `imposesAdvantage` flags that the UI auto-applies.
+
+### Hazard dispatcher doesn't consult character conditions for adv/disadv (Stage 4)
+
+- **Surfaced:** Stage 4 Test 6 smoke (2026-04-23). Aldric walked into
+  Breath-Held while poisoned; the CON save fired as plain 1d20 even
+  though L&B authors disadvantage on ability checks for `poisoned`.
+- **Root cause:** `ui-hazards.openCheckPrompt` sets `advantage: false,
+  disadvantage: false` unconditionally. The dispatcher doesn't inspect
+  character conditions.
+- **Fix direction:** pairs with the engine-side `checkInputsFor`
+  enhancement above. Once conditions carry structured mechanical effect
+  tags (v1.1 schema), the dispatcher reads the flag and sets adv/disadv
+  on the check context. Until then, hazards are correct under no-adv/
+  disadv packs (Three Knots) and slightly generous under condition-
+  imposing packs (L&B).
+
 ### GM narrates stale door/room counts after partial exploration (Gauntlet)
 
 - **Surfaced:** Stage 3 smoke test (2026-04-22). Designer visited First Arms
