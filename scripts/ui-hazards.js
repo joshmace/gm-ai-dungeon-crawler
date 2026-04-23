@@ -183,9 +183,10 @@
         // paths; we just persist times_fired here.
         const id = active.plan.id;
         const cur = getHazardState(id);
-        setHazardState(id, { times_fired: (cur.times_fired || 0) + 1 });
+        const nextCount = (cur.times_fired || 0) + 1;
+        setHazardState(id, { times_fired: nextCount });
         if (global.saveGame) global.saveGame();
-        if (global.debugLog) global.debugLog('HAZARD', `finish ${id}: state=${cur.state}, times_fired=${(cur.times_fired || 0) + 1}`);
+        if (global.debugLog) global.debugLog('HAZARD', `finish ${id}: state=${cur.state}, times_fired=${nextCount}`);
         gs().activeHazard = null;
         advanceQueue();
     }
