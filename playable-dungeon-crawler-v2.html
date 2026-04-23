@@ -224,13 +224,13 @@
                     const room = gameData.module.rooms[roomId];
                     addSystemMessage(`[DEBUG] Teleported to ${room.name}`);
                     addNarration(room.description);
-                    // Stage 4: fire on_enter / on_traverse hazards for the new
-                    // room so testing the hazard dispatcher doesn't require
-                    // walking through the full module. Matches the production
-                    // room-change hook in scripts/response-parser.js.
-                    if (prev !== roomId && window.UI && window.UI.hazards) {
+                    // Stage 5: single coordination point — marks visited,
+                    // renders feature cards + connections strip, fires
+                    // on_enter hazards. Matches the production room-change
+                    // hook in scripts/response-parser.js.
+                    if (prev !== roomId && typeof onRoomEntry === 'function') {
                         setTimeout(() => {
-                            window.UI.hazards.triggerHazards(roomId, 'on_enter');
+                            onRoomEntry(roomId);
                         }, 0);
                     }
                     if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();

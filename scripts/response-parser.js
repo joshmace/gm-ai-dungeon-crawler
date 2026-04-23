@@ -207,18 +207,17 @@
             disableInput(false);
         }
 
-        // Stage 4: fire room-entry hazards when the room has changed during
-        // this response. Runs AFTER narration / roll prompt so the designer
-        // reads the GM's room description before the hazard UI appears.
-        // We fire once with 'on_enter'; the dispatcher's synonym rule also
-        // catches on_traverse hazards at room-entry time (Stage 5 refines
-        // on_traverse once connection clicks become structured). Deferred a
-        // tick so callAIGM's DOM writes settle first.
+        // Stage 5: on room change, run the single coordination point that
+        // marks the room visited, renders feature cards + connections strip,
+        // and fires on_enter hazards (synonym-covering on_traverse too).
+        // Runs AFTER narration / roll prompt so the designer reads the GM's
+        // room description before the new UI panels appear. Deferred a tick
+        // so callAIGM's DOM writes settle first.
         const newRoom = gs().currentRoom;
-        if (newRoom && newRoom !== previousRoom && global.UI && global.UI.hazards) {
-            debugLog('HAZARD', `room change ${previousRoom} → ${newRoom}; triggering on_enter (on_traverse synonym)`);
+        if (newRoom && newRoom !== previousRoom) {
+            debugLog('PARSE', `room change ${previousRoom} → ${newRoom}; running onRoomEntry`);
             setTimeout(() => {
-                global.UI.hazards.triggerHazards(newRoom, 'on_enter');
+                if (global.onRoomEntry) global.onRoomEntry(newRoom);
             }, 0);
         }
     }

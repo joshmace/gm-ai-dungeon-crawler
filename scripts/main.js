@@ -363,17 +363,15 @@
             addSystemMessage('Game loaded.');
             addResumeContext();
         }
-        // Stage 4: fire any on_enter hazards in the starting room. Defer a tick
-        // so the welcome narration lands first. The dispatcher's synonym rule
-        // also catches on_traverse hazards at entry time. No-op for modules
-        // whose starting room has no hazards (Gauntlet's hall_of_initiation).
-        if (global.UI && global.UI.hazards) {
-            setTimeout(() => {
-                const roomId = gs().currentRoom;
-                if (!roomId) return;
-                global.UI.hazards.triggerHazards(roomId, 'on_enter');
-            }, 0);
-        }
+        // Stage 5: single room-entry call. Marks the starting room visited,
+        // renders feature cards + connections strip, and fires any on_enter
+        // hazards (synonym-covering on_traverse too). Deferred a tick so the
+        // welcome narration / resume context lands first.
+        setTimeout(() => {
+            const roomId = gs().currentRoom;
+            if (!roomId) return;
+            onRoomEntry(roomId);
+        }, 0);
         document.getElementById('playerInput').focus();
         const copyBtn = document.getElementById('copyNarrativeBtn');
         if (copyBtn) copyBtn.onclick = () => copyNarrativeToClipboard();
@@ -432,6 +430,40 @@
         }
     }
 
+    /**
+     * Stage 5: single coordination point for room entry. Called from:
+     *   - finishGameStart (game start / resume)
+     *   - response-parser's room-change wiring (player moved via narration)
+     *   - ui-connections click handler indirectly (via the same response-parser path)
+     *
+     * Responsibilities in order:
+     *   1. Mark the room visited (idempotent; only first entry appends).
+     *   2. Render the feature cards for this room.
+     *   3. Render the exit-button strip for this room.
+     *   4. Fire any on_enter hazards in this room (the Stage 4 dispatcher's
+     *      synonym rule also catches on_traverse hazards at entry time).
+     *
+     * Steps 2 + 3 re-evaluate prereqs every call, so features / connections
+     * that became accessible via applyEffect while the player was elsewhere
+     * surface correctly on re-entry.
+     */
+    function onRoomEntry(roomId) {
+        if (!roomId) return;
+        debugLog('STATE', `onRoomEntry: ${roomId}`);
+        if (global.GameState && global.GameState.markRoomVisited) {
+            global.GameState.markRoomVisited(roomId);
+        }
+        if (global.UI && global.UI.features && global.UI.features.renderForRoom) {
+            global.UI.features.renderForRoom(roomId);
+        }
+        if (global.UI && global.UI.connections && global.UI.connections.renderForRoom) {
+            global.UI.connections.renderForRoom(roomId);
+        }
+        if (global.UI && global.UI.hazards && global.UI.hazards.triggerHazards) {
+            global.UI.hazards.triggerHazards(roomId, 'on_enter');
+        }
+    }
+
     function submitAction() {
         const input = document.getElementById('playerInput');
         const action = input.value.trim();
@@ -478,6 +510,7 @@
         handleKeyPress,
         handleInputKeyDown,
         submitAction,
+        onRoomEntry,
         loadGameData,
         updateLoadingStatus,
         debugLog,
@@ -493,6 +526,7 @@
     global.handleKeyPress              = handleKeyPress;
     global.handleInputKeyDown          = handleInputKeyDown;
     global.submitAction                = submitAction;
+    global.onRoomEntry                 = onRoomEntry;
     global.loadGameData                = loadGameData;
     global.updateLoadingStatus         = updateLoadingStatus;
     global.debugLog                    = debugLog;
