@@ -109,7 +109,7 @@
 
     "resources": {
       "hit_points": {
-        "max_formula": "class_hd_plus_con",
+        "max_formula": "average_class_hd_plus_con",
         "at_zero": "unconscious",
         "overflow": null
       },

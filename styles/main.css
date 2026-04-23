@@ -316,8 +316,12 @@ body {
   background: var(--dkColor);
   border: 1px solid var(--ltColor);
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 4px 6px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
 }
 
 .ability-name {
@@ -325,44 +329,131 @@ body {
   color: var(--ltColor);
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 4px;
-  display: inline-block;
 }
 
 .ability-value {
-  display: none;
+  font-size: 1em;
+  font-weight: bold;
+  line-height: 1;
 }
 
 .ability-modifier {
-  font-size: 0.9em;
-  font-weight: bold;
-  display: inline-block;
+  font-size: 0.75em;
+  color: var(--ltColor);
+  line-height: 1;
 }
 
+.saves-list,
 .skills-list {
   padding: 10px 12px;
 }
 
+.save-item,
 .skill-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 4px 6px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
   margin-bottom: 4px;
   font-size: 0.85em;
+  gap: 8px;
 }
 
+.save-item:last-child,
 .skill-item:last-child {
   margin-bottom: 0;
 }
 
+.save-name,
 .skill-name {
   color: var(--ltColor);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
+.save-modifier,
 .skill-modifier {
   font-weight: bold;
+  flex-shrink: 0;
+}
+
+/* Proficient dot — small amber pip to the left of the name. */
+.prof-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d4af37;
+  margin-right: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.prof-dot.hollow {
+  background: transparent;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+}
+
+.class-features-list,
+.feature-resources-list {
+  padding: 10px 12px;
+}
+
+.class-feature-item {
+  background: var(--dkColor);
+  border: 1px solid var(--ltColor);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 0.82em;
+}
+.class-feature-item:last-child {
+  margin-bottom: 0;
+}
+.class-feature-name {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+.class-feature-desc {
+  color: var(--ltColor);
+  font-size: 0.95em;
+  line-height: 1.3;
+}
+
+.feature-resource-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  margin-bottom: 4px;
+  font-size: 0.85em;
+}
+.feature-resource-item:last-child {
+  margin-bottom: 0;
+}
+.feature-resource-name {
+  color: var(--ltColor);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.feature-resource-count {
+  font-weight: bold;
+  flex-shrink: 0;
+}
+.feature-resource-recharge {
+  font-size: 0.75em;
+  color: rgba(232, 220, 196, 0.55);
+  flex-shrink: 0;
+  text-transform: lowercase;
+}
+
+/* Hidden utility: renderer toggles this on section headers + lists. */
+.panel-hidden {
+  display: none !important;
 }
 
 .equipment-section,
@@ -468,6 +559,21 @@ body {
 .mode-indicator.mode-combat {
   background: rgba(186, 0, 0, 0.35);
   color: #ff9b9b;
+}
+
+/* Debug room indicator: shows gameState.currentRoom when CONFIG.DEBUG_MODE is on. */
+.debug-room-indicator {
+  font-size: 0.7rem;
+  font-family: monospace;
+  padding: 3px 7px;
+  border-radius: 3px;
+  background: rgba(212, 175, 55, 0.12);
+  color: rgba(212, 175, 55, 0.85);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  display: none;
+}
+.debug-room-indicator.visible {
+  display: inline-block;
 }
 
 .mode-indicator.mode-travel {
@@ -988,6 +1094,62 @@ input[type="number"].dice-input {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Error card — replaces the overlay body when pack load fails. */
+#loadingErrorCard {
+  max-width: 720px;
+  width: 90%;
+  max-height: 80vh;
+  background: #1a1410;
+  border: 1px solid #5a4a3a;
+  border-radius: 6px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--ltColor);
+}
+
+#loadingErrorCard h2 {
+  color: #d4af37;
+  font-size: 1.5em;
+  margin: 0;
+}
+
+#loadingErrorDetails {
+  flex: 1;
+  overflow: auto;
+  background: #0d0a07;
+  border: 1px solid #3a2f22;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #e8dcc3;
+  margin: 0;
+}
+
+.loading-error-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.loading-error-actions button {
+  padding: 8px 16px;
+  background: #3a2f22;
+  color: #e8dcc3;
+  border: 1px solid #5a4a3a;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95em;
+}
+
+.loading-error-actions button:hover {
+  background: #5a4a3a;
+  color: #ffffff;
 }
 
 /* ============================================

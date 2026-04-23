@@ -72,10 +72,10 @@
 
     "resolution": {
       "checks": {
-        "method":                 "roll_high_vs_dc",
+        "method":                 "roll_under_score",
         "dice":                   "1d20",
-        "crit_success":           "nat_20",
-        "crit_failure":           "nat_1",
+        "crit_success":           "nat_1",
+        "crit_failure":           "nat_20",
         "advantage_disadvantage": false
       },
       "auxiliary": {
@@ -189,9 +189,9 @@
 
     "difficulty": {
       "scale": [
-        { "id": "easy",   "name": "Easy",   "dc": 10 },
-        { "id": "medium", "name": "Medium", "dc": 12 },
-        { "id": "hard",   "name": "Hard",   "dc": 15 }
+        { "id": "easy",   "name": "Easy",   "modifier":  2 },
+        { "id": "medium", "name": "Medium", "modifier":  0 },
+        { "id": "hard",   "name": "Hard",   "modifier": -2 }
       ],
       "auto_success": "Tasks a competent adventurer does without thinking: walking a safe road, lighting a torch, reading a familiar language.",
       "auto_failure": "Tasks physically or mentally impossible with the resources at hand. Describe why, then move on."

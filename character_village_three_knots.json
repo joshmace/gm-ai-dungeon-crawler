@@ -21,11 +21,11 @@
 
     "saves": {
       "values": {
-        "death":     12,
-        "wands":     13,
+        "death":     16,
+        "wands":     15,
         "paralysis": 14,
-        "breath":    15,
-        "spells":    16
+        "breath":    13,
+        "spells":    12
       }
     },
 
