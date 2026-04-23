@@ -168,7 +168,10 @@
         
         const rollRequestPattern = /\[ROLL_REQUEST:\s*([^\]]+)\]/i;
         const match = displayResponse.match(rollRequestPattern);
-        
+        debugLog('CHECK', match
+            ? `[ROLL_REQUEST:] present in GM response → "${match[1].trim()}"`
+            : '[ROLL_REQUEST:] absent in GM response');
+
         if (gs().isDead) {
             const textToShow = displayResponse.replace(rollRequestPattern, '').trim() || displayResponse.trim();
             showDeathOverlay(textToShow);

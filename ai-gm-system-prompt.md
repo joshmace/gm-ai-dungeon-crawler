@@ -124,11 +124,14 @@ Conditions: {{CONDITIONS}}
 {{ENCOUNTER_INFO}}
 
 # ADJUDICATION
-**Auto-success:** Simple actions (per ruleset: {{AUTO_SUCCESS}})
-**Auto-fail:** Impossible actions (per ruleset: {{AUTO_FAIL}})
-**Requires roll:** Risky actions, searching, difficult tasks (only when outcome is uncertain and failure has consequences)
+Three buckets — pick one for every player action:
+- **Auto-success** — trivial for a competent adventurer. Describe it; no roll. ({{AUTO_SUCCESS}})
+- **Auto-failure** — physically or mentally impossible with current resources. Describe why; no roll. ({{AUTO_FAIL}})
+- **Call for a roll** — anything else where the player actively attempts something with a real chance of failure and failure would cost them something (time, HP, position, information, reputation, etc.). This is the **default** for player-declared attempts at stealth, climbing, jumping, lifting, picking locks, dodging, persuasion against a resistant NPC, searching a suspicious area, listening at a door, spotting a detail, etc.
 
-DCs (from ruleset — use these numbers): {{DCS}}
+**Do not narrate outcomes for risky actions in pure prose.** If the player writes "I try to X", and X is nontrivial, your response MUST include **[ROLL_REQUEST: <ability>]** (or a skill name when the pack declares skills). Having the NPC "catch" the player, or saying "you fail because Y", without a roll is only acceptable when it fits auto-failure (above). Otherwise let the dice speak.
+
+DCs (from ruleset): {{DCS}}
 
 # TONE
 Atmospheric but concise. Show don't tell. Build tension through description.
