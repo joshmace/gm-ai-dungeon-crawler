@@ -10,41 +10,6 @@ Each entry: one-line description + where it was surfaced + suggested approach.
 
 ## Open items
 
-### GM doesn't emit `, advantage` / `, disadvantage` suffix from authored conditions (Stage 4)
-
-- **Surfaced:** Stage 4 Test 6 smoke (2026-04-23). With Aldric poisoned
-  (L&B authored effect: "Disadvantage on attack rolls and ability checks"),
-  the GM emitted plain `[ROLL_REQUEST: X]` without the `, disadvantage`
-  suffix. The engine path is correct when the suffix IS present (verified
-  by `test.rollRequest('X, disadvantage')` in-browser plus Stage 4a unit
-  tests); the break is in prompt compliance.
-- **Root cause:** the RULESET_BLOCK lists conditions compactly but the
-  CURRENT GAME STATE Conditions line doesn't remind the GM to consult
-  them on every roll request.
-- **Fix direction:** in `prompt-builder.buildSystemPrompt`, render the
-  player's current conditions with their full authored effect and add an
-  explicit instruction ("Before emitting `[ROLL_REQUEST:]`, check the
-  player's active conditions — if any impose advantage/disadvantage on the
-  relevant roll type, append the suffix to the tag.") Belt-and-suspenders
-  option for when v1.1 adds structured condition effect tags: engine-side,
-  have `checkInputsFor` inspect `character.conditions` and return
-  `imposesDisadvantage` / `imposesAdvantage` flags that the UI auto-applies.
-
-### Hazard dispatcher doesn't consult character conditions for adv/disadv (Stage 4)
-
-- **Surfaced:** Stage 4 Test 6 smoke (2026-04-23). Aldric walked into
-  Breath-Held while poisoned; the CON save fired as plain 1d20 even
-  though L&B authors disadvantage on ability checks for `poisoned`.
-- **Root cause:** `ui-hazards.openCheckPrompt` sets `advantage: false,
-  disadvantage: false` unconditionally. The dispatcher doesn't inspect
-  character conditions.
-- **Fix direction:** pairs with the engine-side `checkInputsFor`
-  enhancement above. Once conditions carry structured mechanical effect
-  tags (v1.1 schema), the dispatcher reads the flag and sets adv/disadv
-  on the check context. Until then, hazards are correct under no-adv/
-  disadv packs (Three Knots) and slightly generous under condition-
-  imposing packs (L&B).
-
 ### GM narrates stale door/room counts after partial exploration (Gauntlet)
 
 - **Surfaced:** Stage 3 smoke test (2026-04-22). Designer visited First Arms
@@ -210,6 +175,48 @@ Each entry: one-line description + where it was surfaced + suggested approach.
   to `"average_class_hd_plus_con"` so it matches the per-level rule.
   One-line data-pack edit — not a code change. Same check applies to any
   future pack that declares both keys.
+
+---
+
+## Landed during Stage 4 (2026-04-23)
+
+The following items were surfaced and shipped during the Stage 4 smoke test run:
+
+- **L&B `max_formula` contradicted `hp_gain_per_level`** — one-line data
+  fix to `rules_lantern_and_blade.json`. Aldric now loads at 28/28
+  instead of the confusing 28/36.
+- **System prompt 29k chars (RED zone)** — `LAYOUT_BLOCK` rewritten to
+  render only the current room in full; other rooms ship id + name +
+  exits. Conditions block truncates each effect to ~90 chars. Net: 29k →
+  ~23k (still RED but -20%; template trim is the next lever).
+- **`[ROOM:]` tag** — added as the authoritative room-change contract.
+  GM prompt now requires it on every transition. Heuristic fallback
+  narrowed to same-sentence co-occurrence of movement verb + room name
+  after two false-positive incidents ("reach for the jar" + "the tomb
+  road" in different sentences teleporting the player).
+- **Hazard double-trigger** — `triggerHazards` de-duped; response-parser
+  and main.js now call the dispatcher once per room-entry event (the
+  on_enter/on_traverse synonym rule in ui-hazards handles both).
+- **`times_fired` accounting** — moved to a single increment per plan
+  completion in `finishHazard` so detect+avoid sequences count as 1x.
+- **Player-invention guard** — added to the DUNGEON LAYOUT section of
+  the system prompt. Players can't conjure NPCs, items, or features by
+  describing them; the GM replies in-fiction ("there is no jar").
+- **ADJUDICATION tightened** — "call for a roll" is now the default
+  bucket with explicit examples; "don't narrate outcomes in pure prose"
+  prohibition added to prevent the GM from hand-waving risky player
+  attempts.
+- **Copy session report button** — single-click clipboard dump for
+  designer→developer feedback. State block + 40-event ring-buffered
+  debug trail + narrative. Keyed off `debugLog` so every PARSE / HAZARD
+  / CHECK / PROMPT event is captured.
+- **Condition-driven adv/disadv** — B1 + B2. RulesEngine's
+  `conditionAdvDisadvFor(character, rules, checkKind)` returns
+  adv/disadv flags based on authored condition effects. Hazard
+  dispatcher auto-applies on ability-check hazards. Prompt renders
+  player's active conditions with full authored effect + explicit
+  "check conditions before [ROLL_REQUEST:]" guidance so GM-initiated
+  checks also get the right suffix.
 
 ---
 
