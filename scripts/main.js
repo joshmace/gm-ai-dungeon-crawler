@@ -359,14 +359,14 @@
             addResumeContext();
         }
         // Stage 4: fire any on_enter hazards in the starting room. Defer a tick
-        // so the welcome narration lands first. The dispatcher is a no-op for
-        // modules whose starting room has no hazards (Gauntlet's hall_of_initiation).
+        // so the welcome narration lands first. The dispatcher's synonym rule
+        // also catches on_traverse hazards at entry time. No-op for modules
+        // whose starting room has no hazards (Gauntlet's hall_of_initiation).
         if (global.UI && global.UI.hazards) {
             setTimeout(() => {
                 const roomId = gs().currentRoom;
                 if (!roomId) return;
                 global.UI.hazards.triggerHazards(roomId, 'on_enter');
-                global.UI.hazards.triggerHazards(roomId, 'on_traverse');
             }, 0);
         }
         document.getElementById('playerInput').focus();

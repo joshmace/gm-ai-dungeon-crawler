@@ -89,15 +89,26 @@
         const hazards = getHazardsForRoom(roomId);
         if (hazards.length === 0) return;
 
+        const queued = new Set(((gs().hazardQueue || []).map(p => p && p.id)).filter(Boolean));
+        const active = gs().activeHazard && gs().activeHazard.plan && gs().activeHazard.plan.id;
         for (const hz of hazards) {
             const authored = (hz.trigger && hz.trigger.type) || 'on_enter';
             const match = authored === triggerType
                 || (triggerType === 'on_enter' && authored === 'on_traverse');
             if (!match) continue;
+            // De-dupe: skip if this hazard is already queued or currently active.
+            // Protects against double-trigger paths (e.g. simultaneous
+            // on_enter + on_traverse fires, or a future caller that calls
+            // triggerHazards twice for the same event).
+            if (queued.has(hz.id) || active === hz.id) {
+                if (global.debugLog) global.debugLog('HAZARD', `skip ${hz.id}: already queued/active`);
+                continue;
+            }
             const state = getHazardState(hz.id);
             const plan = RulesEngine.evaluateHazard(hz, state);
             if (!plan || plan.suppress) continue;
             enqueue(plan);
+            queued.add(hz.id);
         }
         // Only start processing when the player isn't mid-roll and no hazard is active.
         if (!gs().activeHazard && !gs().waitingForRoll) advanceQueue();
@@ -166,8 +177,15 @@
     function finishHazard() {
         const active = gs().activeHazard;
         if (!active) return advanceQueue();
-        // Persist + move on. The callers set nextState on each step already.
+        // One increment per full run (regardless of which steps fired),
+        // so times_fired matches "how many times the hazard has resolved".
+        // nextState was set per-step by the onCheckResolved / runAutomatic
+        // paths; we just persist times_fired here.
+        const id = active.plan.id;
+        const cur = getHazardState(id);
+        setHazardState(id, { times_fired: (cur.times_fired || 0) + 1 });
         if (global.saveGame) global.saveGame();
+        if (global.debugLog) global.debugLog('HAZARD', `finish ${id}: state=${cur.state}, times_fired=${(cur.times_fired || 0) + 1}`);
         gs().activeHazard = null;
         advanceQueue();
     }
@@ -289,22 +307,18 @@
 
         // Detection success with resolved_by_detection: skip avoidance.
         if (step.kind === 'detection' && resolved && resolved.success && step.onSuccess && step.onSuccess.skipAvoidance) {
-            const cur = getHazardState(active.plan.id);
             setHazardState(active.plan.id, {
-                state: step.onSuccess.nextState || 'detected_resolved',
-                times_fired: (cur.times_fired || 0)
+                state: step.onSuccess.nextState || 'detected_resolved'
             });
             finishHazard();
             return;
         }
 
-        // Otherwise: record state, advance to the next step (or finish).
+        // Otherwise: record per-step state, advance to the next step. Final
+        // state + times_fired roll up once in finishHazard so a multi-step
+        // plan counts as a single firing of the hazard.
         const nextState = (outcome && outcome.nextState) || (resolved && resolved.success ? 'avoided' : 'triggered');
-        const cur = getHazardState(active.plan.id);
-        setHazardState(active.plan.id, {
-            state: nextState,
-            times_fired: (cur.times_fired || 0) + (resolved && resolved.success ? 0 : 1)
-        });
+        setHazardState(active.plan.id, { state: nextState });
         active.stepIndex++;
         dispatchStep();
     }
@@ -315,11 +329,7 @@
         if (step.narration && global.addNarration) global.addNarration(step.narration);
         applyOutcome({ damage: step.damage, conditions: step.conditions });
         const active = gs().activeHazard;
-        const cur = getHazardState(active.plan.id);
-        setHazardState(active.plan.id, {
-            state: step.nextState || 'triggered',
-            times_fired: (cur.times_fired || 0) + 1
-        });
+        setHazardState(active.plan.id, { state: step.nextState || 'triggered' });
         active.stepIndex++;
         dispatchStep();
     }

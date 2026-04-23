@@ -206,15 +206,15 @@
         // Stage 4: fire room-entry hazards when the room has changed during
         // this response. Runs AFTER narration / roll prompt so the designer
         // reads the GM's room description before the hazard UI appears.
-        // on_enter AND on_traverse hazards in the new room both fire here;
-        // Stage 5 will refine on_traverse once connection clicks become
-        // structured. Defer a tick so callAIGM's DOM writes settle first.
+        // We fire once with 'on_enter'; the dispatcher's synonym rule also
+        // catches on_traverse hazards at room-entry time (Stage 5 refines
+        // on_traverse once connection clicks become structured). Deferred a
+        // tick so callAIGM's DOM writes settle first.
         const newRoom = gs().currentRoom;
         if (newRoom && newRoom !== previousRoom && global.UI && global.UI.hazards) {
-            debugLog('HAZARD', `room change ${previousRoom} → ${newRoom}; triggering on_enter + on_traverse`);
+            debugLog('HAZARD', `room change ${previousRoom} → ${newRoom}; triggering on_enter (on_traverse synonym)`);
             setTimeout(() => {
                 global.UI.hazards.triggerHazards(newRoom, 'on_enter');
-                global.UI.hazards.triggerHazards(newRoom, 'on_traverse');
             }, 0);
         }
     }
