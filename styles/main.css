@@ -819,6 +819,73 @@ button:disabled {
 }
 
 /* ============================================
+   Stage 5: Connections Strip (exit buttons)
+   ============================================ */
+.connections-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 0;
+}
+
+.connections-strip:empty {
+  display: none;
+}
+
+.connection-button {
+  padding: 6px 12px;
+  font-size: 0.82em;
+  font-family: "Fraunces", serif;
+  background: var(--dkColor);
+  border: 2px solid var(--ltColor);
+  border-radius: 999px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.connection-button.connection-open:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.connection-button.connection-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+  font-style: italic;
+}
+
+.connection-button .connection-lock {
+  margin-right: 4px;
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+@keyframes connection-reveal-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.65); }
+  70%  { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);  }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);     }
+}
+
+.connection-button.connection-revealed {
+  animation: connection-reveal-pulse 1.2s ease-out;
+}
+
+/* ============================================
+   Stage 5: Feature Cards (lore / searchable / interactive / puzzle)
+   ============================================ */
+.feature-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.feature-cards:empty {
+  display: none;
+}
+
+/* ============================================
    Dice Section
    ============================================ */
 .dice-section {
