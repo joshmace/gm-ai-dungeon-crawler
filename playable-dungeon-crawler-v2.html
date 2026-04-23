@@ -280,6 +280,68 @@
             clearHistory() {
                 gameState.conversationHistory = [];
                 addSystemMessage('[DEBUG] Conversation history cleared');
+            },
+
+            // --- Stage 5 feature / connection helpers ---
+            //
+            // Skip the narrative path and write engine-level state directly.
+            // Each helper calls RulesEngine.applyEffect, then re-renders
+            // feature cards + connections strip so the UI reflects the change
+            // immediately. Use for smoke-testing without typing through GM
+            // narration (e.g. force the Oathblade rack open, reveal a hidden
+            // door, solve the puzzle to see on_success fire).
+
+            activateFeature(featureId, state) {
+                if (!window.RulesEngine || !window.GameState) return;
+                const ms = window.GameState.buildModuleState();
+                const result = window.RulesEngine.applyEffect(
+                    { type: 'activate_feature', target: featureId, state: state || 'unlocked' },
+                    ms,
+                    gameData
+                );
+                addSystemMessage(`[DEBUG] activateFeature(${featureId}, ${state || 'unlocked'}) → ${JSON.stringify(result)}`);
+                if (typeof saveGame === 'function') saveGame();
+                if (window.UI && window.UI.features && window.UI.features.renderForRoom) window.UI.features.renderForRoom(gameState.currentRoom);
+                if (window.UI && window.UI.connections && window.UI.connections.renderForRoom) window.UI.connections.renderForRoom(gameState.currentRoom);
+            },
+
+            unlockConnection(key) {
+                if (!window.RulesEngine || !window.GameState) return;
+                const ms = window.GameState.buildModuleState();
+                const result = window.RulesEngine.applyEffect(
+                    { type: 'unlock_connection', target: key },
+                    ms,
+                    gameData
+                );
+                addSystemMessage(`[DEBUG] unlockConnection(${key}) → ${JSON.stringify(result)}`);
+                if (typeof saveGame === 'function') saveGame();
+                if (window.UI && window.UI.connections && window.UI.connections.renderForRoom) window.UI.connections.renderForRoom(gameState.currentRoom);
+            },
+
+            revealConnection(key) {
+                if (!window.RulesEngine || !window.GameState) return;
+                const ms = window.GameState.buildModuleState();
+                const result = window.RulesEngine.applyEffect(
+                    { type: 'reveal_connection', target: key },
+                    ms,
+                    gameData
+                );
+                addSystemMessage(`[DEBUG] revealConnection(${key}) → ${JSON.stringify(result)}`);
+                if (typeof saveGame === 'function') saveGame();
+                if (window.UI && window.UI.connections && window.UI.connections.renderForRoom) window.UI.connections.renderForRoom(gameState.currentRoom);
+            },
+
+            // Force a puzzle solve — fires on_success effects + reward via markSolved.
+            // Use when you want to exercise the reward / effect pipeline without
+            // typing the narrative answer (e.g. test.solveFeature('hidden_word_riddle')
+            // for the Gauntlet regression).
+            solveFeature(featureId) {
+                if (window.UI && window.UI.features && window.UI.features.markSolved) {
+                    const ok = window.UI.features.markSolved(featureId, { narrateFromAuthored: true });
+                    addSystemMessage(`[DEBUG] solveFeature(${featureId}) → ${ok ? 'applied' : 'no-op (not found or already solved)'}`);
+                } else {
+                    addSystemMessage(`[DEBUG] solveFeature: UI.features.markSolved not available`);
+                }
             }
         };
         
