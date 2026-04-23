@@ -467,28 +467,50 @@
             return;
         }
 
-        // Heuristic path. Stage 4 broadens the matcher: the old gate required
-        // a movement word AND a room name, which missed phrasings like "the
-        // door swings wide" or "the dart-plates lie before you". Now we
-        // accept an unambiguous room-name match on its own, with a light
-        // reference-filter so "you remember the Chamber of X" doesn't teleport.
-        const movementWord = /\b(?:enter|reach|arrive|step(?:s|ped)?\s+(?:in(?:to)?|through|across|onto|up|down)|walk(?:s|ed)?\s+(?:in|into|through)|move(?:s|d)?\s+(?:in|into|through)|cross(?:es|ed)?|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through))\b/.test(t);
-        const referenceHint = /\b(?:remember(?:ed)?|think(?:ing)?\s+of|behind\s+you|the\s+door\s+to)\b/;
+        // Heuristic fallback. The [ROOM:] tag is the GM's primary contract;
+        // this runs only when the tag is missing. It's intentionally CONSERVATIVE
+        // because a false positive (teleport mid-reference) silently corrupts
+        // state, while a false negative (GM forgets the tag + prose ambiguous)
+        // is visible in the session report (no room-change event, player
+        // clearly in a new room narratively).
+        //
+        // Require BOTH:
+        //   (a) an unambiguous movement word ("step into", "walk into",
+        //       "enter", "arrive", "find yourself in", "head to", etc.), AND
+        //   (b) an exact room-name or id-phrase match.
+        // Pure name mentions ("the tomb road's the other way", "the chamber is
+        // behind you") do not move the player.
+        const movementWord = /\b(?:enter(?:s|ed)?|reach(?:es|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/.test(t);
+        if (!movementWord) {
+            // No movement cue — don't teleport. Log once if a room name was
+            // mentioned, so a [ROOM:]-tag miss by the GM is spotted in the trail.
+            for (const [roomId, room] of Object.entries(rooms)) {
+                if (!room || roomId === gs().currentRoom) continue;
+                const roomName = (room.name || '').toLowerCase();
+                if (roomName && normalized.includes(roomName)) {
+                    debugLog('PARSE', `Room name "${room.name}" mentioned without movement cue or [ROOM:] tag — staying in ${gs().currentRoom}`);
+                    return;
+                }
+            }
+            return;
+        }
         for (const [roomId, room] of Object.entries(rooms)) {
             if (!room) continue;
             if (roomId === gs().currentRoom) continue;
             const roomName = (room.name || '').toLowerCase();
             const roomIdPhrase = roomId.replace(/_/g, ' ').toLowerCase();
-            const hasName = roomName && normalized.includes(roomName);
-            const hasIdPhrase = roomIdPhrase && normalized.includes(roomIdPhrase);
-            if (!hasName && !hasIdPhrase) continue;
-            // Accept if (a) the text contains a movement word, OR (b) the room
-            // name is in the text and the text doesn't read like a reference.
-            if (!movementWord && referenceHint.test(t)) continue;
-            gs().currentRoom = roomId;
-            updateCharacterDisplay();
-            debugLog('PARSE', `Room changed to: ${roomId} (${room.name}) — ${hasName ? 'name match' : 'id-phrase match'}${movementWord ? ', movement cue' : ''}`);
-            return;
+            if (roomName && normalized.includes(roomName)) {
+                gs().currentRoom = roomId;
+                updateCharacterDisplay();
+                debugLog('PARSE', `Room changed to: ${roomId} (${room.name}) — name + movement cue (heuristic fallback; GM omitted [ROOM:] tag)`);
+                return;
+            }
+            if (roomIdPhrase && normalized.includes(roomIdPhrase)) {
+                gs().currentRoom = roomId;
+                updateCharacterDisplay();
+                debugLog('PARSE', `Room changed to: ${roomId} (id phrase "${roomIdPhrase}") — id + movement cue (heuristic fallback)`);
+                return;
+            }
         }
     }
     
