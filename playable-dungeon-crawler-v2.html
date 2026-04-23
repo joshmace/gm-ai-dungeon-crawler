@@ -243,6 +243,20 @@
                 });
                 console.log('Full state:', gameState);
             },
+
+            addCondition(id) {
+                if (typeof addCondition === 'function') {
+                    addCondition(id);
+                    addSystemMessage(`[DEBUG] Condition added: ${id}`);
+                }
+            },
+
+            removeCondition(id) {
+                if (typeof removeCondition === 'function') {
+                    removeCondition(id);
+                    addSystemMessage(`[DEBUG] Condition removed: ${id}`);
+                }
+            },
             
             clearHistory() {
                 gameState.conversationHistory = [];
