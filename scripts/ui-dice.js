@@ -1086,10 +1086,12 @@
         const addedCallout = rollType === 'attack' || rollType === 'damage' || rollType === 'ability';
         if (!addedCallout) addSystemMessage(message);
 
-        // Stage 4: if this roll was driven by a hazard (or later a feature),
-        // the dispatcher owns the next step. Skip the GM round-trip.
-        const hazardDispatch = ctx && ctx.hazardDispatch;
-        if (hazardDispatch && rollType === 'ability') {
+        // Stage 4: if this roll was driven by a hazard, the dispatcher owns
+        // the next step. Skip the GM round-trip. Stage 5: same for features
+        // (searchable check, puzzle try-a-roll).
+        const hazardDispatch  = ctx && ctx.hazardDispatch;
+        const featureDispatch = ctx && ctx.featureDispatch;
+        if ((hazardDispatch || featureDispatch) && rollType === 'ability') {
             hideDiceSection();
             const v1Check = ctx.v1Check || {};
             const resolved = RulesEngine.resolveCheck({
@@ -1102,8 +1104,10 @@
                 naturalRoll: roll
             });
             gs()._v1RollMessageOverride = null;
-            if (global.UI && global.UI.hazards && global.UI.hazards.onCheckResolved) {
+            if (hazardDispatch && global.UI && global.UI.hazards && global.UI.hazards.onCheckResolved) {
                 global.UI.hazards.onCheckResolved(resolved, ctx);
+            } else if (featureDispatch && global.UI && global.UI.features && global.UI.features.onCheckResolved) {
+                global.UI.features.onCheckResolved(resolved, ctx);
             }
             return;
         }
