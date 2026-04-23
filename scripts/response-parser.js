@@ -160,6 +160,7 @@
             .replace(/\[COMBAT:\s*(on|off|true|false|yes|no)\]/gi, '')
             .replace(/\[MODE:\s*(travel|exploration)\]/gi, '')
             .replace(/\[ROOM:\s*[a-z0-9_]+\]/gi, '')
+            .replace(/\[FEATURE_SOLVED:\s*[a-z0-9_]+\]/gi, '')
             .replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, '')
             .trim();
         
@@ -685,6 +686,32 @@
         }
     }
 
+    /**
+     * Stage 5: when the GM emits [FEATURE_SOLVED: <feature_id>] in response to
+     * a narrative puzzle proposal, route the solve to UI.features.markSolved so
+     * on_success effects / rewards fire and the card flips to "Solved". Only
+     * features of type 'puzzle' are valid targets; other types ignore the tag.
+     * Multiple tags in one response are all honored.
+     */
+    function tryParseFeatureSolved(text) {
+        if (!text) return;
+        const re = /\[FEATURE_SOLVED:\s*([a-z0-9_]+)\s*\]/gi;
+        let m;
+        let count = 0;
+        while ((m = re.exec(text)) !== null) {
+            const id = m[1];
+            const UIf = global.UI && global.UI.features;
+            if (UIf && UIf.markSolved) {
+                const ok = UIf.markSolved(id, { narrateFromAuthored: false });
+                debugLog('PARSE', `[FEATURE_SOLVED: ${id}] → markSolved ${ok ? 'applied' : 'skipped (not found or already solved)'}`);
+            } else {
+                debugLog('PARSE', `[FEATURE_SOLVED: ${id}] seen but UI.features.markSolved not wired`);
+            }
+            count++;
+        }
+        if (count > 1) debugLog('PARSE', `[FEATURE_SOLVED:] tag appeared ${count} times in one response`);
+    }
+
     function parseStateChanges(text) {
         debugLog('PARSE', 'Parsing state changes from AI response');
         gs().combatStateFromTag = false; // reset; set true if GM used [COMBAT: on/off]
@@ -694,6 +721,7 @@
         
         tryParseRoomChange(plainText);
         tryParseModeTag(plainText);
+        tryParseFeatureSolved(plainText);  // Stage 5: [FEATURE_SOLVED: <id>] → markSolved.
         tryParseCombatTag(plainText);   // GM tag takes precedence
         tryParseCombatBegins(plainText);
         tryParseRetreat(plainText);

@@ -346,9 +346,7 @@
             return;
         }
         if (disp.kind === 'puzzle') {
-            // Placeholder — puzzle resolution lands in C7. For now, log it
-            // so C7 has a clear hook point.
-            debugLog('FEATURE', `puzzle check resolved: ${feature.id} success=${success} (C7 will apply)`);
+            applyPuzzleOutcome(feature, rt, success);
             return;
         }
     }
@@ -370,20 +368,208 @@
         }
     }
 
-    // ---- Placeholders for interactive + puzzle (filled in C7) -------------
+    // ---- Interactive sub-type ---------------------------------------------
+    //
+    // Authoring shape:
+    //   { type: "interactive", states: ["unlit", "lit"], initial_state: "unlit",
+    //     actions: { "<state>": { label, result, effects, next_state? } } }
+    //
+    // One button per action authored for the current state. After firing:
+    //  1. Narrate `result` in the narrative panel.
+    //  2. Dispatch `effects[]` through RulesEngine.applyEffect.
+    //  3. Transition state: use action.next_state if authored, else the next
+    //     entry in states[] (wraps on the final state — stays terminal).
 
-    function renderInteractivePlaceholder(card, feature, rt) {
-        const note = doc().createElement('div');
-        note.className = 'feature-card-stub';
-        note.textContent = '(interactive actions — coming in C7)';
-        card.appendChild(note);
+    function currentInteractiveState(feature, rt) {
+        if (rt.current_state) return rt.current_state;
+        const initial = feature.initial_state || ((Array.isArray(feature.states) && feature.states[0]) || 'default');
+        rt.current_state = initial;
+        return initial;
     }
 
+    function nextInteractiveState(feature, currentState, authoredNext) {
+        if (authoredNext) return authoredNext;
+        const states = Array.isArray(feature.states) ? feature.states : [];
+        const idx = states.indexOf(currentState);
+        if (idx === -1 || idx >= states.length - 1) return currentState;  // stay terminal
+        return states[idx + 1];
+    }
+
+    function renderInteractivePlaceholder(card, feature, rt) {
+        // Name retained from C6 for call-site continuity; fully implemented now.
+        const actions = feature.actions || {};
+        const cur = currentInteractiveState(feature, rt);
+        const action = actions[cur];
+
+        const stateLine = doc().createElement('div');
+        stateLine.className = 'feature-card-substate';
+        stateLine.textContent = `State: ${cur}`;
+        card.appendChild(stateLine);
+
+        if (!action) {
+            // No action authored for this state — pure-description terminal.
+            return;
+        }
+        const btn = doc().createElement('button');
+        btn.type = 'button';
+        btn.className = 'feature-card-action';
+        btn.textContent = action.label || `Act (${cur})`;
+        // Terminal state with no effects → render as disabled chip; still show the label.
+        const terminal = (!action.effects || action.effects.length === 0)
+            && !action.next_state
+            && (function () {
+                const states = Array.isArray(feature.states) ? feature.states : [];
+                return states.indexOf(cur) === states.length - 1;
+            })();
+        if (terminal) btn.disabled = true;
+        btn.addEventListener('click', () => onInteractiveClick(feature, rt, cur, action));
+        card.appendChild(btn);
+    }
+
+    function onInteractiveClick(feature, rt, fromState, action) {
+        if (gs().waitingForRoll || gs().activeHazard) return;
+        debugLog('FEATURE', `interactive click: ${feature.id} state=${fromState} → action="${action.label || ''}"`);
+        if (action.result && global.addNarration) global.addNarration(action.result);
+        if (Array.isArray(action.effects) && action.effects.length) {
+            dispatchEffects(action.effects);
+        }
+        const toState = nextInteractiveState(feature, fromState, action.next_state);
+        rt.current_state = toState;
+        rt[toState] = true;   // Convention A: flag set alongside current_state.
+        debugLog('FEATURE', `interactive transition: ${feature.id} ${fromState} → ${toState}`);
+        if (global.saveGame) global.saveGame();
+        refreshCardAfterAction(feature);
+    }
+
+    // ---- Puzzle sub-type --------------------------------------------------
+    //
+    // Two solve paths:
+    //  1. Pure-narrative ("Propose a solution" text input): sends "I try: <text>"
+    //     as a player action. The GM judges per the feature.solution.description
+    //     (which ships in LAYOUT_BLOCK) and emits [FEATURE_SOLVED: <id>] on a
+    //     correct solve. response-parser routes the tag to UI.features.markSolved.
+    //  2. Check-gated ("Try a roll"): available when solution.check is authored.
+    //     Opens openFeatureCheck with kind=puzzle → onCheckResolved routes to
+    //     applyPuzzleOutcome.
+
     function renderPuzzlePlaceholder(card, feature, rt) {
-        const note = doc().createElement('div');
-        note.className = 'feature-card-stub';
-        note.textContent = '(puzzle propose / try-a-roll — coming in C7)';
-        card.appendChild(note);
+        // Name retained from C6 for call-site continuity; fully implemented now.
+        const solution = feature.solution || {};
+        if (rt.solved) {
+            const solvedLine = doc().createElement('div');
+            solvedLine.className = 'feature-card-substate feature-card-solved';
+            solvedLine.textContent = 'Solved';
+            card.appendChild(solvedLine);
+            return;
+        }
+
+        const row = doc().createElement('div');
+        row.className = 'feature-card-puzzle-row';
+
+        const input = doc().createElement('input');
+        input.type = 'text';
+        input.className = 'feature-card-puzzle-input';
+        input.placeholder = 'Propose a solution…';
+        input.maxLength = 200;
+        input.addEventListener('keypress', (ev) => {
+            if (ev.key === 'Enter') { ev.preventDefault(); proposePuzzleSolution(feature, input.value); input.value = ''; }
+        });
+        row.appendChild(input);
+
+        const proposeBtn = doc().createElement('button');
+        proposeBtn.type = 'button';
+        proposeBtn.className = 'feature-card-action';
+        proposeBtn.textContent = 'Propose';
+        proposeBtn.addEventListener('click', () => {
+            proposePuzzleSolution(feature, input.value);
+            input.value = '';
+        });
+        row.appendChild(proposeBtn);
+
+        card.appendChild(row);
+
+        if (solution.check) {
+            const rollBtn = doc().createElement('button');
+            rollBtn.type = 'button';
+            rollBtn.className = 'feature-card-action feature-card-action-secondary';
+            rollBtn.textContent = 'Try a roll';
+            rollBtn.addEventListener('click', () => {
+                if (gs().waitingForRoll || gs().activeHazard) return;
+                debugLog('FEATURE', `puzzle try-a-roll: ${feature.id}`);
+                openFeatureCheck(feature, 'puzzle');
+            });
+            card.appendChild(rollBtn);
+        }
+    }
+
+    function proposePuzzleSolution(feature, text) {
+        if (gs().waitingForRoll || gs().activeHazard) return;
+        const trimmed = String(text || '').trim();
+        if (!trimmed) return;
+        debugLog('FEATURE', `puzzle propose: ${feature.id} → "${trimmed.slice(0, 60)}"`);
+        const playerInput = doc().getElementById('playerInput');
+        if (!playerInput) return;
+        playerInput.value = `I try: ${trimmed} (attempting to solve ${feature.name || feature.id})`;
+        if (global.submitAction) global.submitAction();
+    }
+
+    /**
+     * Apply the puzzle outcome for a check-gated attempt. Success: fire
+     * on_success prose + effects + rewards + mark solved. Failure: narrate
+     * on_failure; the player can retry.
+     */
+    function applyPuzzleOutcome(feature, rt, success) {
+        const onSuccess = feature.on_success || {};
+        const onFailure = feature.on_failure || {};
+        if (success) {
+            markSolved(feature.id, { narrateFromAuthored: true });
+        } else {
+            if (onFailure.narration && global.addNarration) global.addNarration(onFailure.narration);
+            else if (typeof onFailure === 'string' && global.addNarration) global.addNarration(onFailure);
+            if (global.saveGame) global.saveGame();
+            refreshCardAfterAction(feature);
+        }
+    }
+
+    /**
+     * Public entry point for a puzzle solve — called by onCheckResolved (check
+     * path) AND by response-parser when it sees [FEATURE_SOLVED: <id>]
+     * (narrative path). Fires on_success narration + effects + rewards,
+     * flips rt.solved, and re-renders.
+     *
+     * `opts.narrateFromAuthored` controls whether to narrate feature.on_success.narration.
+     * For narrative solves, the GM's own prose already covered the solve, so the
+     * app shouldn't duplicate it — but for check-gated solves, the engine
+     * does not produce prose, so narration: true.
+     */
+    function markSolved(featureId, opts) {
+        const feature = RulesEngine.findFeatureById(gd(), featureId);
+        if (!feature) {
+            debugLog('FEATURE', `markSolved: feature ${featureId} not found`);
+            return false;
+        }
+        const rt = featureRuntimeState(featureId);
+        if (rt.solved) {
+            debugLog('FEATURE', `markSolved: ${featureId} already solved (no-op)`);
+            return false;
+        }
+        rt.solved = true;
+        rt.current_state = 'solved';   // Convention A: current_state + flag both set.
+        const onSuccess = feature.on_success || {};
+        const narrateFromAuthored = !!(opts && opts.narrateFromAuthored);
+        if (narrateFromAuthored && onSuccess.narration && global.addNarration) {
+            global.addNarration(onSuccess.narration);
+        }
+        if (Array.isArray(onSuccess.effects) && onSuccess.effects.length) {
+            dispatchEffects(onSuccess.effects);
+        }
+        if (onSuccess.reward) {
+            if (global.applyReward) global.applyReward(onSuccess.reward, gd());
+        }
+        debugLog('FEATURE', `solved: ${featureId}${narrateFromAuthored ? ' (check)' : ' (narrative)'}`);
+        if (global.saveGame) global.saveGame();
+        refreshCardAfterAction(feature);
+        return true;
     }
 
     // ---- Helpers ----------------------------------------------------------
@@ -405,6 +591,9 @@
         renderForRoom,
         onCheckResolved,
         featureRuntimeState,
-        dispatchEffects
+        dispatchEffects,
+        // C7:
+        markSolved,
+        proposePuzzleSolution
     };
 })(typeof window !== 'undefined' ? window : globalThis);
