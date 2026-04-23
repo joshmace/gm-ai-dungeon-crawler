@@ -125,11 +125,17 @@
         if (atZero) lines.push(`At 0 HP: ${atZero}.`);
 
         // Conditions — list id + short effect so the GM can apply them via [CONDITION: add id].
+        // Truncate each effect to ~90 chars; the full rules live in the pack
+        // for reference, and the GM only needs a nudge of what each does.
         const conds = Array.isArray(r.conditions) ? r.conditions : [];
         if (conds.length) {
+            const trim = (s, n) => {
+                const str = String(s || '').replace(/\s+/g, ' ').trim();
+                return str.length > n ? str.slice(0, n - 1).trim() + '…' : str;
+            };
             const condList = conds.map(c => {
                 const summary = c.effect_summary || c.effect || c.description || c.name || c.id;
-                return `${c.id}: ${summary}`;
+                return `${c.id}: ${trim(summary, 90)}`;
             }).join('; ');
             lines.push(`Conditions (apply exactly as specified; use [CONDITION: add id] / [CONDITION: remove id] so the app can track): ${condList}`);
         }
@@ -162,61 +168,92 @@
 
     function buildModuleLayoutForPrompt() {
         const gd = global.gameData;
+        const gs = global.gameState;
         if (!gd || !gd.module) return '';
         const rooms = gd.module.rooms || {};
-        let out = '';
+        const currentRoomId = gs && gs.currentRoom;
+
+        // Risks §1 mitigation: for modules with many rooms, rendering every
+        // room in full blows the prompt past 16k (Gauntlet hit 29k at Stage 4
+        // Test 1). Current room gets full detail (description + features +
+        // hazards + encounters). Other rooms ship only id + name + exits so
+        // the GM can route the player but doesn't carry the full catalog.
+        // When the player changes rooms, the next turn's LAYOUT_BLOCK
+        // rebuilds with the new current room in full — no loss of fidelity,
+        // just paged access.
+        let out = '\nNote: the CURRENT ROOM is rendered in full below. Other rooms are listed by id + name + exits only; their full descriptions, features, hazards, and encounters will appear when the player enters them. Use them only to route movement, not to invent content you haven\'t been given.\n';
+
+        // Current room (full detail).
+        const current = currentRoomId ? rooms[currentRoomId] : null;
+        if (current) {
+            out += renderRoomFull(currentRoomId, current, rooms);
+        }
+
+        // Other rooms (compact).
         for (const [roomId, room] of Object.entries(rooms)) {
-            out += `\n--- ROOM: ${room.name} (id: ${roomId}) ---\n`;
-            out += `Description: ${room.description}\n`;
-            if (room.connections && Object.keys(room.connections).length > 0) {
-                const exits = Object.entries(room.connections).map(([dir, targetOrObj]) => {
-                    const targetId = typeof targetOrObj === 'string' ? targetOrObj : (targetOrObj && targetOrObj.to);
-                    const target = targetId ? rooms[targetId] : null;
-                    const targetName = target ? target.name : (targetId || '?');
-                    return `${dir} → ${targetName} (${targetId || '?'})`;
-                }).join(', ');
-                out += `Exits (use ONLY these): ${exits}\n`;
-            } else {
-                out += `Exits: none\n`;
-            }
-            if (room.features && room.features.length > 0) {
-                out += 'Features (use ONLY these; do not add others):\n';
-                for (const f of room.features) {
-                    out += `- ${f.name}: ${f.description || ''}`;
-                    if (f.text)        out += ` | When read/used: "${f.text}"`;
-                    if (f.note)        out += ` | Note: "${f.note}"`;
-                    if (f.success)     out += ` | On success: "${f.success}"`;
-                    if (f.failure)     out += ` | On failure: "${f.failure}"`;
-                    if (f.contains)    out += ` | Contains: ${JSON.stringify(f.contains)}`;
-                    if (f.interaction) out += ` | Interaction: ${f.interaction}`;
-                    // Stage 4: v1 features carry tier strings (dc_tier) instead of
-                    // numeric DCs. Render the tier so the GM names it rather than
-                    // the number; the engine maps tier → DC per rules pack.
-                    if (f.check && f.check.dc_tier) {
-                        const ctype = f.check.skill ? `${f.check.skill} skill` : (f.check.ability ? `${f.check.ability} check` : 'check');
-                        out += ` | Check: ${ctype}, tier ${f.check.dc_tier} (app rolls / compares)`;
-                    } else if (f.dc != null) {
-                        out += ` | DC: ${f.dc} (use this exact value from ruleset scale)`;
-                    }
-                    out += '\n';
-                }
-            }
-            if (Array.isArray(room.hazards) && room.hazards.length > 0) {
-                out += 'Hazards (APP HANDLES — do not request rolls for these; narrate only after the app reports the outcome in a callout):\n';
-                for (const h of room.hazards) {
-                    const tt = (h.trigger && h.trigger.type) || 'on_enter';
-                    const shape = h.detection && h.avoidance ? 'detect-then-avoid'
-                                : h.avoidance                 ? 'pure-avoidance'
-                                : 'automatic';
-                    out += `- ${h.name || h.id} (${tt}, ${shape}): ${h.description || ''}\n`;
-                }
-            }
-            if (room.encounters && room.encounters.length > 0) {
-                out += 'Encounters here (ONLY these monsters exist in this room): ';
-                out += room.encounters.map(e => e.name + ' (' + e.monster_ref + ')').join(', ') + '\n';
-            }
+            if (!room || roomId === currentRoomId) continue;
+            out += renderRoomCompact(roomId, room, rooms);
         }
         return out;
+    }
+
+    /** Full room detail — only for the current room. */
+    function renderRoomFull(roomId, room, rooms) {
+        let out = `\n--- CURRENT ROOM: ${room.name} (id: ${roomId}) ---\n`;
+        out += `Description: ${room.description}\n`;
+        out += `Exits (use ONLY these): ${renderExits(room, rooms)}\n`;
+        if (room.features && room.features.length > 0) {
+            out += 'Features (use ONLY these; do not add others):\n';
+            for (const f of room.features) {
+                out += `- ${f.name}: ${f.description || ''}`;
+                if (f.text)        out += ` | When read/used: "${f.text}"`;
+                if (f.note)        out += ` | Note: "${f.note}"`;
+                if (f.success)     out += ` | On success: "${f.success}"`;
+                if (f.failure)     out += ` | On failure: "${f.failure}"`;
+                if (f.contains)    out += ` | Contains: ${JSON.stringify(f.contains)}`;
+                if (f.interaction) out += ` | Interaction: ${f.interaction}`;
+                // Stage 4: v1 features carry tier strings (dc_tier) instead of
+                // numeric DCs. Render the tier so the GM names it rather than
+                // the number; the engine maps tier → DC per rules pack.
+                if (f.check && f.check.dc_tier) {
+                    const ctype = f.check.skill ? `${f.check.skill} skill` : (f.check.ability ? `${f.check.ability} check` : 'check');
+                    out += ` | Check: ${ctype}, tier ${f.check.dc_tier} (app rolls / compares)`;
+                } else if (f.dc != null) {
+                    out += ` | DC: ${f.dc} (use this exact value from ruleset scale)`;
+                }
+                out += '\n';
+            }
+        }
+        if (Array.isArray(room.hazards) && room.hazards.length > 0) {
+            out += 'Hazards (APP HANDLES — do not request rolls for these; narrate only after the app reports the outcome in a callout):\n';
+            for (const h of room.hazards) {
+                const tt = (h.trigger && h.trigger.type) || 'on_enter';
+                const shape = h.detection && h.avoidance ? 'detect-then-avoid'
+                            : h.avoidance                 ? 'pure-avoidance'
+                            : 'automatic';
+                out += `- ${h.name || h.id} (${tt}, ${shape}): ${h.description || ''}\n`;
+            }
+        }
+        if (room.encounters && room.encounters.length > 0) {
+            out += 'Encounters here (ONLY these monsters exist in this room): ';
+            out += room.encounters.map(e => e.name + ' (' + e.monster_ref + ')').join(', ') + '\n';
+        }
+        return out;
+    }
+
+    /** Compact room reference — id, name, and exits only. */
+    function renderRoomCompact(roomId, room, rooms) {
+        return `\n- ${room.name} (id: ${roomId}) — exits: ${renderExits(room, rooms)}\n`;
+    }
+
+    function renderExits(room, rooms) {
+        if (!room.connections || Object.keys(room.connections).length === 0) return 'none';
+        return Object.entries(room.connections).map(([dir, targetOrObj]) => {
+            const targetId = typeof targetOrObj === 'string' ? targetOrObj : (targetOrObj && targetOrObj.to);
+            const target = targetId ? rooms[targetId] : null;
+            const targetName = target ? target.name : (targetId || '?');
+            return `${dir} → ${targetName} (${targetId || '?'})`;
+        }).join(', ');
     }
 
     // --- Top-level builder --------------------------------------------------
