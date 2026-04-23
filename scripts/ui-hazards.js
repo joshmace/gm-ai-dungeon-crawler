@@ -227,11 +227,27 @@
         const stepLabel = step.kind === 'detection' ? 'Detection' : 'Avoidance';
         const tierLabel = tier ? ` (${tier})` : '';
 
+        // Stage 4 follow-up: let authored conditions (poisoned, frightened,
+        // blinded, prone, restrained) auto-apply adv/disadv to hazard-driven
+        // ability checks on packs that declare advantage_disadvantage: true.
+        // The engine-side helper does pragmatic substring matching against
+        // the condition's authored effect text.
+        let applyAdv = false, applyDisadv = false;
+        if (ctx.adEnabled) {
+            const flags = RulesEngine.conditionAdvDisadvFor(char, rules, 'ability_check');
+            applyAdv = !!flags.advantage;
+            applyDisadv = !!flags.disadvantage;
+            if ((applyAdv || applyDisadv) && global.debugLog) {
+                const conds = (char.conditions || []).map(c => c.id || c.name || c).join(',');
+                global.debugLog('HAZARD', `auto-${applyDisadv ? 'disadv' : 'adv'} from conditions [${conds}] on ${stepLabel} check`);
+            }
+        }
+
         const diceCtx = {
             type: 'd20',
             ability: ctx._label || check.skill || check.ability,
-            advantage: false,
-            disadvantage: false,
+            advantage: applyAdv,
+            disadvantage: applyDisadv,
             v1Check: {
                 method: ctx.method,
                 modifier: ctx.modifier || 0,
@@ -263,14 +279,16 @@
         const rollPrompt = doc().getElementById('rollPrompt');
         const rollBtn = doc().getElementById('rollBtn');
         const diceInput = doc().getElementById('diceInput');
+        const adLabel = applyAdv ? ' (advantage)' : applyDisadv ? ' (disadvantage)' : '';
+        const diceCountLabel = (applyAdv || applyDisadv) ? 'Roll 2d20' : 'Roll 1d20';
         if (ctx.method === 'roll_under_score') {
-            rollPrompt.textContent = `${stepLabel}: roll for ${ctx._label} (1d20 ≤ ${target}).`;
-            rollBtn.textContent = `Roll 1d20 (≤ ${target})`;
+            rollPrompt.textContent = `${stepLabel}: roll for ${ctx._label} (1d20 ≤ ${target})${adLabel}.`;
+            rollBtn.textContent = `${diceCountLabel} (≤ ${target})`;
         } else {
             const modStr = signed(ctx.modifier || 0);
             const dcTail = dc != null ? ` vs DC ${dc}` : '';
-            rollPrompt.textContent = `${stepLabel}: roll for ${ctx._label} (1d20 ${modStr})${dcTail}.`;
-            rollBtn.textContent = `Roll 1d20 (${modStr})`;
+            rollPrompt.textContent = `${stepLabel}: roll for ${ctx._label} (1d20 ${modStr})${dcTail}${adLabel}.`;
+            rollBtn.textContent = `${diceCountLabel} (${modStr})`;
         }
         diceInput.placeholder = '1-20';
         diceInput.min = '1';

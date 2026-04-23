@@ -1090,6 +1090,88 @@
     }
 
     /**
+     * Inspect the character's active conditions and return whether the
+     * current check type should be rolled with advantage or disadvantage
+     * under this rules pack's authored condition effects.
+     *
+     * `checkKind` is one of:
+     *   'attack'         — attack rolls (melee or ranged)
+     *   'ability_check'  — GM-initiated or hazard ability/skill checks
+     *   'ability_save'   — per-ability saves (L&B CON save, DEX save, etc.)
+     *
+     * v1 conditions store the effect as a human-readable string; we do
+     * pragmatic substring matching here. v1.1 will add structured effect
+     * tags and this helper becomes a straight field-read.
+     *
+     * Returns { advantage, disadvantage }. Both can be false; if both
+     * were somehow set, the caller should pass disadvantage (the
+     * conservative outcome for the player).
+     */
+    function conditionAdvDisadvFor(character, rules, checkKind) {
+        const out = { advantage: false, disadvantage: false };
+        if (!character || !rules || !checkKind) return out;
+        const active = Array.isArray(character.conditions) ? character.conditions : [];
+        if (active.length === 0) return out;
+        const declared = Array.isArray(rules.conditions) ? rules.conditions : [];
+        if (declared.length === 0) return out;
+        const byId = {};
+        for (const c of declared) if (c && c.id) byId[String(c.id).toLowerCase()] = c;
+
+        for (const entry of active) {
+            const id = String((entry && (entry.id || entry.name)) || '').toLowerCase();
+            const def = byId[id];
+            if (!def) continue;
+            const effect = String(def.effect || def.description || '').toLowerCase();
+            if (!effect) continue;
+
+            // Disadvantage patterns. The rules pack phrasing in v1 has two
+            // common shapes — forward ("Disadvantage on attack rolls...")
+            // and inverted ("your attack rolls have disadvantage") — and we
+            // match both. Extend this table if a pack ships a new phrasing.
+            if (checkKind === 'attack' && (
+                /disadvantage on (?:your )?attack rolls/.test(effect) ||
+                /your attack rolls have disadvantage/.test(effect)
+            )) {
+                out.disadvantage = true;
+            }
+            if (checkKind === 'ability_check' && (
+                /disadvantage on .*ability checks/.test(effect) ||
+                /your ability checks have disadvantage/.test(effect)
+            )) {
+                out.disadvantage = true;
+            }
+            if (checkKind === 'ability_save' && (
+                /disadvantage on .*\bsaves?\b/.test(effect) ||
+                /your .*\bsaves?\b have disadvantage/.test(effect)
+            )) {
+                out.disadvantage = true;
+            }
+
+            // Advantage patterns. No v1 condition currently authors
+            // advantage-on-your-roll (the pack awards it only to attackers
+            // against you), so this arm is here for completeness / v1.1.
+            if (checkKind === 'attack' && (
+                /advantage on your attack rolls/.test(effect) ||
+                /your attack rolls have advantage/.test(effect)
+            )) {
+                out.advantage = true;
+            }
+            if (checkKind === 'ability_check' && (
+                /advantage on .*ability checks/.test(effect) ||
+                /your ability checks have advantage/.test(effect)
+            )) {
+                out.advantage = true;
+            }
+        }
+        // Both flags set → net disadvantage (v1.1 may add structured
+        // "cancels" semantics; for now the conservative read is safer).
+        if (out.advantage && out.disadvantage) {
+            out.advantage = false;
+        }
+        return out;
+    }
+
+    /**
      * Assemble resolveCheck inputs for an ability or skill check against the
      * v1 character + rules pack. `kind` is 'ability' or 'skill'; `key` is the
      * ability id (str/dex/...) or skill id (perception/acrobatics/...).
@@ -1298,6 +1380,7 @@
         resolveSave,
         checkInputsFor,
         evaluateHazard,
-        skillDefFor
+        skillDefFor,
+        conditionAdvDisadvFor
     };
 })(typeof window !== 'undefined' ? window : globalThis);
