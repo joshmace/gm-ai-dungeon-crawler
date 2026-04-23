@@ -530,6 +530,16 @@
         const rt = rollType || (prompt.match(/Roll\s+(.+?)(?::|$)/i)?.[1]?.trim() || '');
         const dice = getDiceForRollRequest(rt);
         const contextType = inferRollContextType(rt);
+        if (global.debugLog) {
+            if (dice.v1Check) {
+                const v = dice.v1Check;
+                const adTrail = dice.advantage ? ' +adv' : dice.disadvantage ? ' +disadv' : '';
+                const methodTrail = v.method === 'roll_under_score' ? `target=${v.target}` : `mod=${v.modifier}`;
+                global.debugLog('CHECK', `ROLL_REQUEST "${rt}" → v1 ${v.kind || 'check'} ${v.label} (${v.method}, ${methodTrail})${adTrail}`);
+            } else {
+                global.debugLog('CHECK', `ROLL_REQUEST "${rt}" → ${dice.type} (legacy path)`);
+            }
+        }
         
         if (dice.type === 'weapon') {
             const w = getEquippedWeaponDamage();

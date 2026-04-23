@@ -189,8 +189,14 @@
 
     /** Build plain-text copy of narrative panel for playtest feedback. */
     function copyNarrativeToClipboard() {
+        const text = buildNarrativeBlock().join('\n');
+        writeClipboardAndFlash(text, 'copyNarrativeBtn');
+        return text;
+    }
+
+    function buildNarrativeBlock() {
         const scroll = doc().getElementById('narrativeScroll');
-        if (!scroll) return '';
+        if (!scroll) return [];
         const lines = ['---', 'Narrative panel (for playtest feedback)', '---', ''];
         const getText = el => (el && el.innerText != null ? el.innerText
             : (el && el.textContent != null ? el.textContent : '')).trim();
@@ -205,10 +211,13 @@
             else if (system  && system.textContent.trim())  lines.push('[System] '  + getText(system));
             else if (callout && callout.textContent.trim()) lines.push('[Callout] ' + getText(callout));
         }
-        const text = lines.join('\n');
+        return lines;
+    }
+
+    function writeClipboardAndFlash(text, btnId) {
         if (global.navigator && global.navigator.clipboard && global.navigator.clipboard.writeText) {
             global.navigator.clipboard.writeText(text).then(() => {
-                const btn = doc().getElementById('copyNarrativeBtn');
+                const btn = doc().getElementById(btnId);
                 if (btn) {
                     const orig = btn.textContent;
                     btn.textContent = 'Copied!';
@@ -217,6 +226,128 @@
                 }
             }).catch(() => {});
         }
+    }
+
+    // ----- Stage 4: Copy session report ------------------------------------
+    //
+    // One-paste bug report: pack/character header, state block keyed on
+    // Stage 4 concerns (currentRoom, hazardState, activeHazard, conditions,
+    // pendingRollContext, prompt size), last-20-event debug trail, and the
+    // full narrative + callouts. Designed to be pasted back to me so I can
+    // diagnose without asking the designer to re-type.
+
+    /** Extract a compact { id, state, times_fired } map from gameState. */
+    function hazardStateSummary() {
+        const gs = global.gameState;
+        const raw = (gs && gs.hazardState) || {};
+        const out = {};
+        for (const [id, v] of Object.entries(raw)) {
+            out[id] = { state: v.state, times_fired: v.times_fired };
+        }
+        return out;
+    }
+
+    function promptZoneFor(len) {
+        if (!Number.isFinite(len)) return '(not yet built)';
+        if (len < 8000)  return `${len} chars (green)`;
+        if (len < 16000) return `${len} chars (YELLOW — watch)`;
+        return `${len} chars (RED — mitigate)`;
+    }
+
+    function buildStateBlock() {
+        const gs = global.gameState || {};
+        const gd = global.gameData  || {};
+        const cfg = global.CONFIG   || {};
+        const char = gs.character || {};
+        const v1 = gd._v1 || {};
+        const pack = cfg.GAME_PACK || '?';
+        const moduleTitle = (gd.module && gd.module.module && gd.module.module.title) || '?';
+        const ruleset = (v1.rules && v1.rules.name) || (gd.rules && gd.rules.name) || '?';
+        const rulesMethod = (v1.rules && v1.rules.resolution && v1.rules.resolution.checks
+            && v1.rules.resolution.checks.method) || '?';
+        const saveType = (v1.rules && v1.rules.character_model && v1.rules.character_model.saves
+            && v1.rules.character_model.saves.type) || '?';
+        const adEnabled = !!(v1.rules && v1.rules.resolution && v1.rules.resolution.checks
+            && v1.rules.resolution.checks.advantage_disadvantage);
+        const conditions = (char.conditions || []).map(c => c.id || c.name || c).join(', ') || '(none)';
+        const pending = gs.pendingRollContext
+            ? `${gs.pendingRollContext.rollType || '?'} / ${(gs.pendingRollContext.abilityName || gs.pendingRollContext.dice && gs.pendingRollContext.dice.ability) || '?'}`
+            : '(none)';
+        const active = gs.activeHazard
+            ? `${gs.activeHazard.plan && gs.activeHazard.plan.id} step ${gs.activeHazard.stepIndex}`
+            : '(none)';
+        const queue = (gs.hazardQueue || []).map(p => p && p.id).join(', ') || '(empty)';
+        const promptLen = gs._lastSystemPromptLen;
+
+        const lines = [];
+        lines.push('---');
+        lines.push('Session report');
+        lines.push('---');
+        lines.push(`Generated: ${new Date().toISOString()}`);
+        lines.push(`Pack:       ${pack}`);
+        lines.push(`Module:     ${moduleTitle}`);
+        lines.push(`Ruleset:    ${ruleset}  (checks=${rulesMethod}, saves=${saveType}, adv/disadv=${adEnabled})`);
+        lines.push('');
+        lines.push('## Character');
+        lines.push(`Name:       ${char.name || '?'} (${char.class || '?'} L${char.level || '?'})`);
+        lines.push(`HP:         ${char.hp != null ? char.hp : '?'} / ${char.maxHp != null ? char.maxHp : '?'}`);
+        lines.push(`AC:         ${char.ac != null ? char.ac : '?'}`);
+        lines.push(`XP:         ${char.xp != null ? char.xp : '?'}`);
+        lines.push(`Conditions: ${conditions}`);
+        lines.push(`Readied:    ${gs.readiedWeaponName || '(none)'}`);
+        lines.push('');
+        lines.push('## Runtime state');
+        lines.push(`currentRoom:    ${gs.currentRoom || '(null)'}`);
+        lines.push(`lastCombatRoom: ${gs.lastCombatRoom || '(null)'}`);
+        lines.push(`mode:           ${gs.mode || '(exploration)'}`);
+        lines.push(`inCombat:       ${!!gs.inCombat}`);
+        lines.push(`lastUserRollType: ${gs.lastUserRollType || '(null)'}`);
+        lines.push(`waitingForRoll: ${!!gs.waitingForRoll}`);
+        lines.push(`pendingRoll:    ${pending}`);
+        lines.push('');
+        lines.push('## Hazard dispatcher');
+        lines.push(`activeHazard: ${active}`);
+        lines.push(`hazardQueue:  ${queue}`);
+        const hzState = hazardStateSummary();
+        if (Object.keys(hzState).length === 0) {
+            lines.push('hazardState:  (empty)');
+        } else {
+            lines.push('hazardState:');
+            for (const [id, v] of Object.entries(hzState)) {
+                lines.push(`  ${id}: ${v.state} (fired ${v.times_fired}x)`);
+            }
+        }
+        lines.push('');
+        lines.push(`System prompt size: ${promptZoneFor(promptLen)}`);
+        return lines;
+    }
+
+    function buildDebugTrailBlock() {
+        const ring = (global._debugRing || []).slice(-40);
+        const lines = ['---', 'Debug trail (most recent 40)', '---'];
+        if (ring.length === 0) { lines.push('(empty)'); return lines; }
+        for (const e of ring) {
+            const ts = new Date(e.t).toLocaleTimeString();
+            const tail = e.data ? ` · ${e.data}` : '';
+            lines.push(`${ts} [${e.category}] ${e.message}${tail}`);
+        }
+        return lines;
+    }
+
+    /** Primary session-report builder — pastes well into a bug report. */
+    function buildSessionReport() {
+        const chunks = [];
+        chunks.push(buildStateBlock().join('\n'));
+        chunks.push('');
+        chunks.push(buildDebugTrailBlock().join('\n'));
+        chunks.push('');
+        chunks.push(buildNarrativeBlock().join('\n'));
+        return chunks.join('\n');
+    }
+
+    function copySessionReport() {
+        const text = buildSessionReport();
+        writeClipboardAndFlash(text, 'copySessionReportBtn');
         return text;
     }
 
@@ -247,6 +378,8 @@
         removeStreamingNarration,
         readAnthropicStream,
         copyNarrativeToClipboard,
+        copySessionReport,
+        buildSessionReport,
         addErrorMessage,
         CONTROL_TAG_RE
     };
@@ -268,6 +401,8 @@
     global.removeStreamingNarration = removeStreamingNarration;
     global.readAnthropicStream = readAnthropicStream;
     global.copyNarrativeToClipboard = copyNarrativeToClipboard;
+    global.copySessionReport = copySessionReport;
+    global.buildSessionReport = buildSessionReport;
     global.addErrorMessage = addErrorMessage;
     global.CONTROL_TAG_RE = CONTROL_TAG_RE;
 })(typeof window !== 'undefined' ? window : globalThis);

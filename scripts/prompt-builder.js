@@ -359,6 +359,15 @@
         for (const [key, val] of Object.entries(values)) {
             out = out.split(`{{${key}}}`).join(val == null ? '' : String(val));
         }
+        // Stash the most-recent prompt length so the session report can
+        // surface it. Monitors the Risks §1 yellow/red-zone budget.
+        if (global.gameState) {
+            global.gameState._lastSystemPromptLen = out.length;
+            global.gameState._lastSystemPromptBuiltAt = Date.now();
+        }
+        if (global.debugLog) {
+            global.debugLog('PROMPT', `built system prompt: ${out.length} chars (mode=${gs.mode || 'exploration'}, room=${gs.currentRoom}, last_roll=${gs.lastUserRollType || '-'}, encounters=${(room.encounters || []).length})`);
+        }
         return out;
     }
 

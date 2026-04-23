@@ -121,6 +121,7 @@
 
     function startHazard(plan) {
         gs().activeHazard = { plan, stepIndex: 0 };
+        if (global.debugLog) global.debugLog('HAZARD', `start ${plan.id} (${plan.triggerType}; steps: ${plan.steps.map(s => s.kind).join('+')})`);
         // Opener: one mechanics-callout line so the designer reads it separately
         // from the GM's room narration. Full description sits on the
         // authored hazard; ui-hazards surfaces just the hazard name + a
@@ -233,6 +234,9 @@
                 : (dc != null ? ` vs DC ${dc}` : '');
             global.addMechanicsCallout(`${stepLabel} check: ${ctx._label}${tierLabel}${tierHint}`);
         }
+        if (global.debugLog) {
+            global.debugLog('HAZARD', `${stepLabel} step for ${active.plan.id}: ${ctx._label} (${ctx.method}, tier=${tier}, ${ctx.method === 'roll_under_score' ? 'target=' + target : 'dc=' + dc})`);
+        }
 
         // Populate the dice section directly — avoid getDiceForRollRequest so
         // our pre-built v1Check isn't re-derived.
@@ -272,6 +276,9 @@
         if (!active) return advanceQueue();
         const step = active.plan.steps[active.stepIndex];
         if (!step) { finishHazard(); return; }
+        if (global.debugLog) {
+            global.debugLog('HAZARD', `${step.kind} resolved for ${active.plan.id}: natural=${resolved && resolved.natural} success=${resolved && resolved.success} crit=${resolved && resolved.isCrit} fumble=${resolved && resolved.isFumble}`);
+        }
 
         const outcome = resolved && resolved.success ? step.onSuccess : step.onFailure;
         // Narrate the outcome prose (engine's already emitted the callout).
@@ -319,6 +326,13 @@
 
     function applyOutcome(outcome) {
         if (!outcome) return;
+        if (global.debugLog) {
+            const parts = [];
+            if (outcome.reward && outcome.reward.xp) parts.push(`xp=${outcome.reward.xp}`);
+            if (outcome.damage) parts.push(`damage=${outcome.damage.amount}${outcome.damage.type ? ' ' + outcome.damage.type : ''}`);
+            if (Array.isArray(outcome.conditions) && outcome.conditions.length) parts.push(`conditions=${outcome.conditions.join(',')}`);
+            if (parts.length) global.debugLog('HAZARD', `outcome: ${parts.join(' ')}`);
+        }
 
         // XP reward. Narration (if the reward carried its own line) is already
         // surfaced by the step's onSuccess/onFailure narration up-stream.

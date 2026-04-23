@@ -211,6 +211,7 @@
         // structured. Defer a tick so callAIGM's DOM writes settle first.
         const newRoom = gs().currentRoom;
         if (newRoom && newRoom !== previousRoom && global.UI && global.UI.hazards) {
+            debugLog('HAZARD', `room change ${previousRoom} → ${newRoom}; triggering on_enter + on_traverse`);
             setTimeout(() => {
                 global.UI.hazards.triggerHazards(newRoom, 'on_enter');
                 global.UI.hazards.triggerHazards(newRoom, 'on_traverse');

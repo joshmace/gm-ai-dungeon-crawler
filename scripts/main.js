@@ -103,15 +103,36 @@
         historyTurnsEl.addEventListener('blur', applyHistoryTurns);
     }
 
+    // Ring buffer of recent debugLog events. Used by Copy session report to
+    // give me the last slice of PARSE / HAZARD / STATE / PROMPT events
+    // alongside the narrative. Kept in memory only; cleared on reload.
+    const DEBUG_RING_MAX = 80;
+    const debugRing = [];
+    global._debugRing = debugRing;
+
+    function pushDebugRing(category, message, data) {
+        const entry = {
+            t: Date.now(),
+            category,
+            message: String(message),
+            data: data == null ? null : (typeof data === 'string' ? data : JSON.stringify(data))
+        };
+        debugRing.push(entry);
+        if (debugRing.length > DEBUG_RING_MAX) debugRing.shift();
+    }
+
     // Debug logging function
     function debugLog(category, message, data = null) {
+        // The ring buffer stays populated regardless of DEBUG_MODE so the
+        // session report still has a trail when debug console spam is off.
+        pushDebugRing(category, message, data);
         if (!CFG().DEBUG_MODE) return;
-        
+
         const timestamp = new Date().toLocaleTimeString();
         const prefix = `[${timestamp}] [${category}]`;
-        
+
         console.log(prefix, message, data || '');
-        
+
         // Update debug panel parse log if it's a parse event
         if (category === 'PARSE') {
             const logDiv = document.getElementById('debugParseLog');
@@ -120,7 +141,7 @@
                 entry.textContent = `${timestamp} ${message}`;
                 entry.style.marginBottom = '2px';
                 logDiv.insertBefore(entry, logDiv.firstChild);
-                
+
                 // Keep only last 20 entries
                 while (logDiv.children.length > 20) {
                     logDiv.removeChild(logDiv.lastChild);
@@ -351,6 +372,8 @@
         document.getElementById('playerInput').focus();
         const copyBtn = document.getElementById('copyNarrativeBtn');
         if (copyBtn) copyBtn.onclick = () => copyNarrativeToClipboard();
+        const reportBtn = document.getElementById('copySessionReportBtn');
+        if (reportBtn) reportBtn.onclick = () => copySessionReport();
         debugLog('INIT', 'Game initialization complete');
     }
 
