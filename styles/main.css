@@ -885,6 +885,111 @@ button:disabled {
   display: none;
 }
 
+.feature-card {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--ltColor);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.88em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feature-card.feature-locked {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.feature-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.feature-card-title {
+  font-weight: bold;
+  font-size: 0.95em;
+}
+
+.feature-card-type {
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+
+.feature-card-desc {
+  line-height: 1.35;
+  opacity: 0.9;
+}
+
+.feature-card-hint {
+  margin-top: 2px;
+  font-style: italic;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.feature-card-action {
+  padding: 5px 12px;
+  font-size: 0.82em;
+  font-family: "Fraunces", serif;
+  background: var(--dkColor);
+  border: 2px solid var(--ltColor);
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.feature-card-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.feature-card-action-secondary {
+  opacity: 0.85;
+  border-style: dashed;
+}
+
+.feature-card-substate {
+  font-size: 0.78em;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.feature-card-solved {
+  color: rgba(77, 201, 77, 1);
+  opacity: 0.95;
+  font-weight: bold;
+  font-style: normal;
+}
+
+.feature-card-puzzle-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.feature-card-puzzle-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 0.85em;
+  background: var(--dkColor);
+  border: 1px solid var(--ltColor);
+  border-radius: 4px;
+  color: #ffffff;
+  font-family: "Fraunces", serif;
+}
+
+.feature-card-stub {
+  font-size: 0.78em;
+  opacity: 0.55;
+  font-style: italic;
+}
+
 /* ============================================
    Dice Section
    ============================================ */
