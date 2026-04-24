@@ -659,6 +659,50 @@
         const rt = payload.runtime || {};
         const clone = v => JSON.parse(JSON.stringify(v));
 
+        // Step 1: apply character_mutations to the v1 source of truth
+        // (gd()._v1.character). The legacy shim reads this in step 2 to
+        // rebuild the shimmed ability/equipment/hp buckets, so the
+        // loaded equipment/pack/hp/xp/level/gold flow through
+        // automatically rather than needing per-field overlay logic.
+        const v1 = gd() && gd()._v1 && gd()._v1.character;
+        if (v1) {
+            if (Array.isArray(cm.equipment))       v1.equipment        = clone(cm.equipment);
+            if (Array.isArray(cm.pack))            v1.pack             = clone(cm.pack);
+            if (cm.feature_resources)              v1.feature_resources= clone(cm.feature_resources);
+            if (cm.charged_items)                  v1.charged_items    = clone(cm.charged_items);
+            if (typeof cm.gold       === 'number') v1.gold       = cm.gold;
+            if (typeof cm.xp         === 'number') v1.xp         = cm.xp;
+            if (typeof cm.hp_current === 'number') v1.hp_current = cm.hp_current;
+            if (cm.basic_info && typeof cm.basic_info.level === 'number') {
+                v1.basic_info = v1.basic_info || {};
+                v1.basic_info.level = cm.basic_info.level;
+            }
+            if (Array.isArray(cm.conditions))      v1.conditions = clone(cm.conditions);
+        }
+
+        // Step 2: re-run the pack shim so gd().character (shimmed buckets)
+        // reflects the loaded mutations. Without this, the shim's
+        // equipment.worn/wielded/carried/backpack/coin buckets stay
+        // frozen at start-of-game contents.
+        if (global.GameState && typeof global.GameState.init === 'function' && gd() && gd()._v1) {
+            try {
+                const rebuilt = global.GameState.init(gd()._v1);
+                Object.assign(gd(), rebuilt);
+            } catch (e) {
+                console.warn('Shim rebuild during loadGame failed:', e);
+            }
+        }
+
+        // Step 3: build the legacy gs().character from the fresh shim.
+        // initializeGameStateFromData also resets the runtime state
+        // fields (hazardState, visitedRooms, mode, etc.) — those get
+        // overwritten from the save payload in step 4 below.
+        if (typeof global.initializeGameStateFromData === 'function') {
+            global.initializeGameStateFromData();
+        }
+
+        // Step 4: overlay the save's module / combat / completion /
+        // runtime blocks on top of the freshly-initialized state.
         gs().currentRoom         = m.current_room || gs().currentRoom;
         gs().visitedRooms        = Array.isArray(m.visited_rooms) ? m.visited_rooms.slice() : [];
         gs().hazardState         = m.hazards              ? clone(m.hazards)              : {};
@@ -678,40 +722,14 @@
         gs().completion     = payload.completion ? clone(payload.completion)
                                                  : { completed: false, conditions_met: [] };
 
-        // character_mutations flows back into both the legacy runtime
-        // character (hp/xp/level/gold/conditions) and the v1 source of
-        // truth under gd()._v1.character (equipment/pack/feature_resources/
-        // charged_items/hp_current/xp). Equipment mutations MUST land on
-        // the v1 side because Stage 6's equipItem/unequipItem write there.
+        // Conditions + level sometimes don't flow cleanly through the
+        // shim (level is carried as basic_info.level but the legacy
+        // renderer reads gs().character.level directly; conditions are
+        // on gs().character.conditions). Overlay them directly as a
+        // belt-and-braces.
         if (gs().character) {
-            const c = gs().character;
-            if (cm.basic_info && typeof cm.basic_info.level === 'number') c.level = cm.basic_info.level;
-            if (typeof cm.hp_current === 'number') c.hp = cm.hp_current;
-            if (typeof cm.xp === 'number')         c.xp = cm.xp;
-            if (typeof cm.gold === 'number') {
-                const g = Array.isArray(c.inventory) ? c.inventory.find(i => i.name === 'Gold') : null;
-                if (g) g.quantity = `${cm.gold}gp`;
-                else {
-                    if (!Array.isArray(c.inventory)) c.inventory = [];
-                    c.inventory.push({ name: 'Gold', quantity: `${cm.gold}gp` });
-                }
-            }
-            if (Array.isArray(cm.conditions)) c.conditions = clone(cm.conditions);
-        }
-        const v1 = gd() && gd()._v1 && gd()._v1.character;
-        if (v1) {
-            if (Array.isArray(cm.equipment))       v1.equipment        = clone(cm.equipment);
-            if (Array.isArray(cm.pack))            v1.pack             = clone(cm.pack);
-            if (cm.feature_resources)              v1.feature_resources= clone(cm.feature_resources);
-            if (cm.charged_items)                  v1.charged_items    = clone(cm.charged_items);
-            if (typeof cm.gold       === 'number') v1.gold       = cm.gold;
-            if (typeof cm.xp         === 'number') v1.xp         = cm.xp;
-            if (typeof cm.hp_current === 'number') v1.hp_current = cm.hp_current;
-            if (cm.basic_info && typeof cm.basic_info.level === 'number') {
-                v1.basic_info = v1.basic_info || {};
-                v1.basic_info.level = cm.basic_info.level;
-            }
-            if (Array.isArray(cm.conditions))      v1.conditions = clone(cm.conditions);
+            if (cm.basic_info && typeof cm.basic_info.level === 'number') gs().character.level = cm.basic_info.level;
+            if (Array.isArray(cm.conditions))                              gs().character.conditions = clone(cm.conditions);
         }
 
         gs().mode                = rt.mode || (gs().inCombat ? 'combat' : 'exploration');
