@@ -1430,6 +1430,27 @@ input[type="number"].dice-input {
   justify-content: center;
 }
 
+/* Stage 7: completion overlay (sibling of death overlay) — same layout,
+   success-tinted title + a stats block between subtitle and buttons. */
+.completion-overlay .death-overlay-content h2 {
+  color: #c9a84a; /* warm gold instead of death-red */
+}
+
+.completion-overlay-stats {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem auto 1.25rem;
+  padding: 0.5rem 0.75rem;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.95em;
+  text-align: left;
+  max-width: 300px;
+}
+
+.completion-overlay-stats .label { color: var(--ltColor); }
+.completion-overlay-stats .value { text-align: right; font-variant-numeric: tabular-nums; }
+
 .start-choice-p {
   color: var(--ltColor);
   margin-bottom: 0.5rem;

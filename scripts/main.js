@@ -354,6 +354,7 @@
 
     function finishGameStart(showWelcome) {
         hideDeathOverlay();
+        if (global.hideCompletionOverlay) global.hideCompletionOverlay();
         updateLoadingStatus('Rendering interface...');
         initializeCharacterSheet();
         document.getElementById('dungeonTitle').textContent = gd().module.module.title;

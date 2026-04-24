@@ -361,6 +361,94 @@
         scrollToBottom();
     }
 
+    /**
+     * Stage 7: end-of-module summary card. Called from GameState.checkCompletion
+     * when the completion condition first fires. `summary` is the payload from
+     * GameState.buildCompletionSummary (XP, gold, level, rooms visited,
+     * encounters defeated, run duration, module title, condition kind/target).
+     *
+     * Mirrors the death-overlay pattern in ui-character.js — disables input,
+     * wires Restart / Load save buttons. Distinct from the death overlay so
+     * Three Knots death-at-zero-HP and completion-on-kill-Havel can both
+     * fire for the same character without UI collision.
+     */
+    function showCompletionOverlay(summary) {
+        const el = doc().getElementById('completionOverlay');
+        if (!el) return;
+        el.style.display = 'flex';
+
+        const title = doc().getElementById('completionOverlayTitle');
+        if (title) {
+            title.textContent = (summary && summary.module_title)
+                ? summary.module_title + ' — Complete'
+                : 'Adventure Complete';
+        }
+
+        const subtitle = doc().getElementById('completionOverlaySubtitle');
+        if (subtitle) {
+            const kind = summary && summary.kind;
+            subtitle.textContent = kind === 'defeat_encounter'     ? 'The final encounter falls.'
+                                 : kind === 'reach_room'           ? 'You have reached the goal.'
+                                 : kind === 'all_encounters_defeated' ? 'Every foe in the module lies defeated.'
+                                 : 'Your adventure is complete.';
+        }
+
+        const stats = doc().getElementById('completionOverlayStats');
+        if (stats && summary) {
+            const mins = Math.floor((summary.duration_ms || 0) / 60000);
+            const secs = Math.floor(((summary.duration_ms || 0) % 60000) / 1000);
+            const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+            const rows = [
+                ['Level',            String(summary.level || 1)],
+                ['XP',               String(summary.xp || 0)],
+                ['Gold',             String(summary.gold || 0)],
+                ['Rooms visited',    String(summary.rooms_visited || 0)],
+                ['Encounters defeated', String(summary.encounters_defeated || 0)],
+                ['Run duration',     durationStr]
+            ];
+            stats.innerHTML = rows.map(([l, v]) =>
+                `<div class="label">${l}</div><div class="value">${v}</div>`
+            ).join('');
+        }
+
+        const loadBtn = doc().getElementById('completionBtnLoadSave');
+        if (loadBtn) {
+            loadBtn.style.display = (global.hasValidSave && global.hasValidSave()) ? '' : 'none';
+            loadBtn.onclick = () => {
+                if (global.loadGame && global.loadGame()) {
+                    hideCompletionOverlay();
+                    if (global.initializeCharacterSheet) global.initializeCharacterSheet();
+                    if (global.updateCharacterDisplay)   global.updateCharacterDisplay();
+                    if (global.updateMonsterPanel)       global.updateMonsterPanel();
+                    if (global.addSystemMessage)         global.addSystemMessage('Game loaded.');
+                    if (global.addResumeContext)         global.addResumeContext();
+                    const input = doc().getElementById('playerInput');
+                    if (input) { input.disabled = false; input.focus(); }
+                }
+            };
+        }
+
+        const restartBtn = doc().getElementById('completionBtnRestart');
+        if (restartBtn) {
+            restartBtn.onclick = () => {
+                hideCompletionOverlay();
+                const scroll = doc().getElementById('narrativeScroll');
+                if (scroll) scroll.innerHTML = '';
+                if (global.initializeGameStateFromData) global.initializeGameStateFromData();
+                if (global.finishGameStart) global.finishGameStart(true);
+            };
+        }
+
+        // Disable further input — the run is over.
+        const input = doc().getElementById('playerInput');
+        if (input) input.disabled = true;
+    }
+
+    function hideCompletionOverlay() {
+        const el = doc().getElementById('completionOverlay');
+        if (el) el.style.display = 'none';
+    }
+
     global.UI = global.UI || {};
     global.UI.narrative = {
         scrollToBottom,
@@ -381,6 +469,8 @@
         copySessionReport,
         buildSessionReport,
         addErrorMessage,
+        showCompletionOverlay,
+        hideCompletionOverlay,
         CONTROL_TAG_RE
     };
 
@@ -404,5 +494,7 @@
     global.copySessionReport = copySessionReport;
     global.buildSessionReport = buildSessionReport;
     global.addErrorMessage = addErrorMessage;
+    global.showCompletionOverlay = showCompletionOverlay;
+    global.hideCompletionOverlay = hideCompletionOverlay;
     global.CONTROL_TAG_RE = CONTROL_TAG_RE;
 })(typeof window !== 'undefined' ? window : globalThis);
