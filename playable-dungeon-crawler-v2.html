@@ -363,6 +363,51 @@
                 const module_ = payload && payload.module_id;
                 addSystemMessage(`[DEBUG] dumpSave: schema=${schema} pack=${pack} module=${module_} (full blob in console)`);
                 return payload;
+            },
+
+            // Stage 7: dump the raw save blob out of localStorage (what's
+            // actually on disk, post-write). Pairs with dumpSave() to check
+            // that what's serialized matches what's persisted.
+            dumpSavedBlob() {
+                const manifest = window.gameData && window.gameData._v1 && window.gameData._v1.manifest;
+                const packId = manifest && manifest.id;
+                if (!packId) { addSystemMessage('[DEBUG] dumpSavedBlob: no pack id'); return null; }
+                const key = 'gm-ai-dungeon-save:' + packId.replace(/[^a-z0-9_-]/gi, '_');
+                const raw = localStorage.getItem(key);
+                if (!raw) { addSystemMessage(`[DEBUG] dumpSavedBlob: no save at key ${key}`); return null; }
+                const parsed = JSON.parse(raw);
+                console.log('[DEBUG] Saved blob @', key, parsed);
+                addSystemMessage(`[DEBUG] dumpSavedBlob: key=${key} bytes=${raw.length} (full blob in console)`);
+                return parsed;
+            },
+
+            // Stage 7: force a save NOW even if isDead. Useful for testing
+            // the death-save-then-load flow (the death path calls saveGame
+            // just before flipping isDead; forceSave lets us sidestep that
+            // ordering if we're poking at edge cases).
+            forceSave() {
+                if (!window.GameState || !window.GameState.getStateToSave) return;
+                const payload = window.GameState.getStateToSave();
+                const packId = (payload && payload.game_pack_id) || 'default';
+                const key = 'gm-ai-dungeon-save:' + packId.replace(/[^a-z0-9_-]/gi, '_');
+                localStorage.setItem(key, JSON.stringify(payload));
+                addSystemMessage(`[DEBUG] forceSave: wrote ${key}`);
+            },
+
+            // Stage 7: stamp a bogus schema_version onto the current save
+            // slot so we can verify the "old save format" drop-and-message
+            // path on next load. Doesn't touch gameplay state.
+            corruptSave() {
+                const manifest = window.gameData && window.gameData._v1 && window.gameData._v1.manifest;
+                const packId = manifest && manifest.id;
+                if (!packId) { addSystemMessage('[DEBUG] corruptSave: no pack id'); return; }
+                const key = 'gm-ai-dungeon-save:' + packId.replace(/[^a-z0-9_-]/gi, '_');
+                const raw = localStorage.getItem(key);
+                if (!raw) { addSystemMessage(`[DEBUG] corruptSave: no save at ${key}`); return; }
+                const data = JSON.parse(raw);
+                data.schema_version = 0;
+                localStorage.setItem(key, JSON.stringify(data));
+                addSystemMessage(`[DEBUG] corruptSave: stamped schema_version=0 on ${key}. Reload + click Continue to verify drop.`);
             }
         };
         
