@@ -513,6 +513,60 @@ body {
 }
 
 /* ============================================
+   Stage 6: Item action buttons (Equip / Unequip / Use)
+   ============================================ */
+.item-action-button {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 0.72em;
+  font-family: "Fraunces", serif;
+  background: var(--dkColor);
+  border: 1px solid var(--ltColor);
+  border-radius: 3px;
+  color: #ffffff;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.item-action-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.item-action-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.equipment-item .item-action-button {
+  float: right;
+  margin-top: 2px;
+}
+
+.inventory-item .item-action-button {
+  flex-shrink: 0;
+}
+
+/* ============================================
+   Stage 6: gm_adjudicate confirm UI
+   ============================================ */
+.gm-adjudicate-confirm .gm-adjudicate-prose {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid var(--ltColor);
+  font-style: italic;
+  font-size: 0.9em;
+  line-height: 1.35;
+}
+
+.gm-adjudicate-confirm .gm-adjudicate-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ============================================
    Narrative Panel (Center Column - 60%)
    ============================================ */
 .narrative-panel {
@@ -816,6 +870,178 @@ button:disabled {
   font-size: 0.85em;
   background: var(--dkColor);
   border: 2px solid var(--ltColor);
+}
+
+/* ============================================
+   Stage 5: Connections Strip (exit buttons)
+   ============================================ */
+.connections-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 0;
+}
+
+.connections-strip:empty {
+  display: none;
+}
+
+.connection-button {
+  padding: 6px 12px;
+  font-size: 0.82em;
+  font-family: "Fraunces", serif;
+  background: var(--dkColor);
+  border: 2px solid var(--ltColor);
+  border-radius: 999px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.connection-button.connection-open:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.connection-button.connection-locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+  font-style: italic;
+}
+
+.connection-button .connection-lock {
+  margin-right: 4px;
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+@keyframes connection-reveal-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.65); }
+  70%  { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);  }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);     }
+}
+
+.connection-button.connection-revealed {
+  animation: connection-reveal-pulse 1.2s ease-out;
+}
+
+/* ============================================
+   Stage 5: Feature Cards (lore / searchable / interactive / puzzle)
+   ============================================ */
+.feature-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.feature-cards:empty {
+  display: none;
+}
+
+.feature-card {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--ltColor);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 0.88em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feature-card.feature-locked {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.feature-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.feature-card-title {
+  font-weight: bold;
+  font-size: 0.95em;
+}
+
+.feature-card-type {
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+
+.feature-card-desc {
+  line-height: 1.35;
+  opacity: 0.9;
+}
+
+.feature-card-hint {
+  margin-top: 2px;
+  font-style: italic;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.feature-card-action {
+  padding: 5px 12px;
+  font-size: 0.82em;
+  font-family: "Fraunces", serif;
+  background: var(--dkColor);
+  border: 2px solid var(--ltColor);
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.feature-card-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.feature-card-action-secondary {
+  opacity: 0.85;
+  border-style: dashed;
+}
+
+.feature-card-substate {
+  font-size: 0.78em;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.feature-card-solved {
+  color: rgba(77, 201, 77, 1);
+  opacity: 0.95;
+  font-weight: bold;
+  font-style: normal;
+}
+
+.feature-card-puzzle-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.feature-card-puzzle-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 0.85em;
+  background: var(--dkColor);
+  border: 1px solid var(--ltColor);
+  border-radius: 4px;
+  color: #ffffff;
+  font-family: "Fraunces", serif;
+}
+
+.feature-card-stub {
+  font-size: 0.78em;
+  opacity: 0.55;
+  font-style: italic;
 }
 
 /* ============================================
@@ -1203,6 +1429,27 @@ input[type="number"].dice-input {
   gap: 12px;
   justify-content: center;
 }
+
+/* Stage 7: completion overlay (sibling of death overlay) — same layout,
+   success-tinted title + a stats block between subtitle and buttons. */
+.completion-overlay .death-overlay-content h2 {
+  color: #c9a84a; /* warm gold instead of death-red */
+}
+
+.completion-overlay-stats {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem auto 1.25rem;
+  padding: 0.5rem 0.75rem;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.95em;
+  text-align: left;
+  max-width: 300px;
+}
+
+.completion-overlay-stats .label { color: var(--ltColor); }
+.completion-overlay-stats .value { text-align: right; font-variant-numeric: tabular-nums; }
 
 .start-choice-p {
   color: var(--ltColor);

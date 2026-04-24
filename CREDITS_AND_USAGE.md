@@ -23,7 +23,7 @@ So **each turn** costs: *(system prompt size + history size)* as input + *(lengt
 | Factor | Effect |
 |--------|--------|
 | **More turns** | More API calls and more messages in history → more input tokens per call as the session goes on. |
-| **Larger system prompt** | Bigger rules (e.g. long `rules.json`), bigger module (more rooms, features, text), more encounters → more input tokens **every** request. |
+| **Larger system prompt** | Bigger rules pack (`rules_*.json`), bigger module (more rooms, features, text), more encounters → more input tokens **every** request. |
 | **Longer conversation history** | Higher `MAX_HISTORY_TURNS` → more messages sent each time → more input per request. |
 | **Longer GM replies** | Model writes more → more output tokens. Capped by `MAX_TOKENS` (default 2000). |
 | **Model choice** | Newer/larger models (e.g. Sonnet 4) cost more per token than smaller/older ones (e.g. Haiku). |
@@ -40,7 +40,7 @@ So **each turn** costs: *(system prompt size + history size)* as input + *(lengt
    - If you switch the app (or server) to a model like Claude Haiku, cost per token is lower than Sonnet (at the cost of possible quality).
 
 4. **Keep rules and modules lean**  
-   - Shorter `rules.json` and smaller module JSON (fewer or shorter room/feature descriptions) reduce the system prompt size and thus input tokens on **every** turn.
+   - Shorter `rules_*.json` and smaller module JSON (fewer or shorter room/feature descriptions) reduce the system prompt size and thus input tokens on **every** turn.
 
 5. **Start a new game when testing**  
    - A fresh game has minimal history, so the first few turns send fewer input tokens than later in a long session.

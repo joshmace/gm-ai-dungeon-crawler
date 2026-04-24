@@ -177,6 +177,16 @@
             lastUserMessageWasDiceRoll: false,
             /** Last roll type: 'resolved' (attack auto-resolved by rules engine) | 'ability' | null (free-form). Drives the current-step hint in the combat prompt. */
             lastUserRollType: null,
+            /** Stage 5: runtime feature state. Deltas from authored initial state, keyed by feature id. */
+            featureState: {},
+            /** Stage 5: runtime connection overrides. Keyed by connection key; { state, revealed? }. */
+            connectionsModified: {},
+            /** Stage 5: ordered list of room ids visited this game. Drives visited-flag rendering in the prompt + UI. */
+            visitedRooms: [],
+            /** Stage 7: completion-condition state. `conditions_met` is a list of descriptor objects per the v1 save spec. */
+            completion: { completed: false, conditions_met: [] },
+            /** Stage 7: wall-clock timestamp when the current game run started. Preserved across loadGame. */
+            sessionStartedAt: null,
         };
         // Stage 1e: expose to extracted modules.
         window.gameState = gameState;
@@ -218,13 +228,13 @@
                     const room = gameData.module.rooms[roomId];
                     addSystemMessage(`[DEBUG] Teleported to ${room.name}`);
                     addNarration(room.description);
-                    // Stage 4: fire on_enter / on_traverse hazards for the new
-                    // room so testing the hazard dispatcher doesn't require
-                    // walking through the full module. Matches the production
-                    // room-change hook in scripts/response-parser.js.
-                    if (prev !== roomId && window.UI && window.UI.hazards) {
+                    // Stage 5: single coordination point — marks visited,
+                    // renders feature cards + connections strip, fires
+                    // on_enter hazards. Matches the production room-change
+                    // hook in scripts/response-parser.js.
+                    if (prev !== roomId && typeof onRoomEntry === 'function') {
                         setTimeout(() => {
-                            window.UI.hazards.triggerHazards(roomId, 'on_enter');
+                            onRoomEntry(roomId);
                         }, 0);
                     }
                     if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
@@ -274,6 +284,247 @@
             clearHistory() {
                 gameState.conversationHistory = [];
                 addSystemMessage('[DEBUG] Conversation history cleared');
+            },
+
+            // --- Stage 5 feature / connection helpers ---
+            //
+            // Skip the narrative path and write engine-level state directly.
+            // Each helper calls RulesEngine.applyEffect, then re-renders
+            // feature cards + connections strip so the UI reflects the change
+            // immediately. Use for smoke-testing without typing through GM
+            // narration (e.g. force the Oathblade rack open, reveal a hidden
+            // door, solve the puzzle to see on_success fire).
+
+            activateFeature(featureId, state) {
+                if (!window.RulesEngine || !window.GameState) return;
+                const ms = window.GameState.buildModuleState();
+                const result = window.RulesEngine.applyEffect(
+                    { type: 'activate_feature', target: featureId, state: state || 'unlocked' },
+                    ms,
+                    gameData
+                );
+                addSystemMessage(`[DEBUG] activateFeature(${featureId}, ${state || 'unlocked'}) → ${JSON.stringify(result)}`);
+                if (typeof saveGame === 'function') saveGame();
+                if (window.UI && window.UI.features && window.UI.features.renderForRoom) window.UI.features.renderForRoom(gameState.currentRoom);
+                if (window.UI && window.UI.connections && window.UI.connections.renderForRoom) window.UI.connections.renderForRoom(gameState.currentRoom);
+            },
+
+            unlockConnection(key) {
+                if (!window.RulesEngine || !window.GameState) return;
+                const ms = window.GameState.buildModuleState();
+                const result = window.RulesEngine.applyEffect(
+                    { type: 'unlock_connection', target: key },
+                    ms,
+                    gameData
+                );
+                addSystemMessage(`[DEBUG] unlockConnection(${key}) → ${JSON.stringify(result)}`);
+                if (typeof saveGame === 'function') saveGame();
+                if (window.UI && window.UI.connections && window.UI.connections.renderForRoom) window.UI.connections.renderForRoom(gameState.currentRoom);
+            },
+
+            revealConnection(key) {
+                if (!window.RulesEngine || !window.GameState) return;
+                const ms = window.GameState.buildModuleState();
+                const result = window.RulesEngine.applyEffect(
+                    { type: 'reveal_connection', target: key },
+                    ms,
+                    gameData
+                );
+                addSystemMessage(`[DEBUG] revealConnection(${key}) → ${JSON.stringify(result)}`);
+                if (typeof saveGame === 'function') saveGame();
+                if (window.UI && window.UI.connections && window.UI.connections.renderForRoom) window.UI.connections.renderForRoom(gameState.currentRoom);
+            },
+
+            // Force a puzzle solve — fires on_success effects + reward via markSolved.
+            // Use when you want to exercise the reward / effect pipeline without
+            // typing the narrative answer (e.g. test.solveFeature('hidden_word_riddle')
+            // for the Gauntlet regression).
+            solveFeature(featureId) {
+                if (window.UI && window.UI.features && window.UI.features.markSolved) {
+                    const ok = window.UI.features.markSolved(featureId, { narrateFromAuthored: true });
+                    addSystemMessage(`[DEBUG] solveFeature(${featureId}) → ${ok ? 'applied' : 'no-op (not found or already solved)'}`);
+                } else {
+                    addSystemMessage(`[DEBUG] solveFeature: UI.features.markSolved not available`);
+                }
+            },
+
+            // Stage 7: print the current save envelope to the console for
+            // spec-checking without round-tripping through localStorage.
+            // Returns the object as well, so `const s = test.dumpSave()` works.
+            dumpSave() {
+                if (!window.GameState || !window.GameState.getStateToSave) {
+                    addSystemMessage('[DEBUG] dumpSave: GameState.getStateToSave not available');
+                    return null;
+                }
+                const payload = window.GameState.getStateToSave();
+                console.log('[DEBUG] Save envelope:', payload);
+                const schema = payload && payload.schema_version;
+                const pack   = payload && payload.game_pack_id;
+                const module_ = payload && payload.module_id;
+                addSystemMessage(`[DEBUG] dumpSave: schema=${schema} pack=${pack} module=${module_} (full blob in console)`);
+                return payload;
+            },
+
+            // Stage 7: dump the raw save blob out of localStorage (what's
+            // actually on disk, post-write). Pairs with dumpSave() to check
+            // that what's serialized matches what's persisted.
+            dumpSavedBlob() {
+                const manifest = window.gameData && window.gameData._v1 && window.gameData._v1.manifest;
+                const packId = manifest && manifest.id;
+                if (!packId) { addSystemMessage('[DEBUG] dumpSavedBlob: no pack id'); return null; }
+                const key = 'gm-ai-dungeon-save:' + packId.replace(/[^a-z0-9_-]/gi, '_');
+                const raw = localStorage.getItem(key);
+                if (!raw) { addSystemMessage(`[DEBUG] dumpSavedBlob: no save at key ${key}`); return null; }
+                const parsed = JSON.parse(raw);
+                console.log('[DEBUG] Saved blob @', key, parsed);
+                addSystemMessage(`[DEBUG] dumpSavedBlob: key=${key} bytes=${raw.length} (full blob in console)`);
+                return parsed;
+            },
+
+            // Stage 7: force a save NOW even if isDead. Useful for testing
+            // the death-save-then-load flow (the death path calls saveGame
+            // just before flipping isDead; forceSave lets us sidestep that
+            // ordering if we're poking at edge cases).
+            forceSave() {
+                if (!window.GameState || !window.GameState.getStateToSave) return;
+                const payload = window.GameState.getStateToSave();
+                const packId = (payload && payload.game_pack_id) || 'default';
+                const key = 'gm-ai-dungeon-save:' + packId.replace(/[^a-z0-9_-]/gi, '_');
+                localStorage.setItem(key, JSON.stringify(payload));
+                addSystemMessage(`[DEBUG] forceSave: wrote ${key}`);
+            },
+
+            // Stage 7: stamp a bogus schema_version onto the current save
+            // slot so we can verify the "old save format" drop-and-message
+            // path on next load. Doesn't touch gameplay state.
+            corruptSave() {
+                const manifest = window.gameData && window.gameData._v1 && window.gameData._v1.manifest;
+                const packId = manifest && manifest.id;
+                if (!packId) { addSystemMessage('[DEBUG] corruptSave: no pack id'); return; }
+                const key = 'gm-ai-dungeon-save:' + packId.replace(/[^a-z0-9_-]/gi, '_');
+                const raw = localStorage.getItem(key);
+                if (!raw) { addSystemMessage(`[DEBUG] corruptSave: no save at ${key}`); return; }
+                const data = JSON.parse(raw);
+                data.schema_version = 0;
+                localStorage.setItem(key, JSON.stringify(data));
+                addSystemMessage(`[DEBUG] corruptSave: stamped schema_version=0 on ${key}. Reload + click Continue to verify drop.`);
+            },
+
+            // Stage 7: force the completion summary overlay without
+            // playing through the module. Uses the module's actual
+            // completion_condition when present so the summary-card
+            // subtitle matches what a real win would show; falls back
+            // to a synthetic { kind: 'forced' } plan for null-condition
+            // packs (Gauntlet) so you can still preview the card.
+            fireCompletion() {
+                if (!window.RulesEngine || !window.GameState) {
+                    addSystemMessage('[DEBUG] fireCompletion: engine not ready');
+                    return;
+                }
+                const mod = window.gameData && window.gameData._v1 && window.gameData._v1.module;
+                const cc = mod && mod.completion_condition;
+                const plan = cc
+                    ? { completed: true, kind: cc.type, target: cc.target || null }
+                    : { completed: true, kind: 'forced' };
+                gameState.completion = { completed: true, conditions_met: [plan] };
+                const summary = window.GameState.buildCompletionSummary(plan);
+                addSystemMessage(`[DEBUG] fireCompletion: kind=${plan.kind}${plan.target ? ' target='+plan.target : ''}`);
+                if (window.UI && window.UI.narrative && window.UI.narrative.showCompletionOverlay) {
+                    window.UI.narrative.showCompletionOverlay(summary);
+                } else {
+                    addSystemMessage('[DEBUG] fireCompletion: UI.narrative.showCompletionOverlay missing');
+                }
+            },
+
+            // Stage 7: evaluate the module's completion_condition NOW
+            // against live state without firing the overlay. Returns the
+            // plan object so you can see whether the win-condition is
+            // tracking (e.g. during a Havel fight — does the engine see
+            // his encounter as resolved yet?).
+            checkCompletion() {
+                if (!window.RulesEngine || !window.GameState) return null;
+                const mod = window.gameData && window.gameData._v1 && window.gameData._v1.module;
+                const ms  = window.GameState.buildModuleState();
+                const plan = window.RulesEngine.evaluateCompletion(mod, ms);
+                console.log('[DEBUG] evaluateCompletion:', plan, 'moduleState encounters:', ms.encounters);
+                addSystemMessage(`[DEBUG] checkCompletion: completed=${plan.completed} kind=${plan.kind}${plan.target ? ' target='+plan.target : ''} (full plan in console)`);
+                return plan;
+            },
+
+            // Stage 7: force HP to 0 to exercise the death-overlay path
+            // under the Stage 7 save rewrite. On Three Knots (at_zero:
+            // "dead") the death overlay fires immediately; on L&B /
+            // Gauntlet (at_zero: "unconscious") the Stage 7 path is the
+            // same save-then-flip sequence but the GM typically narrates
+            // unconsciousness — check that the save blob carried
+            // schema_version:1 either way.
+            //
+            // In normal play the overlay is rendered by the response
+            // parser after the GM narrates the killing blow. Here we
+            // bypass the GM round-trip, so call showDeathOverlay
+            // directly after modifyHP flips isDead.
+            killCharacter() {
+                if (!window.modifyHP || !gameState.character) {
+                    addSystemMessage('[DEBUG] killCharacter: state not ready');
+                    return;
+                }
+                const hp = gameState.character.hp || 0;
+                addSystemMessage(`[DEBUG] killCharacter: HP ${hp} → 0`);
+                window.modifyHP(-hp - 1);
+                if (gameState.isDead && window.showDeathOverlay) {
+                    window.showDeathOverlay('');
+                }
+            },
+
+            // Stage 7: mark every authored encounter resolved in one
+            // shot. Useful for Gauntlet regression ("null completion_
+            // condition must never fire") and for quickly reaching the
+            // all_encounters_defeated path on packs that use it.
+            // Mutates damageToEncounters so the engine sees the kills;
+            // does NOT fire the on_defeat_effects (those belong to the
+            // GM-narrated path).
+            defeatAllEncounters() {
+                const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
+                if (!rooms) return;
+                const { getEncounterHP } = window.UI && window.UI.encounters || {};
+                const hpLookup = getEncounterHP || window.getEncounterHP;
+                let n = 0;
+                for (const room of Object.values(rooms)) {
+                    for (const enc of (room.encounters || [])) {
+                        if (!enc || !enc.id) continue;
+                        const hp = hpLookup ? hpLookup(enc) : { max: 9999 };
+                        gameState.damageToEncounters[enc.id] = (hp && hp.max) || 9999;
+                        n++;
+                    }
+                }
+                addSystemMessage(`[DEBUG] defeatAllEncounters: marked ${n} encounter(s) resolved`);
+                if (window.checkCompletion) window.checkCompletion();
+                if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
+                if (window.updateMonsterPanel) window.updateMonsterPanel();
+                if (typeof saveGame === 'function') saveGame();
+            },
+
+            // Stage 7: helper for defeat_encounter conditions — mark
+            // exactly the target encounter resolved. On Crow's Hollow
+            // that's warden_lieutenants_last_stand; on Three Knots it's
+            // the tomb guardian. Shortcut for `test.defeatEncounter('id')`
+            // without walking the pack down to the room and fighting.
+            defeatEncounter(encounterId) {
+                const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
+                if (!rooms) return;
+                const hpLookup = window.getEncounterHP;
+                for (const room of Object.values(rooms)) {
+                    for (const enc of (room.encounters || [])) {
+                        if (!enc || enc.id !== encounterId) continue;
+                        const hp = hpLookup ? hpLookup(enc) : { max: 9999 };
+                        gameState.damageToEncounters[enc.id] = (hp && hp.max) || 9999;
+                        addSystemMessage(`[DEBUG] defeatEncounter: ${encounterId} (marked resolved)`);
+                        if (window.checkCompletion) window.checkCompletion();
+                        if (typeof saveGame === 'function') saveGame();
+                        return;
+                    }
+                }
+                addSystemMessage(`[DEBUG] defeatEncounter: ${encounterId} not found in any room`);
             }
         };
         

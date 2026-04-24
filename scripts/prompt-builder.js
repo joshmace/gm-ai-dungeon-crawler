@@ -197,32 +197,35 @@
         return out;
     }
 
+    /**
+     * Resolve a connection's effective state by merging the authored state
+     * with the runtime connectionsModified override. Returns the same shape
+     * ui-connections.normalize produces.
+     */
+    function effectiveConnection(key, authored, overrides) {
+        let target = null, label = null, authoredState = 'open';
+        if (typeof authored === 'string') {
+            target = authored;
+        } else if (authored && typeof authored === 'object') {
+            target = authored.to || null;
+            label = authored.label || null;
+            authoredState = authored.state || 'open';
+        }
+        const override = overrides && overrides[key];
+        const state = (override && override.state) || authoredState;
+        return { key, target, label, state };
+    }
+
     /** Full room detail — only for the current room. */
     function renderRoomFull(roomId, room, rooms) {
+        const gs = global.gameState || {};
+        const visited = Array.isArray(gs.visitedRooms) ? gs.visitedRooms : [];
         let out = `\n--- CURRENT ROOM: ${room.name} (id: ${roomId}) ---\n`;
         out += `Description: ${room.description}\n`;
-        out += `Exits (use ONLY these): ${renderExits(room, rooms)}\n`;
+        out += `Exits (use ONLY these; click-driven in-app too):\n${renderExitsDetailed(room, rooms, visited)}\n`;
+
         if (room.features && room.features.length > 0) {
-            out += 'Features (use ONLY these; do not add others):\n';
-            for (const f of room.features) {
-                out += `- ${f.name}: ${f.description || ''}`;
-                if (f.text)        out += ` | When read/used: "${f.text}"`;
-                if (f.note)        out += ` | Note: "${f.note}"`;
-                if (f.success)     out += ` | On success: "${f.success}"`;
-                if (f.failure)     out += ` | On failure: "${f.failure}"`;
-                if (f.contains)    out += ` | Contains: ${JSON.stringify(f.contains)}`;
-                if (f.interaction) out += ` | Interaction: ${f.interaction}`;
-                // Stage 4: v1 features carry tier strings (dc_tier) instead of
-                // numeric DCs. Render the tier so the GM names it rather than
-                // the number; the engine maps tier → DC per rules pack.
-                if (f.check && f.check.dc_tier) {
-                    const ctype = f.check.skill ? `${f.check.skill} skill` : (f.check.ability ? `${f.check.ability} check` : 'check');
-                    out += ` | Check: ${ctype}, tier ${f.check.dc_tier} (app rolls / compares)`;
-                } else if (f.dc != null) {
-                    out += ` | DC: ${f.dc} (use this exact value from ruleset scale)`;
-                }
-                out += '\n';
-            }
+            out += renderFeaturesBlock(room.features);
         }
         if (Array.isArray(room.hazards) && room.hazards.length > 0) {
             out += 'Hazards (APP HANDLES — do not request rolls for these; narrate only after the app reports the outcome in a callout):\n';
@@ -241,19 +244,126 @@
         return out;
     }
 
-    /** Compact room reference — id, name, and exits only. */
+    /**
+     * Compact room reference — id, name, visited flag, exits. Used for all
+     * rooms except the current one (Stage 4 size mitigation preserved).
+     */
     function renderRoomCompact(roomId, room, rooms) {
-        return `\n- ${room.name} (id: ${roomId}) — exits: ${renderExits(room, rooms)}\n`;
+        const gs = global.gameState || {};
+        const visited = Array.isArray(gs.visitedRooms) ? gs.visitedRooms : [];
+        const flag = visited.includes(roomId) ? 'visited' : 'unvisited';
+        return `\n- ${room.name} (id: ${roomId}, ${flag}) — exits: ${renderExits(room, rooms, visited)}\n`;
     }
 
-    function renderExits(room, rooms) {
+    /** Plain inline exit list for compact rooms. Annotates target visited flag. */
+    function renderExits(room, rooms, visited) {
         if (!room.connections || Object.keys(room.connections).length === 0) return 'none';
-        return Object.entries(room.connections).map(([dir, targetOrObj]) => {
-            const targetId = typeof targetOrObj === 'string' ? targetOrObj : (targetOrObj && targetOrObj.to);
-            const target = targetId ? rooms[targetId] : null;
-            const targetName = target ? target.name : (targetId || '?');
-            return `${dir} → ${targetName} (${targetId || '?'})`;
-        }).join(', ');
+        const gs = global.gameState || {};
+        const overrides = gs.connectionsModified || {};
+        return Object.entries(room.connections).map(([key, authored]) => {
+            const c = effectiveConnection(key, authored, overrides);
+            if (c.state === 'hidden') return null;   // don't surface hidden doors in the prompt
+            const target = c.target ? rooms[c.target] : null;
+            const targetName = target ? target.name : (c.target || '?');
+            const vFlag = visited && c.target && visited.includes(c.target) ? ', visited' : ', unvisited';
+            const stateTag = c.state === 'locked' ? ', LOCKED' : '';
+            const label = c.label || key;
+            return `${label} → ${targetName} (${c.target || '?'}${vFlag}${stateTag})`;
+        }).filter(Boolean).join(', ') || 'none';
+    }
+
+    /** Detailed exit list for the current room: one per line, label + state + target + visited flag. */
+    function renderExitsDetailed(room, rooms, visited) {
+        if (!room.connections || Object.keys(room.connections).length === 0) return '  (no exits authored)';
+        const gs = global.gameState || {};
+        const overrides = gs.connectionsModified || {};
+        const lines = [];
+        for (const [key, authored] of Object.entries(room.connections)) {
+            const c = effectiveConnection(key, authored, overrides);
+            if (c.state === 'hidden') continue;
+            const target = c.target ? rooms[c.target] : null;
+            const targetName = target ? target.name : (c.target || '?');
+            const vFlag = visited && c.target && visited.includes(c.target) ? 'visited' : 'unvisited';
+            const stateWord = c.state === 'locked' ? 'LOCKED (do not allow passage)' : 'open';
+            const label = c.label || key;
+            lines.push(`  - ${label} — ${stateWord} — leads to ${targetName} (${c.target || '?'}, ${vFlag})`);
+        }
+        return lines.length ? lines.join('\n') : '  (no exits)';
+    }
+
+    /**
+     * v1 features block. Surfaces every feature — including those whose
+     * prereqs are unmet, so the GM knows the feature exists but shouldn't
+     * let the player interact with it yet. Sub-type-specific detail lines:
+     *
+     *   lore       → on_examine prose (optional embellishment by GM)
+     *   searchable → check tier + on_success / on_failure prose + rewards
+     *   interactive→ current state + the action for that state
+     *   puzzle     → solution.description (GM-only hint for judging narrative
+     *                solves) + [FEATURE_SOLVED:] tag requirement + check fallback
+     *
+     * All feature interactions are app-driven (cards). The GM's job is to
+     * embellish lore examine prose, judge puzzle narrative solves (emitting
+     * [FEATURE_SOLVED: <id>] on correct answers), and otherwise leave the
+     * mechanics to the app.
+     */
+    function renderFeaturesBlock(features) {
+        const gs = global.gameState || {};
+        const RE = global.RulesEngine;
+        const moduleState = (global.GameState && global.GameState.buildModuleState)
+            ? global.GameState.buildModuleState()
+            : { features: gs.featureState || {}, connectionsModified: gs.connectionsModified || {}, encounters: {} };
+
+        let out = 'Features (APP DRIVES cards for these — do not request rolls or narrate outcomes; only embellish lore prose and judge puzzle proposals via [FEATURE_SOLVED: <id>]):\n';
+        for (const f of features) {
+            if (!f) continue;
+            const type = (f.type || 'lore').toLowerCase();
+            const rt = (moduleState.features && moduleState.features[f.id]) || {};
+            const prereqsMet = RE && RE.prereqsMet ? RE.prereqsMet(f, moduleState) : true;
+            const head = `- ${f.name || f.id} (${type}${prereqsMet ? '' : ', PREREQ UNMET'}): ${f.description || ''}`;
+            let detail = '';
+
+            if (type === 'lore') {
+                if (f.on_examine) detail += ` | On examine: "${escapeForPrompt(f.on_examine)}"`;
+            } else if (type === 'searchable') {
+                if (f.check && f.check.dc_tier) {
+                    const ctype = f.check.skill ? `${f.check.skill} skill` : (f.check.ability ? `${f.check.ability} check` : 'check');
+                    detail += ` | Check: ${ctype} tier ${f.check.dc_tier}`;
+                }
+                if (rt.succeeded) detail += ' | Already succeeded';
+                else if (rt.searched) detail += ' | Searched unsuccessfully (player may retry)';
+                if (f.persists) detail += ' | Persists (can re-search)';
+            } else if (type === 'interactive') {
+                const cur = rt.current_state || f.initial_state || ((Array.isArray(f.states) && f.states[0]) || 'default');
+                detail += ` | Current state: ${cur}`;
+                const action = (f.actions && f.actions[cur]) || null;
+                if (action && action.label) detail += ` | Action at ${cur}: "${escapeForPrompt(action.label)}"`;
+            } else if (type === 'puzzle') {
+                if (rt.solved) {
+                    detail += ' | SOLVED';
+                } else {
+                    const sol = f.solution || {};
+                    if (sol.description) {
+                        detail += ` | SOLVE HINT (GM only): ${escapeForPrompt(sol.description)}`;
+                        detail += ` | When the player proposes a solution that matches this hint, emit [FEATURE_SOLVED: ${f.id}]`;
+                    }
+                    if (sol.check && sol.check.dc_tier) {
+                        const ctype = sol.check.skill ? `${sol.check.skill} skill` : (sol.check.ability ? `${sol.check.ability} check` : 'check');
+                        detail += ` | Roll fallback (app drives): ${ctype} tier ${sol.check.dc_tier}`;
+                    }
+                }
+            }
+
+            if (!prereqsMet && f.prereq_hint) detail += ` | Prereq hint shown to player: "${escapeForPrompt(f.prereq_hint)}"`;
+            out += head + detail + '\n';
+        }
+        return out;
+    }
+
+    /** Strip long newlines + clip to a reasonable size so prose lines don't break the prompt layout. */
+    function escapeForPrompt(s) {
+        const str = String(s || '').replace(/\s+/g, ' ').trim();
+        return str.length > 260 ? str.slice(0, 259) + '…' : str;
     }
 
     // --- Top-level builder --------------------------------------------------

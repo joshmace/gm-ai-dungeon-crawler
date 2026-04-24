@@ -183,12 +183,19 @@
             alert('Failed to load game data. Check console for details and ensure all JSON files are in the same directory.');
             return;
         }
+        // Stage 7: drop any pre-v1-envelope saves before checking for a
+        // valid one. If purge fired, stash a note so the post-boot welcome
+        // message tells the user their old save format was dropped.
+        const purged = global.purgeStaleSaves ? global.purgeStaleSaves() : false;
         if (hasValidSave()) {
             showStartChoice();
             return;
         }
         initializeGameStateFromData();
         finishGameStart(true);
+        if (purged && typeof addSystemMessage === 'function') {
+            addSystemMessage('Old save format from a pre-Stage-7 build was dropped. This is a fresh game.');
+        }
     }
 
     function initializeGameStateFromData() {
@@ -207,10 +214,20 @@
         gs().hazardState = {};
         gs().hazardQueue = [];
         gs().activeHazard = null;
+        // Stage 5: module runtime state (feature deltas, connection overrides, visited rooms).
+        // A fresh game starts with authored state; load/save carries these forward too.
+        gs().featureState = {};
+        gs().connectionsModified = {};
+        gs().visitedRooms = [];
         gs().commandHistory = [];
         gs().commandHistoryIndex = -1;
         gs().commandHistoryDraft = '';
         gs().pendingLevelUpAck = null;
+        // Stage 7: completion-condition state + session-start wall-clock.
+        // sessionStartedAt is preserved across loadGame so the completion
+        // summary can show the original session's total runtime.
+        gs().completion = { completed: false, conditions_met: [] };
+        gs().sessionStartedAt = Date.now();
         gs().character = {
             name: gd().character.basic_info.name,
             class: gd().character.basic_info.class,
@@ -268,7 +285,12 @@
                 isWeapon,
                 isArmor,
                 weaponType: typeInfo.type,
-                weaponRange: typeInfo.range
+                weaponRange: typeInfo.range,
+                // Stage 6 back-fill: preserve the v1 slot + id so equipItem /
+                // unequipItem can find this entry on the legacy side (the Unequip
+                // button also checks _v1_slot to decide whether to render).
+                _v1_slot: item.slot || null,
+                _v1_id:   item.id   || null
             };
             if (isArmor && item.ac != null) eq.ac = item.ac;
             if (isWeapon && item.damage) {
@@ -304,7 +326,8 @@
         const overlay = document.getElementById('loadingOverlay');
         if (!overlay) return;
         const meta = getSaveMetadata();
-        const savedAt = meta && meta.savedAt ? new Date(meta.savedAt).toLocaleString() : '';
+        const savedAtTs = meta && (meta.saved_at || meta.savedAt);
+        const savedAt = savedAtTs ? new Date(savedAtTs).toLocaleString() : '';
         overlay.innerHTML = `
             <h2>Saved game found</h2>
             <p class="start-choice-p">Continue your adventure or start a new game.</p>
@@ -331,6 +354,7 @@
 
     function finishGameStart(showWelcome) {
         hideDeathOverlay();
+        if (global.hideCompletionOverlay) global.hideCompletionOverlay();
         updateLoadingStatus('Rendering interface...');
         initializeCharacterSheet();
         document.getElementById('dungeonTitle').textContent = gd().module.module.title;
@@ -358,17 +382,15 @@
             addSystemMessage('Game loaded.');
             addResumeContext();
         }
-        // Stage 4: fire any on_enter hazards in the starting room. Defer a tick
-        // so the welcome narration lands first. The dispatcher's synonym rule
-        // also catches on_traverse hazards at entry time. No-op for modules
-        // whose starting room has no hazards (Gauntlet's hall_of_initiation).
-        if (global.UI && global.UI.hazards) {
-            setTimeout(() => {
-                const roomId = gs().currentRoom;
-                if (!roomId) return;
-                global.UI.hazards.triggerHazards(roomId, 'on_enter');
-            }, 0);
-        }
+        // Stage 5: single room-entry call. Marks the starting room visited,
+        // renders feature cards + connections strip, and fires any on_enter
+        // hazards (synonym-covering on_traverse too). Deferred a tick so the
+        // welcome narration / resume context lands first.
+        setTimeout(() => {
+            const roomId = gs().currentRoom;
+            if (!roomId) return;
+            onRoomEntry(roomId);
+        }, 0);
         document.getElementById('playerInput').focus();
         const copyBtn = document.getElementById('copyNarrativeBtn');
         if (copyBtn) copyBtn.onclick = () => copyNarrativeToClipboard();
@@ -427,13 +449,48 @@
         }
     }
 
+    /**
+     * Stage 5: single coordination point for room entry. Called from:
+     *   - finishGameStart (game start / resume)
+     *   - response-parser's room-change wiring (player moved via narration)
+     *   - ui-connections click handler indirectly (via the same response-parser path)
+     *
+     * Responsibilities in order:
+     *   1. Mark the room visited (idempotent; only first entry appends).
+     *   2. Render the feature cards for this room.
+     *   3. Render the exit-button strip for this room.
+     *   4. Fire any on_enter hazards in this room (the Stage 4 dispatcher's
+     *      synonym rule also catches on_traverse hazards at entry time).
+     *
+     * Steps 2 + 3 re-evaluate prereqs every call, so features / connections
+     * that became accessible via applyEffect while the player was elsewhere
+     * surface correctly on re-entry.
+     */
+    function onRoomEntry(roomId) {
+        if (!roomId) return;
+        debugLog('STATE', `onRoomEntry: ${roomId}`);
+        if (global.GameState && global.GameState.markRoomVisited) {
+            global.GameState.markRoomVisited(roomId);
+        }
+        if (global.UI && global.UI.features && global.UI.features.renderForRoom) {
+            global.UI.features.renderForRoom(roomId);
+        }
+        if (global.UI && global.UI.connections && global.UI.connections.renderForRoom) {
+            global.UI.connections.renderForRoom(roomId);
+        }
+        if (global.UI && global.UI.hazards && global.UI.hazards.triggerHazards) {
+            global.UI.hazards.triggerHazards(roomId, 'on_enter');
+        }
+    }
+
     function submitAction() {
         const input = document.getElementById('playerInput');
         const action = input.value.trim();
-        
+
         if (!action || gs().waitingForRoll) return;
-        
+
         gs().lastCombatRoom = null; // clear lingering monster panel when player takes another action
+        gs()._consumableUsedThisTurn = false; // Stage 6: reset the Use-button guard for this turn
         tryParseWeaponAway(action);
         tryParseWeaponSwitch(action);
         tryParseArmorState(action);
@@ -473,6 +530,7 @@
         handleKeyPress,
         handleInputKeyDown,
         submitAction,
+        onRoomEntry,
         loadGameData,
         updateLoadingStatus,
         debugLog,
@@ -488,6 +546,7 @@
     global.handleKeyPress              = handleKeyPress;
     global.handleInputKeyDown          = handleInputKeyDown;
     global.submitAction                = submitAction;
+    global.onRoomEntry                 = onRoomEntry;
     global.loadGameData                = loadGameData;
     global.updateLoadingStatus         = updateLoadingStatus;
     global.debugLog                    = debugLog;

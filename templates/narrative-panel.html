@@ -26,9 +26,25 @@
       </div>
     </div>
   </div>
+  <!-- Stage 7: completion overlay (shown when the module's completion_condition fires) -->
+  <div class="death-overlay completion-overlay" id="completionOverlay">
+    <div class="death-overlay-content">
+      <h2 id="completionOverlayTitle">Adventure Complete</h2>
+      <p class="death-overlay-subtitle" id="completionOverlaySubtitle"></p>
+      <div class="completion-overlay-stats" id="completionOverlayStats"></div>
+      <div class="death-overlay-buttons">
+        <button type="button" class="primary-button" id="completionBtnRestart">Restart adventure</button>
+        <button type="button" class="secondary-button" id="completionBtnLoadSave">Load save</button>
+      </div>
+    </div>
+  </div>
   <!-- Input Section (fixed to bottom) -->
   <div class="input-section half-bottom-notched">
     <div class="half-bottom-notched">
+      <!-- Stage 5: structured room features (lore / searchable / interactive / puzzle cards) -->
+      <div class="feature-cards" id="featureCards"></div>
+      <!-- Stage 5: structured exits (connection buttons, incl. locked chips) -->
+      <div class="connections-strip" id="connectionsStrip"></div>
       <!-- Dice Rolling Section -->
       <div class="dice-section" id="diceSection">
         <span class="dice-label" id="rollPrompt">Roll requested:</span>

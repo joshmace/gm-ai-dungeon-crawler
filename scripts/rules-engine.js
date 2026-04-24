@@ -1351,6 +1351,331 @@
         return plan;
     }
 
+    // ------------------------------------------------------------
+    // Stage 5 — Rooms, connections, features, effect dispatch
+    //
+    // Pure functions for feature prereq evaluation, effect dispatch, and
+    // feature-check input assembly. No DOM, no globals; callers pass the
+    // state slice to mutate (moduleState) and receive a result object for
+    // logging. UI.features / UI.connections drive the side effects off the
+    // returned diffs and fire the appropriate renders.
+    //
+    // Convention A (see REFACTOR_V1_PLAN.md Risks §4): `activate_feature`
+    // writes both `current_state: <state>` and `<state>: true` on the
+    // feature's runtime slot so prereq evaluators matching either form
+    // (the v1 schema leaves this grey) resolve consistently.
+    //
+    // moduleState shape:
+    //   {
+    //     features:            { [id]: { current_state?, solved?, unlocked?, succeeded?, searched?, ... } },
+    //     connectionsModified: { [key]: { state, revealed? } },
+    //     encounters:          { [id]: { defeated?, resolved? } },  // optional; other code owns this
+    //     visitedRooms:        [ roomId, ... ]                      // optional
+    //   }
+    // ------------------------------------------------------------
+
+    /**
+     * Evaluate a feature's prerequisites against moduleState. Returns true if
+     * no prereqs are authored or if every authored prereq matches.
+     *
+     * Supports:
+     *   prerequisites.feature_state: { [targetId]: "<required state>" }
+     *     Matches when moduleState.features[targetId].current_state === required
+     *     OR moduleState.features[targetId][required] === true (Convention A).
+     *   prerequisites.encounter_defeated: [ encounterId, ... ]
+     *     Matches when moduleState.encounters[encounterId].defeated|resolved is true.
+     */
+    function prereqsMet(feature, moduleState) {
+        const pre = feature && feature.prerequisites;
+        if (!pre) return true;
+        const ms = moduleState || {};
+        const features   = ms.features   || {};
+        const encounters = ms.encounters || {};
+
+        if (pre.feature_state && typeof pre.feature_state === 'object') {
+            for (const [targetId, required] of Object.entries(pre.feature_state)) {
+                const fs = features[targetId] || {};
+                const matches = fs.current_state === required
+                             || fs[required] === true;
+                if (!matches) return false;
+            }
+        }
+        if (Array.isArray(pre.encounter_defeated)) {
+            for (const encId of pre.encounter_defeated) {
+                const enc = encounters[encId] || {};
+                if (!enc.defeated && !enc.resolved) return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Dispatch a single v1 effect against moduleState. Pure-ish: mutates
+     * moduleState in place (callers own it) and returns a result object for
+     * debug-log + UI-refresh routing.
+     *
+     * Supported types:
+     *   - activate_feature: { target, state } → featureState[target].current_state = state + [state]=true
+     *   - unlock_connection: { target } → connectionsModified[target].state = 'open'
+     *   - reveal_connection: { target } → connectionsModified[target].state = 'open', revealed: true
+     *
+     * `gameData` is optional; when passed, the engine cross-checks that the
+     * effect's target actually exists (connection key lives on some room,
+     * or a feature with that id exists). A missing target still applies
+     * (so authoring bugs don't silently no-op) but the result flags it.
+     */
+    function applyEffect(effect, moduleState, gameData) {
+        if (!effect || typeof effect !== 'object' || !effect.type) {
+            return { applied: false, reason: 'invalid_effect' };
+        }
+        if (!moduleState) return { applied: false, reason: 'no_module_state' };
+        const type = effect.type;
+        const target = effect.target;
+        if (!target) return { type, applied: false, reason: 'missing_target' };
+
+        if (type === 'activate_feature') {
+            if (!moduleState.features) moduleState.features = {};
+            if (!moduleState.features[target]) moduleState.features[target] = {};
+            const fs = moduleState.features[target];
+            const state = effect.state || 'activated';
+            fs.current_state = state;
+            fs[state] = true;   // Convention A — flag set so prereq matcher finds it either way.
+            const found = gameData ? !!findFeatureById(gameData, target) : null;
+            return { type, target, state, applied: true, found };
+        }
+
+        if (type === 'unlock_connection' || type === 'reveal_connection') {
+            if (!moduleState.connectionsModified) moduleState.connectionsModified = {};
+            const rec = { state: 'open' };
+            if (type === 'reveal_connection') rec.revealed = true;
+            moduleState.connectionsModified[target] = rec;
+            const found = gameData ? !!findConnectionByKey(gameData, target) : null;
+            return { type, target, applied: true, found };
+        }
+
+        return { type, target, applied: false, reason: 'unknown_effect_type' };
+    }
+
+    /**
+     * Evaluate a module's completion_condition against the current moduleState
+     * (typically assembled by GameState.buildModuleState). Pure function: does
+     * not mutate state. Returns { completed, kind, target? }.
+     *
+     * Condition types (per v1 schema JSON_SCHEMAS.md §completion_condition):
+     *   - { type: 'defeat_encounter', target: <enc_id> }
+     *     matches when moduleState.encounters[target] has .resolved (or .defeated)
+     *   - { type: 'reach_room', target: <room_id> }
+     *     matches when moduleState.visitedRooms includes target
+     *   - { type: 'all_encounters_defeated' }
+     *     matches when every encounter authored in the module has resolved
+     *   - null / missing → kind: 'gm_judged', completed: false (no app event)
+     *
+     * `module` is the v1 module file (gameData._v1.module).
+     */
+    function evaluateCompletion(module, moduleState) {
+        const cc = module && module.completion_condition;
+        if (!cc || typeof cc !== 'object') {
+            return { completed: false, kind: 'gm_judged' };
+        }
+        const ms = moduleState || {};
+        const encounters = ms.encounters || {};
+        const visited    = Array.isArray(ms.visitedRooms) ? ms.visitedRooms : [];
+
+        if (cc.type === 'defeat_encounter') {
+            const target = cc.target;
+            if (!target) return { completed: false, kind: cc.type, target: null };
+            const row = encounters[target] || {};
+            const done = !!(row.resolved || row.defeated);
+            return { completed: done, kind: cc.type, target };
+        }
+
+        if (cc.type === 'reach_room') {
+            const target = cc.target;
+            if (!target) return { completed: false, kind: cc.type, target: null };
+            return { completed: visited.includes(target), kind: cc.type, target };
+        }
+
+        if (cc.type === 'all_encounters_defeated') {
+            // Walk authored encounters so the gate is grounded in module truth
+            // (not just whichever ids moduleState has seen). If a module has
+            // zero encounters authored, this is vacuously true — flagged for
+            // caller awareness via the returned kind.
+            const rooms = (module && module.rooms) || {};
+            const ids = [];
+            for (const room of Object.values(rooms)) {
+                for (const enc of (room && room.encounters) || []) {
+                    if (enc && enc.id) ids.push(enc.id);
+                }
+            }
+            if (ids.length === 0) {
+                return { completed: false, kind: cc.type, reason: 'no_encounters_authored' };
+            }
+            for (const id of ids) {
+                const row = encounters[id] || {};
+                if (!row.resolved && !row.defeated) {
+                    return { completed: false, kind: cc.type };
+                }
+            }
+            return { completed: true, kind: cc.type };
+        }
+
+        return { completed: false, kind: cc.type || 'unknown' };
+    }
+
+    /** Find a feature by id across every room in the module. null if none. */
+    function findFeatureById(gameData, featureId) {
+        const rooms = gameData && gameData.module && gameData.module.rooms;
+        if (!rooms) return null;
+        for (const room of Object.values(rooms)) {
+            const feats = (room && room.features) || [];
+            for (const f of feats) if (f && f.id === featureId) return f;
+        }
+        return null;
+    }
+
+    /** Find a connection by its key across every room. Returns { roomId, connection } or null. */
+    function findConnectionByKey(gameData, connKey) {
+        const rooms = gameData && gameData.module && gameData.module.rooms;
+        if (!rooms) return null;
+        for (const [roomId, room] of Object.entries(rooms)) {
+            const conns = (room && room.connections) || {};
+            if (Object.prototype.hasOwnProperty.call(conns, connKey)) {
+                return { roomId, connection: conns[connKey] };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Pull the check spec out of a feature, regardless of sub-type:
+     *   - searchable: feature.check
+     *   - puzzle:     feature.solution.check
+     * Returns the { skill?, ability?, dc_tier } object, or null when the
+     * feature has no authored check (lore, interactive, or a narrative-only puzzle).
+     */
+    function featureCheckSpec(feature) {
+        if (!feature) return null;
+        if (feature.check) return feature.check;
+        if (feature.solution && feature.solution.check) return feature.solution.check;
+        return null;
+    }
+
+    /**
+     * Assemble the resolveCheck inputs a feature's check should roll against,
+     * given v1 character + rules + items. Returns an object compatible with
+     * ui-dice's v1Check ctx (method, modifier, target, dc, label, abbr,
+     * critSuccessOn, critFailureOn, adEnabled) — the same shape ui-hazards
+     * builds for hazard checks.
+     *
+     * Returns null when no check is authored or when the character/rules
+     * don't resolve the skill/ability.
+     */
+    function featureCheckInputs(feature, character, rules, itemsById) {
+        const check = featureCheckSpec(feature);
+        if (!check || !character || !rules) return null;
+        const tier = check.dc_tier || null;
+
+        let ctx = null;
+        if (check.skill)              ctx = checkInputsFor(character, rules, itemsById, 'skill',   check.skill);
+        if (!ctx && check.ability)    ctx = checkInputsFor(character, rules, itemsById, 'ability', check.ability);
+        if (!ctx) return null;
+
+        let dc = null;
+        let target = ctx.target;
+        if (ctx.method === 'roll_under_score') {
+            const adjust = tierTargetAdjust(tier, rules);
+            if (target != null) target = target + adjust;
+        } else {
+            dc = dcForTier(tier, rules);
+        }
+        return Object.assign({}, ctx, { tier, dc, target });
+    }
+
+    // ------------------------------------------------------------
+    // Stage 6 — Consumable dispatch
+    //
+    // Pure function: given an items-library entry + character + rules,
+    // return a plan the caller drives. No state mutation, no DOM, no RNG
+    // on the caller's behalf — but heal_player DOES roll the amount via
+    // rollFormula (RNG injection supported for tests). Three on_use
+    // keywords from the v1 schema:
+    //
+    //   heal_player     amount = dice formula → roll and clamp at caller.
+    //   cure_condition  amount = condition id OR array of ids → caller
+    //                   removes each from character.conditions.
+    //   gm_adjudicate   amount = prose text → caller surfaces a confirm
+    //                   UI, then injects a hint into the next GM turn.
+    //
+    // Unknown / missing on_use falls through to gm_adjudicate with a
+    // descriptive confirmText so weird authored entries don't brick.
+    // ------------------------------------------------------------
+
+    /**
+     * Dispatch plan for a consumable item.
+     *
+     * Inputs:
+     *   item      — resolved items-library entry (has .consumable.on_use, .consumable.amount).
+     *   character — v1 character (for hp_current clamp on heal; caller applies).
+     *   rules     — v1 rules pack (unused today; reserved for per-ruleset variants).
+     *   opts.rng  — optional RNG for deterministic heal tests.
+     *
+     * Returns one of:
+     *   { kind: 'heal_player',    amount, formula, rolls, breakdown }
+     *   { kind: 'cure_condition', conditions: [id, id, ...] }
+     *   { kind: 'gm_adjudicate',  confirmText, prose }
+     *   { kind: 'none',           reason }   (item isn't a consumable / no on_use)
+     */
+    function useConsumable(item, character, rules, opts) {
+        if (!item || !item.consumable || !item.consumable.on_use) {
+            return { kind: 'none', reason: 'not_consumable' };
+        }
+        const on_use = String(item.consumable.on_use).toLowerCase().trim();
+        const amount = item.consumable.amount;
+        const itemName = item.name || item.id || 'item';
+        const rng = opts && opts.rng;
+
+        if (on_use === 'heal_player') {
+            if (amount == null) return { kind: 'none', reason: 'missing_amount' };
+            if (typeof amount === 'number') {
+                return { kind: 'heal_player', amount, formula: String(amount), rolls: [amount], breakdown: String(amount) };
+            }
+            const roll = rollFormula(String(amount), { rng });
+            return {
+                kind: 'heal_player',
+                amount: roll.total,
+                formula: String(amount),
+                rolls: roll.rolls,
+                breakdown: roll.breakdown
+            };
+        }
+
+        if (on_use === 'cure_condition') {
+            let conditions = [];
+            if (Array.isArray(amount)) conditions = amount.map(s => String(s).toLowerCase().trim()).filter(Boolean);
+            else if (typeof amount === 'string') {
+                // Accept comma-separated ids too, just in case an author writes "poisoned, wounded".
+                conditions = amount.split(',').map(s => s.toLowerCase().trim()).filter(Boolean);
+            }
+            return { kind: 'cure_condition', conditions };
+        }
+
+        if (on_use === 'gm_adjudicate') {
+            return {
+                kind: 'gm_adjudicate',
+                confirmText: `Use ${itemName}?`,
+                prose: typeof amount === 'string' ? amount : ''
+            };
+        }
+
+        // Unknown keyword → let the GM adjudicate rather than silently dropping.
+        return {
+            kind: 'gm_adjudicate',
+            confirmText: `Use ${itemName}?`,
+            prose: typeof amount === 'string' ? amount : `(Unrecognized on_use: ${on_use})`,
+            reason: 'unknown_on_use'
+        };
+    }
+
     global.RulesEngine = {
         rollDie,
         parseFormula,
@@ -1381,6 +1706,17 @@
         checkInputsFor,
         evaluateHazard,
         skillDefFor,
-        conditionAdvDisadvFor
+        conditionAdvDisadvFor,
+        // Stage 5 rooms / connections / features / effects:
+        prereqsMet,
+        applyEffect,
+        findFeatureById,
+        findConnectionByKey,
+        featureCheckSpec,
+        featureCheckInputs,
+        // Stage 6 items / consumables:
+        useConsumable,
+        // Stage 7 completion-condition:
+        evaluateCompletion
     };
 })(typeof window !== 'undefined' ? window : globalThis);

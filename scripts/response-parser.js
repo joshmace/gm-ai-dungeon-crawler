@@ -160,6 +160,7 @@
             .replace(/\[COMBAT:\s*(on|off|true|false|yes|no)\]/gi, '')
             .replace(/\[MODE:\s*(travel|exploration)\]/gi, '')
             .replace(/\[ROOM:\s*[a-z0-9_]+\]/gi, '')
+            .replace(/\[FEATURE_SOLVED:\s*[a-z0-9_]+\]/gi, '')
             .replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, '')
             .trim();
         
@@ -206,18 +207,17 @@
             disableInput(false);
         }
 
-        // Stage 4: fire room-entry hazards when the room has changed during
-        // this response. Runs AFTER narration / roll prompt so the designer
-        // reads the GM's room description before the hazard UI appears.
-        // We fire once with 'on_enter'; the dispatcher's synonym rule also
-        // catches on_traverse hazards at room-entry time (Stage 5 refines
-        // on_traverse once connection clicks become structured). Deferred a
-        // tick so callAIGM's DOM writes settle first.
+        // Stage 5: on room change, run the single coordination point that
+        // marks the room visited, renders feature cards + connections strip,
+        // and fires on_enter hazards (synonym-covering on_traverse too).
+        // Runs AFTER narration / roll prompt so the designer reads the GM's
+        // room description before the new UI panels appear. Deferred a tick
+        // so callAIGM's DOM writes settle first.
         const newRoom = gs().currentRoom;
-        if (newRoom && newRoom !== previousRoom && global.UI && global.UI.hazards) {
-            debugLog('HAZARD', `room change ${previousRoom} → ${newRoom}; triggering on_enter (on_traverse synonym)`);
+        if (newRoom && newRoom !== previousRoom) {
+            debugLog('PARSE', `room change ${previousRoom} → ${newRoom}; running onRoomEntry`);
             setTimeout(() => {
-                global.UI.hazards.triggerHazards(newRoom, 'on_enter');
+                if (global.onRoomEntry) global.onRoomEntry(newRoom);
             }, 0);
         }
     }
@@ -443,6 +443,9 @@
                 }
             }
             updateCharacterDisplay();
+            // Stage 7: encounter defeats can satisfy defeat_encounter /
+            // all_encounters_defeated completion conditions.
+            if (global.checkCompletion) global.checkCompletion();
         }
 
         out.text = text.replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, ' ');
@@ -685,6 +688,32 @@
         }
     }
 
+    /**
+     * Stage 5: when the GM emits [FEATURE_SOLVED: <feature_id>] in response to
+     * a narrative puzzle proposal, route the solve to UI.features.markSolved so
+     * on_success effects / rewards fire and the card flips to "Solved". Only
+     * features of type 'puzzle' are valid targets; other types ignore the tag.
+     * Multiple tags in one response are all honored.
+     */
+    function tryParseFeatureSolved(text) {
+        if (!text) return;
+        const re = /\[FEATURE_SOLVED:\s*([a-z0-9_]+)\s*\]/gi;
+        let m;
+        let count = 0;
+        while ((m = re.exec(text)) !== null) {
+            const id = m[1];
+            const UIf = global.UI && global.UI.features;
+            if (UIf && UIf.markSolved) {
+                const ok = UIf.markSolved(id, { narrateFromAuthored: false });
+                debugLog('PARSE', `[FEATURE_SOLVED: ${id}] → markSolved ${ok ? 'applied' : 'skipped (not found or already solved)'}`);
+            } else {
+                debugLog('PARSE', `[FEATURE_SOLVED: ${id}] seen but UI.features.markSolved not wired`);
+            }
+            count++;
+        }
+        if (count > 1) debugLog('PARSE', `[FEATURE_SOLVED:] tag appeared ${count} times in one response`);
+    }
+
     function parseStateChanges(text) {
         debugLog('PARSE', 'Parsing state changes from AI response');
         gs().combatStateFromTag = false; // reset; set true if GM used [COMBAT: on/off]
@@ -694,6 +723,7 @@
         
         tryParseRoomChange(plainText);
         tryParseModeTag(plainText);
+        tryParseFeatureSolved(plainText);  // Stage 5: [FEATURE_SOLVED: <id>] → markSolved.
         tryParseCombatTag(plainText);   // GM tag takes precedence
         tryParseCombatBegins(plainText);
         tryParseRetreat(plainText);
@@ -840,18 +870,32 @@
 
     /** Parse when player uses Pack items (potion, rope, rations, torch) and decrement quantity.
      * @param {string} text - GM or player narrative text
-     * @param {boolean} fromPlayer - if true, set torchUseParsedThisTurn to avoid double-count when GM also confirms */
+     * @param {boolean} fromPlayer - if true, set torchUseParsedThisTurn to avoid double-count when GM also confirms
+     *
+     * Stage 6: gs()._consumableUsedThisTurn gates the healing-potion branch so
+     * the Use-button path doesn't double-decrement via the GM's response
+     * narration. Flag is set by useConsumableById + by this parser's own
+     * prose match; it clears at the start of the next submitAction. Closes
+     * POLISH_BACKLOG's "Healing-potion flow is prompt-brittle" by making
+     * the card-click path authoritative and the prose path fall-through.
+     */
     function tryParsePackItemUse(text, fromPlayer = false) {
         if (!text) return;
         const t = text.toLowerCase();
-        // Healing potion
-        if (/\b(?:you\s+)?(?:drink|drank|consume|consumed|use|used)\s+(?:a|the)?\s*healing\s+potion\b/i.test(t) ||
-            /\bhealing\s+potion\s+(?:restores?|heals?)\b/i.test(t)) {
+        // Healing potion — gated by the Stage 6 guard flag.
+        const consumableAlreadyFired = !!gs()._consumableUsedThisTurn;
+        if (!consumableAlreadyFired && (
+                /\b(?:you\s+)?(?:drink|drank|consume|consumed|use|used)\s+(?:a|the)?\s*healing\s+potion\b/i.test(t) ||
+                /\bhealing\s+potion\s+(?:restores?|heals?)\b/i.test(t)
+        )) {
             const before = gs().character.inventory.find(i => i.name === 'Healing Potion');
             if (before && (typeof before.quantity === 'number') && before.quantity > 0) {
                 removeFromInventory('Healing Potion', 1);
-                debugLog('PARSE', 'Detected potion usage');
+                gs()._consumableUsedThisTurn = true;   // block the GM-side match later in the same cycle
+                debugLog('PARSE', 'Detected potion usage (prose path)');
             }
+        } else if (consumableAlreadyFired) {
+            debugLog('PARSE', 'Skipping potion heuristic — Use-button path already decremented');
         }
         // Rope
         if (/\b(?:you\s+)?(?:use|used|employ)\s+(?:the\s+)?rope\b/i.test(t) ||

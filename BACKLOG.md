@@ -1,7 +1,30 @@
 # AI Dungeon Crawler - Development Backlog
 
-**Last Updated:** February 21, 2026  
-**Status:** Active tracking — Pre–long-adventure priorities defined
+**Last Updated:** April 24, 2026
+**Status:** v1 refactor complete (Stages 1–7). Streaming + character creation are the next top items.
+
+---
+
+## v1 refactor — landed (April 2026)
+
+Stages 1 through 7 from `REFACTOR_V1_PLAN.md` all shipped. Highlights:
+
+- **Rules engine** (`scripts/rules-engine.js`) owns all d20 math: attack resolution, damage with resistance/immunity/vulnerability, ability/skill checks, saves (per_ability + categorical), hazard dispatch (detect-then-avoid, pure-avoidance, automatic, interaction-gated), feature prerequisites, effect dispatch (`unlock_connection` / `reveal_connection` / `activate_feature`), consumable dispatch (`heal_player` / `cure_condition` / `gm_adjudicate`), and completion-condition evaluation (`defeat_encounter` / `reach_room` / `all_encounters_defeated` / null).
+- **Pack loader** (`scripts/pack-loader.js`) loads v1 manifest + six archetype files + sidecar `.md` guidance, validates references, surfaces a specific error card on failure.
+- **HTML split** into `scripts/` modules (pack-loader, rules-engine, game-state, prompt-builder, response-parser, llm-proxy, per-panel UI, main). The monolith is a thin shell.
+- **Character panel** renders natively from v1 data for all three rules-pack variations (per_ability + categorical saves, table_5e + table_bx modifiers, skill-less + skill-full, typed + typeless damage, encumbrance method).
+- **Items pipeline**: equipment + pack resolve against the items library; magic bonuses thread through `deriveSheet`; equip/unequip UX; consumable dispatch handles all three `on_use` keywords; module-scoped items resolve before shared.
+- **Rooms / connections / features**: structured connections as exit buttons (open/locked/hidden); feature cards for all four sub-types (lore/searchable/interactive/puzzle); prereqs evaluated; `[FEATURE_SOLVED:]` tag for narrative solves; effect dispatch.
+- **Save state** follows the v1 envelope (`schema_version: 1`, `game_pack_id`, `module_id`, `module{}` / `combat{}` / `completion{}` / `character_mutations{}` / `runtime{}`). Per-pack localStorage slots so switching packs doesn't overwrite the other packs' saves. Pre-v1 saves drop with a one-time system message on first load.
+- **Completion condition**: end-of-module summary card fires from `GameState.checkCompletion`; overlay shows XP, gold, level, rooms visited, encounters defeated, run duration; Restart / Load save buttons.
+- **Pre-v1 files deleted**: `rules.json`, `monster_manual.json`, `test_module_rules.json`, `test_module_arena.json`.
+- **Debug + test infrastructure**: ring-buffered debug trail covers PARSE / HAZARD / CHECK / PROMPT / FEATURE / CONNECTION / EFFECT / CONSUMABLE / EQUIP / STATE / SAVE / SAVE_VERSION / COMPLETION / AI / HISTORY. Copy-session-report button pastes state + trail + narrative. `test.*` console helpers cover teleport, HP mod, XP, gold, conditions, rolls, feature/connection effects, save dump, and Stage 7 completion triggers.
+
+Next top items:
+
+1. **Streaming** — single-file hookup in `scripts/llm-proxy.js` to the existing SSE `/api/messages` path. Proxy already supports it.
+2. **Character creation** flow (Tier 3 from the pre-long-adventure plan).
+3. **Prompt trim pass** — see `POLISH_BACKLOG.md` for the RED-zone note.
 
 ---
 

@@ -424,87 +424,336 @@
         return XP_LEVELS_DEFAULT;
     }
 
-    const SAVE_KEY = 'gm-ai-dungeon-save';
-    const SAVE_VERSION = 1;
+    // Stage 7: save-state follows the v1 envelope from JSON_SCHEMAS.md:
+    //   { schema_version: 1, game_pack_id, module_id, saved_at,
+    //     session_started_at, module{}, combat{}, completion{},
+    //     character_mutations{}, runtime{} }
+    // `runtime{}` holds the app-state bits that aren't in the v1 spec but
+    // are needed to resume cleanly (mode, equippedInUse, conversation
+    // history, etc.). Per-pack localStorage slots prevent cross-pack
+    // contamination when switching Three Knots ↔ Crow's Hollow ↔ Gauntlet.
+    const SAVE_KEY_PREFIX    = 'gm-ai-dungeon-save';
+    const SAVE_SCHEMA_VERSION = 1;
 
-    /** Serializable slice of game state for save. */
+    function saveKeyFor(gamePackId) {
+        const id = (gamePackId || 'default').replace(/[^a-z0-9_-]/gi, '_');
+        return `${SAVE_KEY_PREFIX}:${id}`;
+    }
+
+    function currentGamePackId() {
+        const m = gd() && gd()._v1 && gd()._v1.manifest;
+        return (m && m.id) || null;
+    }
+
+    function currentModuleId() {
+        const mod = gd() && gd()._v1 && gd()._v1.module;
+        return (mod && mod.id) || null;
+    }
+
+    // Build the encounters{} map for the save envelope. Per the spec the
+    // shape is `{ [id]: { resolved, instances[] } }` keyed by encounter id.
+    // Per-instance HP tracking isn't modeled in runtime yet (Stage 3 damage
+    // is per encounter group, not per instance) — we still ship the spec
+    // shape with a `damage_dealt` companion so round-trip preserves the
+    // information we DO have; `instances[]` stays empty until the
+    // per-instance rewrite lands.
+    function buildEncountersForSave() {
+        const out = {};
+        const rooms = (gd()._v1 && gd()._v1.module && gd()._v1.module.rooms) || {};
+        const damage = gs().damageToEncounters || {};
+        for (const room of Object.values(rooms)) {
+            for (const enc of (room.encounters || [])) {
+                if (!enc || !enc.id) continue;
+                let maxHp = 0;
+                try { maxHp = (global.getEncounterHP && global.getEncounterHP(enc).max) || 0; }
+                catch (e) { maxHp = 0; }
+                const dmg = Number(damage[enc.id] || 0);
+                const resolved = maxHp > 0 && dmg >= maxHp;
+                out[enc.id] = { resolved, damage_dealt: dmg, instances: [] };
+            }
+        }
+        return out;
+    }
+
+    function currentGoldNumeric() {
+        const inv = gs().character && gs().character.inventory;
+        if (Array.isArray(inv)) {
+            const g = inv.find(i => i.name === 'Gold');
+            if (g && g.quantity != null) {
+                const m = String(g.quantity).match(/(\d+)/);
+                if (m) return parseInt(m[1], 10);
+            }
+        }
+        const v1 = gd()._v1 && gd()._v1.character;
+        return (v1 && typeof v1.gold === 'number') ? v1.gold : 0;
+    }
+
+    /**
+     * Produce the v1 save envelope from current runtime state. Pure — no
+     * side effects; `saveGame` wraps this for localStorage writes, and
+     * `test.dumpSave()` prints it verbatim for spec-checking.
+     */
     function getStateToSave() {
+        const char   = gs().character || {};
+        const v1char = (gd()._v1 && gd()._v1.character) || {};
+        const clone = v => JSON.parse(JSON.stringify(v));
+
         return {
-            character: JSON.parse(JSON.stringify(gs().character)),
-            currentRoom: gs().currentRoom,
-            triggeredEvents: [...(gs().triggeredEvents || [])],
-            conversationHistory: gs().conversationHistory.map(m => ({ role: m.role, content: m.content })),
-            damageToEncounters: { ...(gs().damageToEncounters || {}) },
-            inCombat: !!gs().inCombat,
-            mode: gs().mode || 'exploration',
-            equippedInUse: [...(gs().equippedInUse || [])],
-            lastCombatRoom: gs().lastCombatRoom,
-            encounterHistory: (gs().encounterHistory || []).map(e => ({ ...e })),
-            readiedWeaponName: gs().readiedWeaponName,
-            armorEquipped: !!gs().armorEquipped,
-            lastUserRollType: gs().lastUserRollType,
-            // Stage 4: hazard state rides with the save so fire-once hazards
-            // stay resolved across reloads. Only the state table is persisted;
-            // the in-flight queue + active plan are reconstructed from a fresh
-            // trigger call after load.
-            hazardState: JSON.parse(JSON.stringify(gs().hazardState || {}))
+            schema_version:     SAVE_SCHEMA_VERSION,
+            game_pack_id:       currentGamePackId(),
+            module_id:          currentModuleId(),
+            saved_at:           Date.now(),
+            session_started_at: gs().sessionStartedAt || Date.now(),
+            module: {
+                current_room:         gs().currentRoom || null,
+                visited_rooms:        (gs().visitedRooms || []).slice(),
+                encounters:           buildEncountersForSave(),
+                hazards:              clone(gs().hazardState || {}),
+                features:             clone(gs().featureState || {}),
+                connections_modified: clone(gs().connectionsModified || {})
+            },
+            combat: {
+                in_combat:        !!gs().inCombat,
+                last_combat_room: gs().lastCombatRoom || null
+            },
+            completion: clone(gs().completion || { completed: false, conditions_met: [] }),
+            character_mutations: {
+                basic_info: { level: char.level || (v1char.basic_info && v1char.basic_info.level) || 1 },
+                hp_current:        (typeof char.hp === 'number') ? char.hp : (v1char.hp_current || 0),
+                xp:                (typeof char.xp === 'number') ? char.xp : (v1char.xp || 0),
+                gold:              currentGoldNumeric(),
+                equipment:         clone(v1char.equipment || []),
+                pack:              clone(v1char.pack || []),
+                feature_resources: clone(v1char.feature_resources || {}),
+                charged_items:     clone(v1char.charged_items || {}),
+                conditions:        clone(char.conditions || v1char.conditions || [])
+            },
+            runtime: {
+                mode:                 gs().mode || 'exploration',
+                equipped_in_use:      [...(gs().equippedInUse || [])],
+                readied_weapon_name:  gs().readiedWeaponName || null,
+                armor_equipped:       !!gs().armorEquipped,
+                last_user_roll_type:  gs().lastUserRollType || null,
+                triggered_events:     [...(gs().triggeredEvents || [])],
+                encounter_history:    (gs().encounterHistory || []).map(e => ({ ...e })),
+                conversation_history: (gs().conversationHistory || []).map(m => ({ role: m.role, content: m.content }))
+            }
         };
     }
 
     function saveGame() {
         if (!gs().character || gs().isDead) return;
         try {
-            const payload = {
-                version: SAVE_VERSION,
-                gamePack: CONFIG.GAME_PACK,
-                moduleTitle: gd().module && gd().module.module ? gd().module.module.title : '',
-                savedAt: Date.now(),
-                state: getStateToSave()
-            };
-            localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+            const payload = getStateToSave();
+            const packId = payload.game_pack_id || (global.CONFIG && global.CONFIG.GAME_PACK) || 'default';
+            localStorage.setItem(saveKeyFor(packId), JSON.stringify(payload));
             debugLog('SAVE', 'Game saved');
         } catch (e) {
             console.warn('Save failed:', e);
         }
     }
 
+    /**
+     * Drop any stale-shape saves for the current pack (legacy single-key
+     * slot + per-pack slot with a wrong schema or pack id). Returns true
+     * if anything was removed. Called once at boot so the UI doesn't hide
+     * a "Continue" button over a save that will fail the schema gate
+     * anyway. Safe to call multiple times — subsequent calls are no-ops.
+     */
+    function purgeStaleSaves() {
+        const packId = currentGamePackId();
+        let purged = false;
+        const check = (key) => {
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                const schemaOk = data && data.schema_version === SAVE_SCHEMA_VERSION;
+                const packOk   = data && data.game_pack_id === packId;
+                if (!schemaOk || !packOk) {
+                    localStorage.removeItem(key);
+                    purged = true;
+                    debugLog('SAVE_VERSION',
+                        `Purged stale save (${key}) — schema=${data && data.schema_version} pack=${data && data.game_pack_id}`);
+                }
+            } catch (e) {
+                localStorage.removeItem(key);
+                purged = true;
+                debugLog('SAVE_VERSION', `Purged unparseable save (${key})`);
+            }
+        };
+        check(SAVE_KEY_PREFIX);
+        if (packId) check(saveKeyFor(packId));
+        return purged;
+    }
+
+    /**
+     * Return the save envelope for the current pack iff it passes the
+     * schema + pack-id gate. Older saves (pre-Stage-7 shape, or written
+     * against a different pack) return null. This is the single read-point
+     * for save metadata; callers never touch localStorage directly.
+     */
     function getSaveMetadata() {
+        const packId = currentGamePackId();
+        if (!packId) return null;
+        let raw = null;
         try {
-            const raw = localStorage.getItem(SAVE_KEY);
+            raw = localStorage.getItem(saveKeyFor(packId));
+            if (!raw) raw = localStorage.getItem(SAVE_KEY_PREFIX); // legacy single-slot fallback
             if (!raw) return null;
             const data = JSON.parse(raw);
-            return data && data.version === SAVE_VERSION ? data : null;
+            if (!data) return null;
+            if (data.schema_version !== SAVE_SCHEMA_VERSION) return null;
+            if (data.game_pack_id !== packId) return null;
+            return data;
         } catch (e) {
             return null;
         }
     }
 
     function hasValidSave() {
-        const meta = getSaveMetadata();
-        return meta && meta.gamePack === CONFIG.GAME_PACK;
+        return !!getSaveMetadata();
     }
 
     function loadGame() {
-        const meta = getSaveMetadata();
-        if (!meta || meta.gamePack !== CONFIG.GAME_PACK) return false;
-        const s = meta.state;
-        if (!s || !s.character) return false;
-        gs().character = s.character;
-        gs().currentRoom = s.currentRoom;
-        gs().triggeredEvents = s.triggeredEvents || [];
-        gs().conversationHistory = s.conversationHistory || [];
-        gs().damageToEncounters = s.damageToEncounters || {};
-        gs().inCombat = !!s.inCombat;
-        gs().mode = s.mode || (s.inCombat ? 'combat' : 'exploration');
-        gs().equippedInUse = s.equippedInUse || [];
-        gs().lastCombatRoom = s.lastCombatRoom;
-        gs().encounterHistory = s.encounterHistory || [];
-        gs().readiedWeaponName = s.readiedWeaponName || null;
-        gs().armorEquipped = !!s.armorEquipped;
-        gs().lastUserRollType = s.lastUserRollType || null;
-        gs().hazardState = s.hazardState ? JSON.parse(JSON.stringify(s.hazardState)) : {};
+        const packId = currentGamePackId();
+        if (!packId) return false;
+        const newKey = saveKeyFor(packId);
+        let raw = localStorage.getItem(newKey);
+        let fromLegacyKey = false;
+        if (!raw) {
+            const legacy = localStorage.getItem(SAVE_KEY_PREFIX);
+            if (legacy) { raw = legacy; fromLegacyKey = true; }
+        }
+        if (!raw) return false;
+
+        let payload;
+        try {
+            payload = JSON.parse(raw);
+        } catch (e) {
+            debugLog('SAVE_VERSION', 'Save parse failed — dropping');
+            if (fromLegacyKey) localStorage.removeItem(SAVE_KEY_PREFIX);
+            else               localStorage.removeItem(newKey);
+            return false;
+        }
+
+        // Stage 7 schema gate: pre-v1-envelope saves don't carry
+        // schema_version at the top level, so they fail here and are
+        // dropped with a one-time system message. Option (a) from the
+        // Stage 7 brief — no best-effort migration of old shapes.
+        const schemaOk = payload && payload.schema_version === SAVE_SCHEMA_VERSION;
+        const packOk   = payload && payload.game_pack_id === packId;
+        if (!schemaOk || !packOk) {
+            debugLog('SAVE_VERSION',
+                `Save rejected — schema=${payload && payload.schema_version} pack=${payload && payload.game_pack_id} (need ${SAVE_SCHEMA_VERSION} / ${packId})`);
+            if (fromLegacyKey) localStorage.removeItem(SAVE_KEY_PREFIX);
+            else               localStorage.removeItem(newKey);
+            if (global.addSystemMessage) {
+                global.addSystemMessage('Old save format from a pre-Stage-7 build — please start a new game.');
+            }
+            return false;
+        }
+
+        const m  = payload.module || {};
+        const cm = payload.character_mutations || {};
+        const rt = payload.runtime || {};
+        const clone = v => JSON.parse(JSON.stringify(v));
+
+        // Step 1: apply character_mutations to the v1 source of truth
+        // (gd()._v1.character). The legacy shim reads this in step 2 to
+        // rebuild the shimmed ability/equipment/hp buckets, so the
+        // loaded equipment/pack/hp/xp/level/gold flow through
+        // automatically rather than needing per-field overlay logic.
+        const v1 = gd() && gd()._v1 && gd()._v1.character;
+        if (v1) {
+            if (Array.isArray(cm.equipment))       v1.equipment        = clone(cm.equipment);
+            if (Array.isArray(cm.pack))            v1.pack             = clone(cm.pack);
+            if (cm.feature_resources)              v1.feature_resources= clone(cm.feature_resources);
+            if (cm.charged_items)                  v1.charged_items    = clone(cm.charged_items);
+            if (typeof cm.gold       === 'number') v1.gold       = cm.gold;
+            if (typeof cm.xp         === 'number') v1.xp         = cm.xp;
+            if (typeof cm.hp_current === 'number') v1.hp_current = cm.hp_current;
+            if (cm.basic_info && typeof cm.basic_info.level === 'number') {
+                v1.basic_info = v1.basic_info || {};
+                v1.basic_info.level = cm.basic_info.level;
+            }
+            if (Array.isArray(cm.conditions))      v1.conditions = clone(cm.conditions);
+        }
+
+        // Step 2: re-run the pack shim so gd().character (shimmed buckets)
+        // reflects the loaded mutations. Without this, the shim's
+        // equipment.worn/wielded/carried/backpack/coin buckets stay
+        // frozen at start-of-game contents.
+        if (global.GameState && typeof global.GameState.init === 'function' && gd() && gd()._v1) {
+            try {
+                const rebuilt = global.GameState.init(gd()._v1);
+                Object.assign(gd(), rebuilt);
+            } catch (e) {
+                console.warn('Shim rebuild during loadGame failed:', e);
+            }
+        }
+
+        // Step 3: build the legacy gs().character from the fresh shim.
+        // initializeGameStateFromData also resets the runtime state
+        // fields (hazardState, visitedRooms, mode, etc.) — those get
+        // overwritten from the save payload in step 4 below.
+        if (typeof global.initializeGameStateFromData === 'function') {
+            global.initializeGameStateFromData();
+        }
+
+        // Step 4: overlay the save's module / combat / completion /
+        // runtime blocks on top of the freshly-initialized state.
+        gs().currentRoom         = m.current_room || gs().currentRoom;
+        gs().visitedRooms        = Array.isArray(m.visited_rooms) ? m.visited_rooms.slice() : [];
+        gs().hazardState         = m.hazards              ? clone(m.hazards)              : {};
+        gs().featureState        = m.features             ? clone(m.features)             : {};
+        gs().connectionsModified = m.connections_modified ? clone(m.connections_modified) : {};
+
+        // Rehydrate damageToEncounters from encounters[id].damage_dealt
+        // (per-instance HP not modeled yet — see buildEncountersForSave).
+        const dmg = {};
+        for (const [id, row] of Object.entries(m.encounters || {})) {
+            if (row && typeof row.damage_dealt === 'number') dmg[id] = row.damage_dealt;
+        }
+        gs().damageToEncounters = dmg;
+
+        gs().inCombat       = !!(payload.combat && payload.combat.in_combat);
+        gs().lastCombatRoom = (payload.combat && payload.combat.last_combat_room) || null;
+        gs().completion     = payload.completion ? clone(payload.completion)
+                                                 : { completed: false, conditions_met: [] };
+
+        // Conditions + level sometimes don't flow cleanly through the
+        // shim (level is carried as basic_info.level but the legacy
+        // renderer reads gs().character.level directly; conditions are
+        // on gs().character.conditions). Overlay them directly as a
+        // belt-and-braces.
+        if (gs().character) {
+            if (cm.basic_info && typeof cm.basic_info.level === 'number') gs().character.level = cm.basic_info.level;
+            if (Array.isArray(cm.conditions))                              gs().character.conditions = clone(cm.conditions);
+        }
+
+        gs().mode                = rt.mode || (gs().inCombat ? 'combat' : 'exploration');
+        gs().equippedInUse       = Array.isArray(rt.equipped_in_use) ? rt.equipped_in_use.slice() : [];
+        gs().readiedWeaponName   = rt.readied_weapon_name || null;
+        gs().armorEquipped       = !!rt.armor_equipped;
+        gs().lastUserRollType    = rt.last_user_roll_type || null;
+        gs().triggeredEvents     = Array.isArray(rt.triggered_events) ? rt.triggered_events.slice() : [];
+        gs().encounterHistory    = Array.isArray(rt.encounter_history) ? rt.encounter_history.map(e => ({ ...e })) : [];
+        gs().conversationHistory = Array.isArray(rt.conversation_history)
+            ? rt.conversation_history.map(h => ({ role: h.role, content: h.content }))
+            : [];
+
+        gs().sessionStartedAt = payload.session_started_at || Date.now();
         gs().isDead = false;
         gs().pendingLevelUpAck = null;
+
+        if (fromLegacyKey) {
+            localStorage.removeItem(SAVE_KEY_PREFIX);
+            try { localStorage.setItem(newKey, JSON.stringify(payload)); } catch (e) { /* ignore */ }
+            debugLog('SAVE_VERSION', 'Migrated legacy save key to per-pack slot');
+        }
+
+        debugLog('SAVE_VERSION', `Save loaded — schema=${payload.schema_version} pack=${payload.game_pack_id}`);
         debugLog('SAVE', 'Game loaded');
         return true;
     }
@@ -624,10 +873,17 @@
     
     function removeFromInventory(itemName, quantity = 1) {
         debugLog('STATE', `Removing from inventory: ${itemName} x${quantity}`);
-        const item = gs().character.inventory.find(i => i.name === itemName);
-        if (item) {
+        const inv = gs().character.inventory;
+        const idx = inv.findIndex(i => i.name === itemName);
+        if (idx !== -1) {
+            const item = inv[idx];
             if (typeof item.quantity === 'number') {
                 item.quantity = Math.max(0, item.quantity - quantity);
+                // Stage 6: splice zero-quantity entries so the Pack panel doesn't
+                // render "Warden's Oathblade x0" after the item's been equipped
+                // (or any consumable that's been fully used up). Gold is kept at
+                // 0 intentionally via the string branch below.
+                if (item.quantity === 0) inv.splice(idx, 1);
             } else if (typeof item.quantity === 'string' && item.name === 'Gold') {
                 const m = item.quantity.match(/(\d+)/);
                 if (m) {
@@ -753,6 +1009,610 @@
         saveGame();
     }
 
+    // ------------------------------------------------------------
+    // Stage 5 — module runtime state + reward dispatch
+    //
+    // Callers ask GameState for a unified moduleState view, pass it to
+    // RulesEngine.prereqsMet / applyEffect, and then re-render the
+    // affected panels. buildModuleState derives the `encounters` map
+    // from damageToEncounters + authored encounter HP so prereq
+    // evaluators that gate on encounter defeat work without a separate
+    // encounter-state store (Stage 3 shim model stays authoritative).
+    // ------------------------------------------------------------
+
+    /**
+     * Assemble the moduleState view the RulesEngine Stage 5 helpers expect.
+     * Returns a live reference to gs().featureState and gs().connectionsModified
+     * (so applyEffect's mutations persist), plus a derived encounters map
+     * built from damageToEncounters + the room's authored encounter HP.
+     */
+    function buildModuleState() {
+        if (!gs().featureState) gs().featureState = {};
+        if (!gs().connectionsModified) gs().connectionsModified = {};
+        if (!Array.isArray(gs().visitedRooms)) gs().visitedRooms = [];
+
+        const encounters = {};
+        const rooms = (gd().module && gd().module.rooms) || {};
+        const damage = gs().damageToEncounters || {};
+        for (const room of Object.values(rooms)) {
+            for (const enc of (room.encounters || [])) {
+                if (!enc || !enc.id) continue;
+                const maxHp = (() => {
+                    try { return (global.getEncounterHP && global.getEncounterHP(enc).max) || 0; }
+                    catch (e) { return 0; }
+                })();
+                const dmg = Number(damage[enc.id] || 0);
+                const defeated = maxHp > 0 && dmg >= maxHp;
+                encounters[enc.id] = { defeated, resolved: defeated };
+            }
+        }
+
+        return {
+            features:            gs().featureState,
+            connectionsModified: gs().connectionsModified,
+            visitedRooms:        gs().visitedRooms,
+            encounters
+        };
+    }
+
+    /**
+     * Record a room entry. Idempotent — first visit appends; later visits
+     * are no-ops. Used by room-change wiring so the prompt + UI can
+     * annotate "visited / unvisited" per connection.
+     */
+    function markRoomVisited(roomId) {
+        if (!roomId) return false;
+        if (!Array.isArray(gs().visitedRooms)) gs().visitedRooms = [];
+        if (gs().visitedRooms.includes(roomId)) return false;
+        gs().visitedRooms.push(roomId);
+        debugLog('STATE', `Room visited: ${roomId}`);
+        checkCompletion();  // Stage 7: reach_room conditions may fire on first visit.
+        saveGame();
+        return true;
+    }
+
+    /**
+     * Stage 7: run the module's completion_condition against current state.
+     * Fires once per game — the first time the condition is met, flip
+     * gs().completion.completed = true, log a COMPLETION debug entry, and
+     * notify UI.narrative if the summary-card renderer is wired.
+     *
+     * Null / missing condition (Gauntlet) is GM-judged and never fires.
+     * Safe to call at any state change; idempotent (re-firing after the
+     * first flip is a no-op).
+     */
+    function checkCompletion() {
+        if (!gs().completion) gs().completion = { completed: false, conditions_met: [] };
+        if (gs().completion.completed) return gs().completion;
+        const re = global.RulesEngine;
+        if (!re || !re.evaluateCompletion) return gs().completion;
+        const mod = (gd() && gd()._v1 && gd()._v1.module) || null;
+        if (!mod) return gs().completion;
+        const plan = re.evaluateCompletion(mod, buildModuleState());
+        if (plan && plan.completed) {
+            gs().completion.completed = true;
+            gs().completion.conditions_met = [plan];
+            debugLog('COMPLETION', `Module completed — kind=${plan.kind}${plan.target ? ` target=${plan.target}` : ''}`);
+            // Fire the UI side if available. Renderer lands in commit 5.
+            if (global.UI && global.UI.narrative && typeof global.UI.narrative.showCompletionOverlay === 'function') {
+                try { global.UI.narrative.showCompletionOverlay(buildCompletionSummary(plan)); }
+                catch (e) { console.warn('showCompletionOverlay failed:', e); }
+            }
+        }
+        return gs().completion;
+    }
+
+    /**
+     * Stage 7: assemble the summary payload for the end-of-module card.
+     * Pure read against current state; no side effects. Caller (Stage 7
+     * UI.narrative.showCompletionOverlay) renders this into the overlay.
+     */
+    function buildCompletionSummary(plan) {
+        const char = gs().character || {};
+        const mod  = (gd() && gd()._v1 && gd()._v1.module) || {};
+        const started = gs().sessionStartedAt || Date.now();
+        const durationMs = Math.max(0, Date.now() - started);
+        const encountersDefeated = Object.values(buildModuleState().encounters || {})
+            .filter(e => e && e.resolved).length;
+        return {
+            kind:             (plan && plan.kind) || 'completed',
+            target:           (plan && plan.target) || null,
+            module_title:     (mod && mod.title) || '',
+            module_id:        (mod && mod.id) || null,
+            xp:               char.xp || 0,
+            gold:             currentGoldNumeric(),
+            level:            char.level || 1,
+            rooms_visited:    (gs().visitedRooms || []).length,
+            encounters_defeated: encountersDefeated,
+            duration_ms:      durationMs
+        };
+    }
+
+    /** Roll a dice formula string or return the integer unchanged. */
+    function rollFormulaNumericLocal(spec) {
+        if (typeof spec === 'number') return spec;
+        if (typeof spec !== 'string') return 0;
+        const re = global.RulesEngine;
+        if (re && re.rollFormula) {
+            const parsed = re.parseFormula && re.parseFormula(spec);
+            if (parsed) return re.rollFormula(spec).total;
+        }
+        const n = parseInt(spec, 10);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    /**
+     * Apply a v1 reward (or an array of rewards) to the character. Surfaces
+     * each application as a mechanics callout so the designer can see what
+     * the engine awarded; mutates character state + pack. Supported types:
+     *
+     *   { type: "xp",   amount: <number|formula> }
+     *   { type: "gold", amount: <number|formula> }
+     *   { type: "item", item_id: "<id>", quantity?: <int> }
+     *
+     * xp_sources including "treasure_recovered" doubles gold rewards into
+     * XP, per the Three Knots authoring convention; other packs ignore it.
+     */
+    function applyReward(reward, gameData) {
+        if (!reward) return;
+        if (Array.isArray(reward)) {
+            reward.forEach(r => applyReward(r, gameData));
+            return;
+        }
+        const type = reward.type;
+        const callout = global.addMechanicsCallout || (() => {});
+
+        if (type === 'xp') {
+            const amt = rollFormulaNumericLocal(reward.amount);
+            if (amt > 0 && global.addXP) global.addXP(amt);
+            callout(`Reward: +${amt} XP`);
+            debugLog('EFFECT', `reward xp +${amt}`);
+            return;
+        }
+
+        if (type === 'gold') {
+            const amt = rollFormulaNumericLocal(reward.amount);
+            if (amt > 0) global.addToInventory('Gold', amt);
+            callout(`Reward: +${amt} gold`);
+            debugLog('EFFECT', `reward gold +${amt}`);
+            // Packs that declare treasure_recovered in xp_sources award
+            // gold-as-XP (Three Knots convention).
+            const v1 = gameData && gameData._v1;
+            const xpSources = (v1 && v1.rules && v1.rules.progression && v1.rules.progression.xp_sources) || [];
+            if (amt > 0 && Array.isArray(xpSources) && xpSources.includes('treasure_recovered')) {
+                if (global.addXP) global.addXP(amt);
+                callout(`Reward: +${amt} XP (treasure recovered)`);
+                debugLog('EFFECT', `reward xp (from gold) +${amt}`);
+            }
+            return;
+        }
+
+        if (type === 'item') {
+            const itemId = reward.item_id;
+            const qty = reward.quantity || 1;
+            const v1 = gameData && gameData._v1;
+            const modItems = (v1 && v1.module && v1.module.module_items && v1.module.module_items.items) || {};
+            const libItems = (v1 && v1.items && v1.items.items) || {};
+            const item = modItems[itemId] || libItems[itemId];
+            const name = (item && item.name) || itemId || 'Item';
+
+            // Mirror into the v1 pack so Stage 6's items pipeline finds it.
+            if (v1 && v1.character) {
+                if (!Array.isArray(v1.character.pack)) v1.character.pack = [];
+                const existing = v1.character.pack.find(p => p && p.item_id === itemId);
+                if (existing) existing.quantity = (existing.quantity || 1) + qty;
+                else v1.character.pack.push({ item_id: itemId, quantity: qty });
+            }
+            // Mirror into the legacy inventory so the character panel shows it today.
+            if (global.addToInventory) global.addToInventory(name, qty);
+            callout(`Reward: ${name}${qty > 1 ? ` x${qty}` : ''}`);
+            debugLog('EFFECT', `reward item ${itemId} x${qty}`);
+            return;
+        }
+
+        debugLog('EFFECT', `reward unknown type: ${type}`);
+    }
+
+    // ------------------------------------------------------------
+    // Stage 6 — Items pipeline
+    //
+    // Helpers:
+    //   useConsumableById(itemId)  — wraps RulesEngine.useConsumable with
+    //                                the side effects (heal, cure, pack
+    //                                decrement, confirm UX for gm_adjudicate).
+    //   equipItem(itemId, slot)    — moves pack → equipment; swap on collision.
+    //   unequipItem(slot)          — moves equipment → pack.
+    //
+    // All three mutate gd()._v1.character directly (the v1 source of truth)
+    // and mirror into the legacy gs().character buckets so the shimmed
+    // character-panel renderer stays correct. Re-render + save on every call.
+    // ------------------------------------------------------------
+
+    /** Merge module_items + items_library into a flat {id: item} dict. Module overrides. */
+    function v1ItemsIndex() {
+        const v = gd()._v1;
+        if (!v) return {};
+        const shared   = (v.items  && v.items.items) || {};
+        const modItems = (v.module && v.module.module_items && v.module.module_items.items) || {};
+        return Object.assign({}, shared, modItems);
+    }
+
+    /** Look up an item by id across the merged index. */
+    function resolveV1Item(itemId) {
+        const index = v1ItemsIndex();
+        return index[itemId] || null;
+    }
+
+    /** Find a pack entry by item_id. Returns the live object (for mutation) or null. */
+    function findPackEntry(itemId) {
+        const v = gd()._v1;
+        if (!v || !v.character || !Array.isArray(v.character.pack)) return null;
+        return v.character.pack.find(p => p && p.item_id === itemId) || null;
+    }
+
+    /**
+     * Decrement a pack entry's quantity by 1; remove the entry when it hits 0.
+     * Mirrors the legacy inventory decrement via removeFromInventory so the
+     * shimmed character panel reflects the change. Returns true on success.
+     */
+    function decrementPack(itemId) {
+        const entry = findPackEntry(itemId);
+        if (!entry) return false;
+        entry.quantity = Math.max(0, (entry.quantity || 1) - 1);
+        if (entry.quantity === 0) {
+            const pack = gd()._v1.character.pack;
+            const idx = pack.indexOf(entry);
+            if (idx !== -1) pack.splice(idx, 1);
+        }
+        const item = resolveV1Item(itemId);
+        const name = (item && item.name) || itemId;
+        if (global.removeFromInventory) global.removeFromInventory(name, 1);
+        return true;
+    }
+
+    /**
+     * Use a consumable by item_id. Wraps RulesEngine.useConsumable with the
+     * side effects (HP / conditions / pack decrement / callouts / confirm UX).
+     *
+     * For gm_adjudicate items, surfaces a Confirm/Cancel system message; on
+     * Confirm, decrements the pack and injects a prompt hint so the GM
+     * narrates the effect. Cancel dismisses without mutation.
+     */
+    function useConsumableById(itemId) {
+        const item = resolveV1Item(itemId);
+        if (!item) {
+            if (global.addSystemMessage) global.addSystemMessage(`[item] ${itemId} not found.`);
+            return false;
+        }
+        const entry = findPackEntry(itemId);
+        if (!entry || (entry.quantity || 0) <= 0) {
+            if (global.addSystemMessage) global.addSystemMessage(`You don't have ${item.name || itemId} in your pack.`);
+            return false;
+        }
+
+        const v = gd()._v1;
+        const plan = global.RulesEngine.useConsumable(item, v.character, v.rules);
+        debugLog('CONSUMABLE', `use ${itemId} (${item.name || ''}) → kind=${plan.kind}${plan.reason ? ' reason=' + plan.reason : ''}`);
+
+        if (plan.kind === 'heal_player') {
+            const beforeHP = gs().character.hp;
+            if (global.modifyHP) global.modifyHP(+plan.amount);
+            const afterHP  = gs().character.hp;
+            const actualHeal = afterHP - beforeHP;
+            decrementPack(itemId);
+            gs()._consumableUsedThisTurn = true;   // tryParsePackItemUse reads + clears on next submitAction
+            if (global.addMechanicsCallout) {
+                const suffix = actualHeal < plan.amount ? ` (${plan.amount - actualHeal} overheal)` : '';
+                global.addMechanicsCallout(`Used ${item.name || itemId}: ${plan.breakdown} → +${actualHeal} HP${suffix} (HP ${afterHP}/${gs().character.maxHp})`);
+            }
+            if (global.saveGame) global.saveGame();
+            updateCharacterDisplay();
+            return true;
+        }
+
+        if (plan.kind === 'cure_condition') {
+            const before = new Set((gs().character.conditions || []).map(c => (c.id || c.name || '').toLowerCase()));
+            for (const cid of plan.conditions) {
+                if (global.removeCondition) global.removeCondition(cid);
+            }
+            const removed = plan.conditions.filter(cid => before.has(cid));
+            decrementPack(itemId);
+            gs()._consumableUsedThisTurn = true;
+            if (global.addMechanicsCallout) {
+                const what = removed.length ? removed.join(', ') : 'no matching condition (no effect)';
+                global.addMechanicsCallout(`Used ${item.name || itemId}: ${what}`);
+            }
+            if (global.saveGame) global.saveGame();
+            updateCharacterDisplay();
+            return true;
+        }
+
+        if (plan.kind === 'gm_adjudicate') {
+            // Surface a confirm/cancel system message. On confirm, decrement
+            // the pack and inject a prompt hint so the GM narrates.
+            promptGmAdjudicateConfirm(itemId, item, plan);
+            return true;
+        }
+
+        if (global.addSystemMessage) global.addSystemMessage(`${item.name || itemId} isn't usable.`);
+        return false;
+    }
+
+    /**
+     * Surface an inline Confirm/Cancel prompt for gm_adjudicate consumables.
+     * On Confirm: decrement the pack, push a user message describing the use
+     * + the item's prose, and fire callAIGM so the GM narrates.
+     * On Cancel: dismiss without mutation.
+     */
+    function promptGmAdjudicateConfirm(itemId, item, plan) {
+        const doc = global.document;
+        const scroll = doc.getElementById('narrativeScroll');
+        if (!scroll) return;
+
+        const entry = doc.createElement('div');
+        entry.className = 'narrative-entry gm-adjudicate-confirm';
+        const wrap = doc.createElement('div');
+        wrap.className = 'system-message';
+
+        const title = doc.createElement('div');
+        title.innerHTML = `<b>Use ${escapeHtml(item.name || itemId)}?</b>`;
+        wrap.appendChild(title);
+
+        if (plan.prose) {
+            const prose = doc.createElement('div');
+            prose.className = 'gm-adjudicate-prose';
+            prose.textContent = plan.prose;
+            wrap.appendChild(prose);
+        }
+
+        const btnRow = doc.createElement('div');
+        btnRow.className = 'gm-adjudicate-buttons';
+
+        const confirm = doc.createElement('button');
+        confirm.type = 'button';
+        confirm.className = 'primary-button';
+        confirm.textContent = 'Confirm use';
+        confirm.addEventListener('click', () => {
+            decrementPack(itemId);
+            gs()._consumableUsedThisTurn = true;
+            debugLog('CONSUMABLE', `gm_adjudicate confirmed: ${itemId}`);
+            entry.remove();
+            if (global.addMechanicsCallout) global.addMechanicsCallout(`Used ${item.name || itemId} (GM adjudicates)`);
+            // Push a user turn that tells the GM what happened + the authored prose.
+            const hint = `I use ${item.name || itemId}. The item prose says: "${plan.prose}". Narrate the effect per the fiction and the player's target (if any).`;
+            gs().conversationHistory.push({ role: 'user', content: hint });
+            if (global.saveGame) global.saveGame();
+            updateCharacterDisplay();
+            if (global.callAIGM) global.callAIGM();
+        });
+        btnRow.appendChild(confirm);
+
+        const cancel = doc.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'secondary-button';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', () => {
+            debugLog('CONSUMABLE', `gm_adjudicate cancelled: ${itemId}`);
+            entry.remove();
+        });
+        btnRow.appendChild(cancel);
+
+        wrap.appendChild(btnRow);
+        entry.appendChild(wrap);
+        scroll.appendChild(entry);
+        if (global.scrollToBottom) global.scrollToBottom();
+    }
+
+    function escapeHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, ch =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    // ---- Equip / unequip ---------------------------------------------------
+    //
+    // Mutates gd()._v1.character.equipment + .pack (the v1 source of truth)
+    // and mirrors into the legacy gs().character.equipment (flat array with
+    // isWeapon/isArmor/damage/weaponType fields) + .inventory so the shimmed
+    // character panel renders correctly.
+    //
+    // Stage 6 does NOT enforce rules.character_model.slot_limits — overflow
+    // triggers a warn callout but the equip still applies (per plan).
+    // Encumbrance penalties are also render-only today.
+
+    /** Infer the natural slot for an item from its authored shape. */
+    function inferSlotForItem(item) {
+        if (!item) return null;
+        if (item.slot) return String(item.slot);
+        const w = item.weapon;
+        if (w) {
+            const props = Array.isArray(item.properties) ? item.properties.join(' ').toLowerCase() : '';
+            if (/two[-\s]?handed/.test(props)) return 'two_handed';
+            if (w.ranged && !w.melee) return 'ranged';
+            return 'main_hand';
+        }
+        if (item.armor) {
+            const props = Array.isArray(item.properties) ? item.properties.join(' ').toLowerCase() : '';
+            if (/shield/i.test(item.name || '') || /shield/.test(props)) return 'shield';
+            return 'body';
+        }
+        return null;
+    }
+
+    /** Rebuild one legacy-equipment entry from a v1 item + slot. Shape matches main.js's initializer. */
+    function legacyEquipEntryFor(item, slot) {
+        const w = item.weapon || {};
+        const isWeapon = !!item.weapon;
+        const isArmor  = !!item.armor;
+        const wTypeInfo = isWeapon ? (global.getWeaponTypeInfo ? global.getWeaponTypeInfo({
+            range: w.ranged && !w.melee ? 'ranged' : (w.melee ? 'melee' : null),
+            name: item.name,
+            properties: item.properties
+        }) : { type: w.ranged && !w.melee ? 'ranged' : 'melee', range: null }) : { type: null, range: null };
+        let stats = '';
+        if (isWeapon && w.damage) {
+            const base = `${w.damage} ${w.damage_type || ''}`.trim();
+            stats = wTypeInfo.type === 'ranged' && wTypeInfo.range
+                ? `${base} (ranged ${wTypeInfo.range})`
+                : `${base} (${wTypeInfo.type || 'melee'})`;
+        } else if (isArmor) {
+            stats = item.armor && typeof item.armor.ac_bonus === 'number' ? `AC +${item.armor.ac_bonus}` : 'armor';
+        }
+        const eq = {
+            name:    item.name,
+            stats,
+            equipped: true,
+            isWeapon,
+            isArmor,
+            weaponType:  wTypeInfo.type,
+            weaponRange: wTypeInfo.range,
+            _v1_slot:    slot,
+            _v1_id:      item.id
+        };
+        if (isWeapon && w.damage) {
+            eq.damage      = w.damage;
+            eq.damage_type = w.damage_type || '';
+            eq.range       = wTypeInfo.range || (wTypeInfo.type === 'ranged' ? 'ranged' : 'melee');
+        }
+        if (isArmor && item.armor && typeof item.armor.ac_bonus === 'number') {
+            eq.ac = item.armor.ac_bonus;
+        }
+        return eq;
+    }
+
+    /**
+     * Move an item from the pack to an equipment slot. If the slot is already
+     * occupied, unequip the current occupant back to the pack first (swap).
+     *
+     * `slot` is optional — when omitted, falls back to item.slot (authored),
+     * then infers from item.weapon / item.armor shape. Fails (and surfaces
+     * a system message) when the item can't be equipped (not a weapon/armor).
+     */
+    function equipItem(itemId, slot) {
+        const v = gd()._v1;
+        if (!v || !v.character) {
+            debugLog('EQUIP', `no v1 character; skipping ${itemId}`);
+            return false;
+        }
+        const item = resolveV1Item(itemId);
+        if (!item) {
+            if (global.addSystemMessage) global.addSystemMessage(`[item] ${itemId} not found.`);
+            return false;
+        }
+        const entry = findPackEntry(itemId);
+        if (!entry || (entry.quantity || 0) <= 0) {
+            if (global.addSystemMessage) global.addSystemMessage(`${item.name || itemId} is not in your pack.`);
+            return false;
+        }
+        const resolvedSlot = slot || inferSlotForItem(item);
+        if (!resolvedSlot) {
+            if (global.addSystemMessage) global.addSystemMessage(`${item.name || itemId} can't be equipped (no slot).`);
+            return false;
+        }
+
+        if (!Array.isArray(v.character.equipment)) v.character.equipment = [];
+
+        // Slot collision: unequip the current occupant first. For two_handed
+        // weapons, also clear main_hand/off_hand. For main_hand/off_hand,
+        // also clear any two_handed occupant.
+        const occupantsToClear = [resolvedSlot];
+        if (resolvedSlot === 'two_handed')  { occupantsToClear.push('main_hand', 'off_hand'); }
+        else if (resolvedSlot === 'main_hand' || resolvedSlot === 'off_hand') { occupantsToClear.push('two_handed'); }
+        for (const s of occupantsToClear) {
+            if (v.character.equipment.some(e => e && e.slot === s)) {
+                unequipItem(s, { silent: true });
+            }
+        }
+
+        // Decrement from pack (also updates the legacy inventory count).
+        decrementPack(itemId);
+
+        // Add to v1 equipment.
+        v.character.equipment.push({ item_id: itemId, slot: resolvedSlot });
+
+        // Mirror into legacy flat equipment.
+        const eq = legacyEquipEntryFor(item, resolvedSlot);
+        if (!Array.isArray(gs().character.equipment)) gs().character.equipment = [];
+        gs().character.equipment.push(eq);
+
+        // Update readiedWeaponName for attack-flow heuristics.
+        if (eq.isWeapon) {
+            gs().readiedWeaponName = item.name;
+        }
+
+        // Warn (not error) on slot_limits overflow — render-only for now.
+        warnOnSlotLimitOverflow(resolvedSlot);
+
+        debugLog('EQUIP', `equip ${itemId} → ${resolvedSlot}`);
+        if (global.addMechanicsCallout) global.addMechanicsCallout(`Equipped ${item.name || itemId} (${resolvedSlot}).`);
+        updateCharacterDisplay();
+        if (global.saveGame) global.saveGame();
+        return true;
+    }
+
+    /**
+     * Move an item from an equipment slot back to the pack. `slot` is the
+     * runtime slot id (main_hand, body, etc.). opts.silent suppresses the
+     * callout (used during equip-swap flow so the swap reads as one action).
+     */
+    function unequipItem(slot, opts) {
+        const silent = !!(opts && opts.silent);
+        const v = gd()._v1;
+        if (!v || !v.character) return false;
+        if (!Array.isArray(v.character.equipment)) v.character.equipment = [];
+
+        const idx = v.character.equipment.findIndex(e => e && e.slot === slot);
+        if (idx === -1) return false;
+        const entry = v.character.equipment[idx];
+        const item = resolveV1Item(entry.item_id);
+        if (!item) {
+            v.character.equipment.splice(idx, 1);
+            return false;
+        }
+
+        // Remove from v1 equipment.
+        v.character.equipment.splice(idx, 1);
+
+        // Add to v1 pack — stack with an existing entry or push new.
+        if (!Array.isArray(v.character.pack)) v.character.pack = [];
+        const existing = v.character.pack.find(p => p && p.item_id === entry.item_id);
+        if (existing) existing.quantity = (existing.quantity || 1) + 1;
+        else v.character.pack.push({ item_id: entry.item_id, quantity: 1 });
+
+        // Mirror into legacy arrays: remove from equipment (by _v1_slot), add to inventory.
+        if (Array.isArray(gs().character.equipment)) {
+            const lidx = gs().character.equipment.findIndex(e => e && e._v1_slot === slot);
+            if (lidx !== -1) gs().character.equipment.splice(lidx, 1);
+        }
+        if (global.addToInventory) global.addToInventory(item.name, 1);
+
+        // If unequipping the readied weapon, clear the readiedWeaponName.
+        const readied = (gs().readiedWeaponName || '').toLowerCase();
+        if (readied && readied === String(item.name || '').toLowerCase()) {
+            gs().readiedWeaponName = null;
+        }
+
+        debugLog('EQUIP', `unequip ${entry.item_id} from ${slot}`);
+        if (!silent && global.addMechanicsCallout) {
+            global.addMechanicsCallout(`Unequipped ${item.name || entry.item_id} (${slot} → pack).`);
+        }
+        updateCharacterDisplay();
+        if (global.saveGame) global.saveGame();
+        return true;
+    }
+
+    /** Warn if a slot now holds more items than rules.character_model.slot_limits allows. Render-only; not enforced. */
+    function warnOnSlotLimitOverflow(slot) {
+        const v = gd()._v1;
+        const limits = v && v.rules && v.rules.character_model && v.rules.character_model.slot_limits;
+        if (!limits || typeof limits !== 'object') return;
+        const max = Number(limits[slot]);
+        if (!Number.isFinite(max) || max <= 0) return;
+        const count = (v.character.equipment || []).filter(e => e && e.slot === slot).length;
+        if (count > max && global.addSystemMessage) {
+            global.addSystemMessage(`[warn] Slot ${slot} now holds ${count} items (limit ${max}). Not enforced in this release.`);
+        }
+    }
+
     /** Remove a condition by id. */
     function removeCondition(id) {
         if (!id || typeof id !== 'string') return;
@@ -776,6 +1636,7 @@
         loadGame,
         getSaveMetadata,
         hasValidSave,
+        purgeStaleSaves,
         getStateToSave,
         modifyHP,
         addXP,
@@ -790,6 +1651,21 @@
         processLevelUp,
         getHitDieSize,
         getConditionModifierForRoll,
+        // Stage 5:
+        buildModuleState,
+        markRoomVisited,
+        applyReward,
+        // Stage 7:
+        checkCompletion,
+        buildCompletionSummary,
+        // Stage 6:
+        useConsumableById,
+        resolveV1Item,
+        findPackEntry,
+        decrementPack,
+        equipItem,
+        unequipItem,
+        inferSlotForItem,
         _modifierFor: modifierFor,
         _hpMax: hpMax,
         _resolveItem: resolveItem,
@@ -805,6 +1681,7 @@
     global.loadGame                     = loadGame;
     global.getSaveMetadata              = getSaveMetadata;
     global.hasValidSave                 = hasValidSave;
+    global.purgeStaleSaves              = purgeStaleSaves;
     global.getStateToSave               = getStateToSave;
     global.modifyHP                     = modifyHP;
     global.addXP                        = addXP;
@@ -819,4 +1696,19 @@
     global.processLevelUp               = processLevelUp;
     global.getHitDieSize                = getHitDieSize;
     global.getConditionModifierForRoll  = getConditionModifierForRoll;
+    // Stage 5 legacy globals.
+    global.buildModuleState             = buildModuleState;
+    global.markRoomVisited              = markRoomVisited;
+    global.applyReward                  = applyReward;
+    // Stage 7 legacy globals.
+    global.checkCompletion              = checkCompletion;
+    global.buildCompletionSummary       = buildCompletionSummary;
+    // Stage 6 legacy globals.
+    global.useConsumableById            = useConsumableById;
+    global.resolveV1Item                = resolveV1Item;
+    global.findPackEntry                = findPackEntry;
+    global.decrementPack                = decrementPack;
+    global.equipItem                    = equipItem;
+    global.unequipItem                  = unequipItem;
+    global.inferSlotForItem             = inferSlotForItem;
 })(typeof window !== 'undefined' ? window : globalThis);

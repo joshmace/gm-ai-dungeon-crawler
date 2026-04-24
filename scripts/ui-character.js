@@ -315,31 +315,47 @@
     function renderEquipment() {
         const char = gs().character;
         if (!char) return;
-        // Equipped strip: armor, weapons, items-in-use (torch etc.)
+        // Equipped strip: armor, weapons, items-in-use (torch etc.).
         const equippedItems = [...(char.equipment || []), ...(gs().equippedInUse || [])];
-        const equippedHTML = equippedItems.map(item => {
+        const equippedEl = doc().getElementById('equippedList');
+        equippedEl.innerHTML = '';
+        for (const item of equippedItems) {
+            const row = doc().createElement('div');
             let typeClass = '';
-            let icon = '';
+            let iconHTML = '';
             if (item.isArmor) {
                 typeClass = 'armor';
-                icon = '<i class="fa-sharp-duotone fa-solid fa-shield-halved"></i>';
+                iconHTML = '<i class="fa-sharp-duotone fa-solid fa-shield-halved"></i>';
             } else if (item.isWeapon && item.weaponType === 'ranged') {
                 typeClass = 'ranged';
-                icon = '<i class="fa-sharp-duotone fa-solid fa-bow-arrow"></i>';
+                iconHTML = '<i class="fa-sharp-duotone fa-solid fa-bow-arrow"></i>';
             } else if (item.isWeapon && (item.weaponType === 'melee' || !item.weaponType)) {
                 typeClass = 'melee';
-                icon = '<i class="fa-sharp-duotone fa-solid fa-sword"></i>';
+                iconHTML = '<i class="fa-sharp-duotone fa-solid fa-sword"></i>';
             }
-            return `
-            <div class="equipment-item${typeClass ? ' ' + typeClass : ''}">
-                ${icon}
+            row.className = `equipment-item${typeClass ? ' ' + typeClass : ''}`;
+            row.innerHTML = `
+                ${iconHTML}
                 <div class="equipment-name">${item.name}</div>
                 <div class="equipment-stats">${item.stats || ''}</div>
-            </div>
-        `;
-        }).join('');
-        const equippedEl = doc().getElementById('equippedList');
-        equippedEl.innerHTML = equippedHTML;
+            `;
+
+            // Stage 6: Unequip button, rendered only for v1-tracked equipment.
+            // equippedInUse entries (torch, etc.) don't have _v1_slot so stay buttonless.
+            if (item._v1_slot && global.unequipItem) {
+                const btn = doc().createElement('button');
+                btn.type = 'button';
+                btn.className = 'item-action-button item-unequip';
+                btn.textContent = 'Unequip';
+                btn.title = `Unequip ${item.name} (${item._v1_slot} → pack)`;
+                btn.addEventListener('click', () => {
+                    if (gs().waitingForRoll || gs().activeHazard) return;
+                    global.unequipItem(item._v1_slot);
+                });
+                row.appendChild(btn);
+            }
+            equippedEl.appendChild(row);
+        }
         if (global.FontAwesome && global.FontAwesome.dom && typeof global.FontAwesome.dom.i2svg === 'function') {
             global.FontAwesome.dom.i2svg({ node: equippedEl });
         }
@@ -350,19 +366,71 @@
         if (!char) return;
         const sortedInventory = [...(char.inventory || [])].sort((a, b) =>
             (a.name === 'Gold' ? -1 : 0) - (b.name === 'Gold' ? -1 : 0));
-        const packHTML = sortedInventory.map(item => {
-            const qty = item.quantity;
-            const qtyStr = item.name === 'Gold' ? ` ${qty}` : `x${qty}`;
-            const goldClass = item.name === 'Gold' ? ' gold' : '';
-            const goldIcon  = item.name === 'Gold' ? '<i class="fa-sharp-duotone fa-solid fa-sack"></i>' : '';
-            return `
-            <div class="inventory-item${goldClass}">
-                <span class="item-name">${goldIcon} ${item.name}</span>
-                <span class="item-quantity">${qtyStr}</span>
-            </div>
-        `}).join('');
+
+        // Build a name-keyed map into the v1 pack so we can attach Equip/Use
+        // buttons to entries that have a v1-items-library counterpart.
+        const v = gd()._v1;
+        const itemsByName = {};
+        if (v && v.character && Array.isArray(v.character.pack)) {
+            const idx = (function () {
+                const shared   = (v.items  && v.items.items) || {};
+                const modItems = (v.module && v.module.module_items && v.module.module_items.items) || {};
+                return Object.assign({}, shared, modItems);
+            })();
+            for (const p of v.character.pack) {
+                if (!p || !p.item_id) continue;
+                const item = idx[p.item_id];
+                if (!item) continue;
+                itemsByName[(item.name || p.item_id).toLowerCase()] = { entry: p, item };
+            }
+        }
+
         const packEl = doc().getElementById('packList');
-        packEl.innerHTML = packHTML;
+        packEl.innerHTML = '';
+        for (const inv of sortedInventory) {
+            const row = doc().createElement('div');
+            const isGold = inv.name === 'Gold';
+            const qtyStr = isGold ? ` ${inv.quantity}` : `x${inv.quantity}`;
+            const goldClass = isGold ? ' gold' : '';
+            const goldIcon  = isGold ? '<i class="fa-sharp-duotone fa-solid fa-sack"></i>' : '';
+            row.className = `inventory-item${goldClass}`;
+            row.innerHTML = `
+                <span class="item-name">${goldIcon} ${inv.name}</span>
+                <span class="item-quantity">${qtyStr}</span>
+            `;
+
+            // Stage 6: match inventory row to a v1 pack entry by name and
+            // render the appropriate action button.
+            const match = itemsByName[String(inv.name || '').toLowerCase()];
+            if (match && !isGold) {
+                const { item } = match;
+                if (item.consumable && item.consumable.on_use && global.useConsumableById) {
+                    const btn = doc().createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'item-action-button item-use';
+                    btn.textContent = 'Use';
+                    btn.title = `Use ${item.name}`;
+                    btn.addEventListener('click', () => {
+                        if (gs().waitingForRoll || gs().activeHazard) return;
+                        global.useConsumableById(item.id);
+                    });
+                    row.appendChild(btn);
+                } else if ((item.weapon || item.armor) && global.equipItem) {
+                    const btn = doc().createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'item-action-button item-equip';
+                    btn.textContent = 'Equip';
+                    const slot = global.inferSlotForItem ? global.inferSlotForItem(item) : null;
+                    btn.title = slot ? `Equip ${item.name} (${slot})` : `Equip ${item.name}`;
+                    btn.addEventListener('click', () => {
+                        if (gs().waitingForRoll || gs().activeHazard) return;
+                        global.equipItem(item.id);
+                    });
+                    row.appendChild(btn);
+                }
+            }
+            packEl.appendChild(row);
+        }
         if (global.FontAwesome && global.FontAwesome.dom && typeof global.FontAwesome.dom.i2svg === 'function') {
             global.FontAwesome.dom.i2svg({ node: packEl });
         }
