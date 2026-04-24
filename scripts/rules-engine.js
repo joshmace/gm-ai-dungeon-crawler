@@ -1456,6 +1456,72 @@
         return { type, target, applied: false, reason: 'unknown_effect_type' };
     }
 
+    /**
+     * Evaluate a module's completion_condition against the current moduleState
+     * (typically assembled by GameState.buildModuleState). Pure function: does
+     * not mutate state. Returns { completed, kind, target? }.
+     *
+     * Condition types (per v1 schema JSON_SCHEMAS.md §completion_condition):
+     *   - { type: 'defeat_encounter', target: <enc_id> }
+     *     matches when moduleState.encounters[target] has .resolved (or .defeated)
+     *   - { type: 'reach_room', target: <room_id> }
+     *     matches when moduleState.visitedRooms includes target
+     *   - { type: 'all_encounters_defeated' }
+     *     matches when every encounter authored in the module has resolved
+     *   - null / missing → kind: 'gm_judged', completed: false (no app event)
+     *
+     * `module` is the v1 module file (gameData._v1.module).
+     */
+    function evaluateCompletion(module, moduleState) {
+        const cc = module && module.completion_condition;
+        if (!cc || typeof cc !== 'object') {
+            return { completed: false, kind: 'gm_judged' };
+        }
+        const ms = moduleState || {};
+        const encounters = ms.encounters || {};
+        const visited    = Array.isArray(ms.visitedRooms) ? ms.visitedRooms : [];
+
+        if (cc.type === 'defeat_encounter') {
+            const target = cc.target;
+            if (!target) return { completed: false, kind: cc.type, target: null };
+            const row = encounters[target] || {};
+            const done = !!(row.resolved || row.defeated);
+            return { completed: done, kind: cc.type, target };
+        }
+
+        if (cc.type === 'reach_room') {
+            const target = cc.target;
+            if (!target) return { completed: false, kind: cc.type, target: null };
+            return { completed: visited.includes(target), kind: cc.type, target };
+        }
+
+        if (cc.type === 'all_encounters_defeated') {
+            // Walk authored encounters so the gate is grounded in module truth
+            // (not just whichever ids moduleState has seen). If a module has
+            // zero encounters authored, this is vacuously true — flagged for
+            // caller awareness via the returned kind.
+            const rooms = (module && module.rooms) || {};
+            const ids = [];
+            for (const room of Object.values(rooms)) {
+                for (const enc of (room && room.encounters) || []) {
+                    if (enc && enc.id) ids.push(enc.id);
+                }
+            }
+            if (ids.length === 0) {
+                return { completed: false, kind: cc.type, reason: 'no_encounters_authored' };
+            }
+            for (const id of ids) {
+                const row = encounters[id] || {};
+                if (!row.resolved && !row.defeated) {
+                    return { completed: false, kind: cc.type };
+                }
+            }
+            return { completed: true, kind: cc.type };
+        }
+
+        return { completed: false, kind: cc.type || 'unknown' };
+    }
+
     /** Find a feature by id across every room in the module. null if none. */
     function findFeatureById(gameData, featureId) {
         const rooms = gameData && gameData.module && gameData.module.rooms;
@@ -1649,6 +1715,8 @@
         featureCheckSpec,
         featureCheckInputs,
         // Stage 6 items / consumables:
-        useConsumable
+        useConsumable,
+        // Stage 7 completion-condition:
+        evaluateCompletion
     };
 })(typeof window !== 'undefined' ? window : globalThis);
