@@ -443,6 +443,9 @@
                 }
             }
             updateCharacterDisplay();
+            // Stage 7: encounter defeats can satisfy defeat_encounter /
+            // all_encounters_defeated completion conditions.
+            if (global.checkCompletion) global.checkCompletion();
         }
 
         out.text = text.replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, ' ');

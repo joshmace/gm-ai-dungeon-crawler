@@ -1048,8 +1048,66 @@
         if (gs().visitedRooms.includes(roomId)) return false;
         gs().visitedRooms.push(roomId);
         debugLog('STATE', `Room visited: ${roomId}`);
+        checkCompletion();  // Stage 7: reach_room conditions may fire on first visit.
         saveGame();
         return true;
+    }
+
+    /**
+     * Stage 7: run the module's completion_condition against current state.
+     * Fires once per game — the first time the condition is met, flip
+     * gs().completion.completed = true, log a COMPLETION debug entry, and
+     * notify UI.narrative if the summary-card renderer is wired.
+     *
+     * Null / missing condition (Gauntlet) is GM-judged and never fires.
+     * Safe to call at any state change; idempotent (re-firing after the
+     * first flip is a no-op).
+     */
+    function checkCompletion() {
+        if (!gs().completion) gs().completion = { completed: false, conditions_met: [] };
+        if (gs().completion.completed) return gs().completion;
+        const re = global.RulesEngine;
+        if (!re || !re.evaluateCompletion) return gs().completion;
+        const mod = (gd() && gd()._v1 && gd()._v1.module) || null;
+        if (!mod) return gs().completion;
+        const plan = re.evaluateCompletion(mod, buildModuleState());
+        if (plan && plan.completed) {
+            gs().completion.completed = true;
+            gs().completion.conditions_met = [plan];
+            debugLog('COMPLETION', `Module completed — kind=${plan.kind}${plan.target ? ` target=${plan.target}` : ''}`);
+            // Fire the UI side if available. Renderer lands in commit 5.
+            if (global.UI && global.UI.narrative && typeof global.UI.narrative.showCompletionOverlay === 'function') {
+                try { global.UI.narrative.showCompletionOverlay(buildCompletionSummary(plan)); }
+                catch (e) { console.warn('showCompletionOverlay failed:', e); }
+            }
+        }
+        return gs().completion;
+    }
+
+    /**
+     * Stage 7: assemble the summary payload for the end-of-module card.
+     * Pure read against current state; no side effects. Caller (Stage 7
+     * UI.narrative.showCompletionOverlay) renders this into the overlay.
+     */
+    function buildCompletionSummary(plan) {
+        const char = gs().character || {};
+        const mod  = (gd() && gd()._v1 && gd()._v1.module) || {};
+        const started = gs().sessionStartedAt || Date.now();
+        const durationMs = Math.max(0, Date.now() - started);
+        const encountersDefeated = Object.values(buildModuleState().encounters || {})
+            .filter(e => e && e.resolved).length;
+        return {
+            kind:             (plan && plan.kind) || 'completed',
+            target:           (plan && plan.target) || null,
+            module_title:     (mod && mod.title) || '',
+            module_id:        (mod && mod.id) || null,
+            xp:               char.xp || 0,
+            gold:             currentGoldNumeric(),
+            level:            char.level || 1,
+            rooms_visited:    (gs().visitedRooms || []).length,
+            encounters_defeated: encountersDefeated,
+            duration_ms:      durationMs
+        };
     }
 
     /** Roll a dice formula string or return the integer unchanged. */
@@ -1579,6 +1637,9 @@
         buildModuleState,
         markRoomVisited,
         applyReward,
+        // Stage 7:
+        checkCompletion,
+        buildCompletionSummary,
         // Stage 6:
         useConsumableById,
         resolveV1Item,
@@ -1621,6 +1682,9 @@
     global.buildModuleState             = buildModuleState;
     global.markRoomVisited              = markRoomVisited;
     global.applyReward                  = applyReward;
+    // Stage 7 legacy globals.
+    global.checkCompletion              = checkCompletion;
+    global.buildCompletionSummary       = buildCompletionSummary;
     // Stage 6 legacy globals.
     global.useConsumableById            = useConsumableById;
     global.resolveV1Item                = resolveV1Item;
