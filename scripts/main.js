@@ -183,12 +183,19 @@
             alert('Failed to load game data. Check console for details and ensure all JSON files are in the same directory.');
             return;
         }
+        // Stage 7: drop any pre-v1-envelope saves before checking for a
+        // valid one. If purge fired, stash a note so the post-boot welcome
+        // message tells the user their old save format was dropped.
+        const purged = global.purgeStaleSaves ? global.purgeStaleSaves() : false;
         if (hasValidSave()) {
             showStartChoice();
             return;
         }
         initializeGameStateFromData();
         finishGameStart(true);
+        if (purged && typeof addSystemMessage === 'function') {
+            addSystemMessage('Old save format from a pre-Stage-7 build was dropped. This is a fresh game.');
+        }
     }
 
     function initializeGameStateFromData() {
@@ -216,6 +223,11 @@
         gs().commandHistoryIndex = -1;
         gs().commandHistoryDraft = '';
         gs().pendingLevelUpAck = null;
+        // Stage 7: completion-condition state + session-start wall-clock.
+        // sessionStartedAt is preserved across loadGame so the completion
+        // summary can show the original session's total runtime.
+        gs().completion = { completed: false, conditions_met: [] };
+        gs().sessionStartedAt = Date.now();
         gs().character = {
             name: gd().character.basic_info.name,
             class: gd().character.basic_info.class,
@@ -314,7 +326,8 @@
         const overlay = document.getElementById('loadingOverlay');
         if (!overlay) return;
         const meta = getSaveMetadata();
-        const savedAt = meta && meta.savedAt ? new Date(meta.savedAt).toLocaleString() : '';
+        const savedAtTs = meta && (meta.saved_at || meta.savedAt);
+        const savedAt = savedAtTs ? new Date(savedAtTs).toLocaleString() : '';
         overlay.innerHTML = `
             <h2>Saved game found</h2>
             <p class="start-choice-p">Continue your adventure or start a new game.</p>

@@ -424,98 +424,318 @@
         return XP_LEVELS_DEFAULT;
     }
 
-    const SAVE_KEY = 'gm-ai-dungeon-save';
-    const SAVE_VERSION = 1;
+    // Stage 7: save-state follows the v1 envelope from JSON_SCHEMAS.md:
+    //   { schema_version: 1, game_pack_id, module_id, saved_at,
+    //     session_started_at, module{}, combat{}, completion{},
+    //     character_mutations{}, runtime{} }
+    // `runtime{}` holds the app-state bits that aren't in the v1 spec but
+    // are needed to resume cleanly (mode, equippedInUse, conversation
+    // history, etc.). Per-pack localStorage slots prevent cross-pack
+    // contamination when switching Three Knots ↔ Crow's Hollow ↔ Gauntlet.
+    const SAVE_KEY_PREFIX    = 'gm-ai-dungeon-save';
+    const SAVE_SCHEMA_VERSION = 1;
 
-    /** Serializable slice of game state for save. */
+    function saveKeyFor(gamePackId) {
+        const id = (gamePackId || 'default').replace(/[^a-z0-9_-]/gi, '_');
+        return `${SAVE_KEY_PREFIX}:${id}`;
+    }
+
+    function currentGamePackId() {
+        const m = gd() && gd()._v1 && gd()._v1.manifest;
+        return (m && m.id) || null;
+    }
+
+    function currentModuleId() {
+        const mod = gd() && gd()._v1 && gd()._v1.module;
+        return (mod && mod.id) || null;
+    }
+
+    // Build the encounters{} map for the save envelope. Per the spec the
+    // shape is `{ [id]: { resolved, instances[] } }` keyed by encounter id.
+    // Per-instance HP tracking isn't modeled in runtime yet (Stage 3 damage
+    // is per encounter group, not per instance) — we still ship the spec
+    // shape with a `damage_dealt` companion so round-trip preserves the
+    // information we DO have; `instances[]` stays empty until the
+    // per-instance rewrite lands.
+    function buildEncountersForSave() {
+        const out = {};
+        const rooms = (gd()._v1 && gd()._v1.module && gd()._v1.module.rooms) || {};
+        const damage = gs().damageToEncounters || {};
+        for (const room of Object.values(rooms)) {
+            for (const enc of (room.encounters || [])) {
+                if (!enc || !enc.id) continue;
+                let maxHp = 0;
+                try { maxHp = (global.getEncounterHP && global.getEncounterHP(enc).max) || 0; }
+                catch (e) { maxHp = 0; }
+                const dmg = Number(damage[enc.id] || 0);
+                const resolved = maxHp > 0 && dmg >= maxHp;
+                out[enc.id] = { resolved, damage_dealt: dmg, instances: [] };
+            }
+        }
+        return out;
+    }
+
+    function currentGoldNumeric() {
+        const inv = gs().character && gs().character.inventory;
+        if (Array.isArray(inv)) {
+            const g = inv.find(i => i.name === 'Gold');
+            if (g && g.quantity != null) {
+                const m = String(g.quantity).match(/(\d+)/);
+                if (m) return parseInt(m[1], 10);
+            }
+        }
+        const v1 = gd()._v1 && gd()._v1.character;
+        return (v1 && typeof v1.gold === 'number') ? v1.gold : 0;
+    }
+
+    /**
+     * Produce the v1 save envelope from current runtime state. Pure — no
+     * side effects; `saveGame` wraps this for localStorage writes, and
+     * `test.dumpSave()` prints it verbatim for spec-checking.
+     */
     function getStateToSave() {
+        const char   = gs().character || {};
+        const v1char = (gd()._v1 && gd()._v1.character) || {};
+        const clone = v => JSON.parse(JSON.stringify(v));
+
         return {
-            character: JSON.parse(JSON.stringify(gs().character)),
-            currentRoom: gs().currentRoom,
-            triggeredEvents: [...(gs().triggeredEvents || [])],
-            conversationHistory: gs().conversationHistory.map(m => ({ role: m.role, content: m.content })),
-            damageToEncounters: { ...(gs().damageToEncounters || {}) },
-            inCombat: !!gs().inCombat,
-            mode: gs().mode || 'exploration',
-            equippedInUse: [...(gs().equippedInUse || [])],
-            lastCombatRoom: gs().lastCombatRoom,
-            encounterHistory: (gs().encounterHistory || []).map(e => ({ ...e })),
-            readiedWeaponName: gs().readiedWeaponName,
-            armorEquipped: !!gs().armorEquipped,
-            lastUserRollType: gs().lastUserRollType,
-            // Stage 4: hazard state rides with the save so fire-once hazards
-            // stay resolved across reloads. Only the state table is persisted;
-            // the in-flight queue + active plan are reconstructed from a fresh
-            // trigger call after load.
-            hazardState: JSON.parse(JSON.stringify(gs().hazardState || {})),
-            // Stage 5: feature deltas, connection overrides, visited rooms.
-            // Deltas-only shape means first-time entries still fire on_enter
-            // hazards on load, puzzle solves stay solved, revealed doors stay
-            // revealed, and the prompt's visited-flag stays accurate.
-            featureState:        JSON.parse(JSON.stringify(gs().featureState || {})),
-            connectionsModified: JSON.parse(JSON.stringify(gs().connectionsModified || {})),
-            visitedRooms:        (gs().visitedRooms || []).slice()
+            schema_version:     SAVE_SCHEMA_VERSION,
+            game_pack_id:       currentGamePackId(),
+            module_id:          currentModuleId(),
+            saved_at:           Date.now(),
+            session_started_at: gs().sessionStartedAt || Date.now(),
+            module: {
+                current_room:         gs().currentRoom || null,
+                visited_rooms:        (gs().visitedRooms || []).slice(),
+                encounters:           buildEncountersForSave(),
+                hazards:              clone(gs().hazardState || {}),
+                features:             clone(gs().featureState || {}),
+                connections_modified: clone(gs().connectionsModified || {})
+            },
+            combat: {
+                in_combat:        !!gs().inCombat,
+                last_combat_room: gs().lastCombatRoom || null
+            },
+            completion: clone(gs().completion || { completed: false, conditions_met: [] }),
+            character_mutations: {
+                basic_info: { level: char.level || (v1char.basic_info && v1char.basic_info.level) || 1 },
+                hp_current:        (typeof char.hp === 'number') ? char.hp : (v1char.hp_current || 0),
+                xp:                (typeof char.xp === 'number') ? char.xp : (v1char.xp || 0),
+                gold:              currentGoldNumeric(),
+                equipment:         clone(v1char.equipment || []),
+                pack:              clone(v1char.pack || []),
+                feature_resources: clone(v1char.feature_resources || {}),
+                charged_items:     clone(v1char.charged_items || {}),
+                conditions:        clone(char.conditions || v1char.conditions || [])
+            },
+            runtime: {
+                mode:                 gs().mode || 'exploration',
+                equipped_in_use:      [...(gs().equippedInUse || [])],
+                readied_weapon_name:  gs().readiedWeaponName || null,
+                armor_equipped:       !!gs().armorEquipped,
+                last_user_roll_type:  gs().lastUserRollType || null,
+                triggered_events:     [...(gs().triggeredEvents || [])],
+                encounter_history:    (gs().encounterHistory || []).map(e => ({ ...e })),
+                conversation_history: (gs().conversationHistory || []).map(m => ({ role: m.role, content: m.content }))
+            }
         };
     }
 
     function saveGame() {
         if (!gs().character || gs().isDead) return;
         try {
-            const payload = {
-                version: SAVE_VERSION,
-                gamePack: CONFIG.GAME_PACK,
-                moduleTitle: gd().module && gd().module.module ? gd().module.module.title : '',
-                savedAt: Date.now(),
-                state: getStateToSave()
-            };
-            localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+            const payload = getStateToSave();
+            const packId = payload.game_pack_id || (global.CONFIG && global.CONFIG.GAME_PACK) || 'default';
+            localStorage.setItem(saveKeyFor(packId), JSON.stringify(payload));
             debugLog('SAVE', 'Game saved');
         } catch (e) {
             console.warn('Save failed:', e);
         }
     }
 
+    /**
+     * Drop any stale-shape saves for the current pack (legacy single-key
+     * slot + per-pack slot with a wrong schema or pack id). Returns true
+     * if anything was removed. Called once at boot so the UI doesn't hide
+     * a "Continue" button over a save that will fail the schema gate
+     * anyway. Safe to call multiple times — subsequent calls are no-ops.
+     */
+    function purgeStaleSaves() {
+        const packId = currentGamePackId();
+        let purged = false;
+        const check = (key) => {
+            try {
+                const raw = localStorage.getItem(key);
+                if (!raw) return;
+                const data = JSON.parse(raw);
+                const schemaOk = data && data.schema_version === SAVE_SCHEMA_VERSION;
+                const packOk   = data && data.game_pack_id === packId;
+                if (!schemaOk || !packOk) {
+                    localStorage.removeItem(key);
+                    purged = true;
+                    debugLog('SAVE_VERSION',
+                        `Purged stale save (${key}) — schema=${data && data.schema_version} pack=${data && data.game_pack_id}`);
+                }
+            } catch (e) {
+                localStorage.removeItem(key);
+                purged = true;
+                debugLog('SAVE_VERSION', `Purged unparseable save (${key})`);
+            }
+        };
+        check(SAVE_KEY_PREFIX);
+        if (packId) check(saveKeyFor(packId));
+        return purged;
+    }
+
+    /**
+     * Return the save envelope for the current pack iff it passes the
+     * schema + pack-id gate. Older saves (pre-Stage-7 shape, or written
+     * against a different pack) return null. This is the single read-point
+     * for save metadata; callers never touch localStorage directly.
+     */
     function getSaveMetadata() {
+        const packId = currentGamePackId();
+        if (!packId) return null;
+        let raw = null;
         try {
-            const raw = localStorage.getItem(SAVE_KEY);
+            raw = localStorage.getItem(saveKeyFor(packId));
+            if (!raw) raw = localStorage.getItem(SAVE_KEY_PREFIX); // legacy single-slot fallback
             if (!raw) return null;
             const data = JSON.parse(raw);
-            return data && data.version === SAVE_VERSION ? data : null;
+            if (!data) return null;
+            if (data.schema_version !== SAVE_SCHEMA_VERSION) return null;
+            if (data.game_pack_id !== packId) return null;
+            return data;
         } catch (e) {
             return null;
         }
     }
 
     function hasValidSave() {
-        const meta = getSaveMetadata();
-        return meta && meta.gamePack === CONFIG.GAME_PACK;
+        return !!getSaveMetadata();
     }
 
     function loadGame() {
-        const meta = getSaveMetadata();
-        if (!meta || meta.gamePack !== CONFIG.GAME_PACK) return false;
-        const s = meta.state;
-        if (!s || !s.character) return false;
-        gs().character = s.character;
-        gs().currentRoom = s.currentRoom;
-        gs().triggeredEvents = s.triggeredEvents || [];
-        gs().conversationHistory = s.conversationHistory || [];
-        gs().damageToEncounters = s.damageToEncounters || {};
-        gs().inCombat = !!s.inCombat;
-        gs().mode = s.mode || (s.inCombat ? 'combat' : 'exploration');
-        gs().equippedInUse = s.equippedInUse || [];
-        gs().lastCombatRoom = s.lastCombatRoom;
-        gs().encounterHistory = s.encounterHistory || [];
-        gs().readiedWeaponName = s.readiedWeaponName || null;
-        gs().armorEquipped = !!s.armorEquipped;
-        gs().lastUserRollType = s.lastUserRollType || null;
-        gs().hazardState = s.hazardState ? JSON.parse(JSON.stringify(s.hazardState)) : {};
-        // Stage 5: rehydrate feature deltas + connection overrides + visited rooms.
-        gs().featureState        = s.featureState        ? JSON.parse(JSON.stringify(s.featureState))        : {};
-        gs().connectionsModified = s.connectionsModified ? JSON.parse(JSON.stringify(s.connectionsModified)) : {};
-        gs().visitedRooms        = Array.isArray(s.visitedRooms) ? s.visitedRooms.slice() : [];
+        const packId = currentGamePackId();
+        if (!packId) return false;
+        const newKey = saveKeyFor(packId);
+        let raw = localStorage.getItem(newKey);
+        let fromLegacyKey = false;
+        if (!raw) {
+            const legacy = localStorage.getItem(SAVE_KEY_PREFIX);
+            if (legacy) { raw = legacy; fromLegacyKey = true; }
+        }
+        if (!raw) return false;
+
+        let payload;
+        try {
+            payload = JSON.parse(raw);
+        } catch (e) {
+            debugLog('SAVE_VERSION', 'Save parse failed — dropping');
+            if (fromLegacyKey) localStorage.removeItem(SAVE_KEY_PREFIX);
+            else               localStorage.removeItem(newKey);
+            return false;
+        }
+
+        // Stage 7 schema gate: pre-v1-envelope saves don't carry
+        // schema_version at the top level, so they fail here and are
+        // dropped with a one-time system message. Option (a) from the
+        // Stage 7 brief — no best-effort migration of old shapes.
+        const schemaOk = payload && payload.schema_version === SAVE_SCHEMA_VERSION;
+        const packOk   = payload && payload.game_pack_id === packId;
+        if (!schemaOk || !packOk) {
+            debugLog('SAVE_VERSION',
+                `Save rejected — schema=${payload && payload.schema_version} pack=${payload && payload.game_pack_id} (need ${SAVE_SCHEMA_VERSION} / ${packId})`);
+            if (fromLegacyKey) localStorage.removeItem(SAVE_KEY_PREFIX);
+            else               localStorage.removeItem(newKey);
+            if (global.addSystemMessage) {
+                global.addSystemMessage('Old save format from a pre-Stage-7 build — please start a new game.');
+            }
+            return false;
+        }
+
+        const m  = payload.module || {};
+        const cm = payload.character_mutations || {};
+        const rt = payload.runtime || {};
+        const clone = v => JSON.parse(JSON.stringify(v));
+
+        gs().currentRoom         = m.current_room || gs().currentRoom;
+        gs().visitedRooms        = Array.isArray(m.visited_rooms) ? m.visited_rooms.slice() : [];
+        gs().hazardState         = m.hazards              ? clone(m.hazards)              : {};
+        gs().featureState        = m.features             ? clone(m.features)             : {};
+        gs().connectionsModified = m.connections_modified ? clone(m.connections_modified) : {};
+
+        // Rehydrate damageToEncounters from encounters[id].damage_dealt
+        // (per-instance HP not modeled yet — see buildEncountersForSave).
+        const dmg = {};
+        for (const [id, row] of Object.entries(m.encounters || {})) {
+            if (row && typeof row.damage_dealt === 'number') dmg[id] = row.damage_dealt;
+        }
+        gs().damageToEncounters = dmg;
+
+        gs().inCombat       = !!(payload.combat && payload.combat.in_combat);
+        gs().lastCombatRoom = (payload.combat && payload.combat.last_combat_room) || null;
+        gs().completion     = payload.completion ? clone(payload.completion)
+                                                 : { completed: false, conditions_met: [] };
+
+        // character_mutations flows back into both the legacy runtime
+        // character (hp/xp/level/gold/conditions) and the v1 source of
+        // truth under gd()._v1.character (equipment/pack/feature_resources/
+        // charged_items/hp_current/xp). Equipment mutations MUST land on
+        // the v1 side because Stage 6's equipItem/unequipItem write there.
+        if (gs().character) {
+            const c = gs().character;
+            if (cm.basic_info && typeof cm.basic_info.level === 'number') c.level = cm.basic_info.level;
+            if (typeof cm.hp_current === 'number') c.hp = cm.hp_current;
+            if (typeof cm.xp === 'number')         c.xp = cm.xp;
+            if (typeof cm.gold === 'number') {
+                const g = Array.isArray(c.inventory) ? c.inventory.find(i => i.name === 'Gold') : null;
+                if (g) g.quantity = `${cm.gold}gp`;
+                else {
+                    if (!Array.isArray(c.inventory)) c.inventory = [];
+                    c.inventory.push({ name: 'Gold', quantity: `${cm.gold}gp` });
+                }
+            }
+            if (Array.isArray(cm.conditions)) c.conditions = clone(cm.conditions);
+        }
+        const v1 = gd() && gd()._v1 && gd()._v1.character;
+        if (v1) {
+            if (Array.isArray(cm.equipment))       v1.equipment        = clone(cm.equipment);
+            if (Array.isArray(cm.pack))            v1.pack             = clone(cm.pack);
+            if (cm.feature_resources)              v1.feature_resources= clone(cm.feature_resources);
+            if (cm.charged_items)                  v1.charged_items    = clone(cm.charged_items);
+            if (typeof cm.gold       === 'number') v1.gold       = cm.gold;
+            if (typeof cm.xp         === 'number') v1.xp         = cm.xp;
+            if (typeof cm.hp_current === 'number') v1.hp_current = cm.hp_current;
+            if (cm.basic_info && typeof cm.basic_info.level === 'number') {
+                v1.basic_info = v1.basic_info || {};
+                v1.basic_info.level = cm.basic_info.level;
+            }
+            if (Array.isArray(cm.conditions))      v1.conditions = clone(cm.conditions);
+        }
+
+        gs().mode                = rt.mode || (gs().inCombat ? 'combat' : 'exploration');
+        gs().equippedInUse       = Array.isArray(rt.equipped_in_use) ? rt.equipped_in_use.slice() : [];
+        gs().readiedWeaponName   = rt.readied_weapon_name || null;
+        gs().armorEquipped       = !!rt.armor_equipped;
+        gs().lastUserRollType    = rt.last_user_roll_type || null;
+        gs().triggeredEvents     = Array.isArray(rt.triggered_events) ? rt.triggered_events.slice() : [];
+        gs().encounterHistory    = Array.isArray(rt.encounter_history) ? rt.encounter_history.map(e => ({ ...e })) : [];
+        gs().conversationHistory = Array.isArray(rt.conversation_history)
+            ? rt.conversation_history.map(h => ({ role: h.role, content: h.content }))
+            : [];
+
+        gs().sessionStartedAt = payload.session_started_at || Date.now();
         gs().isDead = false;
         gs().pendingLevelUpAck = null;
+
+        if (fromLegacyKey) {
+            localStorage.removeItem(SAVE_KEY_PREFIX);
+            try { localStorage.setItem(newKey, JSON.stringify(payload)); } catch (e) { /* ignore */ }
+            debugLog('SAVE_VERSION', 'Migrated legacy save key to per-pack slot');
+        }
+
+        debugLog('SAVE_VERSION', `Save loaded — schema=${payload.schema_version} pack=${payload.game_pack_id}`);
         debugLog('SAVE', 'Game loaded');
         return true;
     }
@@ -1340,6 +1560,7 @@
         loadGame,
         getSaveMetadata,
         hasValidSave,
+        purgeStaleSaves,
         getStateToSave,
         modifyHP,
         addXP,
@@ -1381,6 +1602,7 @@
     global.loadGame                     = loadGame;
     global.getSaveMetadata              = getSaveMetadata;
     global.hasValidSave                 = hasValidSave;
+    global.purgeStaleSaves              = purgeStaleSaves;
     global.getStateToSave               = getStateToSave;
     global.modifyHP                     = modifyHP;
     global.addXP                        = addXP;

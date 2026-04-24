@@ -183,6 +183,10 @@
             connectionsModified: {},
             /** Stage 5: ordered list of room ids visited this game. Drives visited-flag rendering in the prompt + UI. */
             visitedRooms: [],
+            /** Stage 7: completion-condition state. `conditions_met` is a list of descriptor objects per the v1 save spec. */
+            completion: { completed: false, conditions_met: [] },
+            /** Stage 7: wall-clock timestamp when the current game run started. Preserved across loadGame. */
+            sessionStartedAt: null,
         };
         // Stage 1e: expose to extracted modules.
         window.gameState = gameState;
@@ -342,6 +346,23 @@
                 } else {
                     addSystemMessage(`[DEBUG] solveFeature: UI.features.markSolved not available`);
                 }
+            },
+
+            // Stage 7: print the current save envelope to the console for
+            // spec-checking without round-tripping through localStorage.
+            // Returns the object as well, so `const s = test.dumpSave()` works.
+            dumpSave() {
+                if (!window.GameState || !window.GameState.getStateToSave) {
+                    addSystemMessage('[DEBUG] dumpSave: GameState.getStateToSave not available');
+                    return null;
+                }
+                const payload = window.GameState.getStateToSave();
+                console.log('[DEBUG] Save envelope:', payload);
+                const schema = payload && payload.schema_version;
+                const pack   = payload && payload.game_pack_id;
+                const module_ = payload && payload.module_id;
+                addSystemMessage(`[DEBUG] dumpSave: schema=${schema} pack=${pack} module=${module_} (full blob in console)`);
+                return payload;
             }
         };
         
