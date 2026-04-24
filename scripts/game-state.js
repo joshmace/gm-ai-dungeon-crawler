@@ -1102,6 +1102,211 @@
             ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     }
 
+    // ---- Equip / unequip ---------------------------------------------------
+    //
+    // Mutates gd()._v1.character.equipment + .pack (the v1 source of truth)
+    // and mirrors into the legacy gs().character.equipment (flat array with
+    // isWeapon/isArmor/damage/weaponType fields) + .inventory so the shimmed
+    // character panel renders correctly.
+    //
+    // Stage 6 does NOT enforce rules.character_model.slot_limits — overflow
+    // triggers a warn callout but the equip still applies (per plan).
+    // Encumbrance penalties are also render-only today.
+
+    /** Infer the natural slot for an item from its authored shape. */
+    function inferSlotForItem(item) {
+        if (!item) return null;
+        if (item.slot) return String(item.slot);
+        const w = item.weapon;
+        if (w) {
+            const props = Array.isArray(item.properties) ? item.properties.join(' ').toLowerCase() : '';
+            if (/two[-\s]?handed/.test(props)) return 'two_handed';
+            if (w.ranged && !w.melee) return 'ranged';
+            return 'main_hand';
+        }
+        if (item.armor) {
+            const props = Array.isArray(item.properties) ? item.properties.join(' ').toLowerCase() : '';
+            if (/shield/i.test(item.name || '') || /shield/.test(props)) return 'shield';
+            return 'body';
+        }
+        return null;
+    }
+
+    /** Rebuild one legacy-equipment entry from a v1 item + slot. Shape matches main.js's initializer. */
+    function legacyEquipEntryFor(item, slot) {
+        const w = item.weapon || {};
+        const isWeapon = !!item.weapon;
+        const isArmor  = !!item.armor;
+        const wTypeInfo = isWeapon ? (global.getWeaponTypeInfo ? global.getWeaponTypeInfo({
+            range: w.ranged && !w.melee ? 'ranged' : (w.melee ? 'melee' : null),
+            name: item.name,
+            properties: item.properties
+        }) : { type: w.ranged && !w.melee ? 'ranged' : 'melee', range: null }) : { type: null, range: null };
+        let stats = '';
+        if (isWeapon && w.damage) {
+            const base = `${w.damage} ${w.damage_type || ''}`.trim();
+            stats = wTypeInfo.type === 'ranged' && wTypeInfo.range
+                ? `${base} (ranged ${wTypeInfo.range})`
+                : `${base} (${wTypeInfo.type || 'melee'})`;
+        } else if (isArmor) {
+            stats = item.armor && typeof item.armor.ac_bonus === 'number' ? `AC +${item.armor.ac_bonus}` : 'armor';
+        }
+        const eq = {
+            name:    item.name,
+            stats,
+            equipped: true,
+            isWeapon,
+            isArmor,
+            weaponType:  wTypeInfo.type,
+            weaponRange: wTypeInfo.range,
+            _v1_slot:    slot,
+            _v1_id:      item.id
+        };
+        if (isWeapon && w.damage) {
+            eq.damage      = w.damage;
+            eq.damage_type = w.damage_type || '';
+            eq.range       = wTypeInfo.range || (wTypeInfo.type === 'ranged' ? 'ranged' : 'melee');
+        }
+        if (isArmor && item.armor && typeof item.armor.ac_bonus === 'number') {
+            eq.ac = item.armor.ac_bonus;
+        }
+        return eq;
+    }
+
+    /**
+     * Move an item from the pack to an equipment slot. If the slot is already
+     * occupied, unequip the current occupant back to the pack first (swap).
+     *
+     * `slot` is optional — when omitted, falls back to item.slot (authored),
+     * then infers from item.weapon / item.armor shape. Fails (and surfaces
+     * a system message) when the item can't be equipped (not a weapon/armor).
+     */
+    function equipItem(itemId, slot) {
+        const v = gd()._v1;
+        if (!v || !v.character) {
+            debugLog('EQUIP', `no v1 character; skipping ${itemId}`);
+            return false;
+        }
+        const item = resolveV1Item(itemId);
+        if (!item) {
+            if (global.addSystemMessage) global.addSystemMessage(`[item] ${itemId} not found.`);
+            return false;
+        }
+        const entry = findPackEntry(itemId);
+        if (!entry || (entry.quantity || 0) <= 0) {
+            if (global.addSystemMessage) global.addSystemMessage(`${item.name || itemId} is not in your pack.`);
+            return false;
+        }
+        const resolvedSlot = slot || inferSlotForItem(item);
+        if (!resolvedSlot) {
+            if (global.addSystemMessage) global.addSystemMessage(`${item.name || itemId} can't be equipped (no slot).`);
+            return false;
+        }
+
+        if (!Array.isArray(v.character.equipment)) v.character.equipment = [];
+
+        // Slot collision: unequip the current occupant first. For two_handed
+        // weapons, also clear main_hand/off_hand. For main_hand/off_hand,
+        // also clear any two_handed occupant.
+        const occupantsToClear = [resolvedSlot];
+        if (resolvedSlot === 'two_handed')  { occupantsToClear.push('main_hand', 'off_hand'); }
+        else if (resolvedSlot === 'main_hand' || resolvedSlot === 'off_hand') { occupantsToClear.push('two_handed'); }
+        for (const s of occupantsToClear) {
+            if (v.character.equipment.some(e => e && e.slot === s)) {
+                unequipItem(s, { silent: true });
+            }
+        }
+
+        // Decrement from pack (also updates the legacy inventory count).
+        decrementPack(itemId);
+
+        // Add to v1 equipment.
+        v.character.equipment.push({ item_id: itemId, slot: resolvedSlot });
+
+        // Mirror into legacy flat equipment.
+        const eq = legacyEquipEntryFor(item, resolvedSlot);
+        if (!Array.isArray(gs().character.equipment)) gs().character.equipment = [];
+        gs().character.equipment.push(eq);
+
+        // Update readiedWeaponName for attack-flow heuristics.
+        if (eq.isWeapon) {
+            gs().readiedWeaponName = item.name;
+        }
+
+        // Warn (not error) on slot_limits overflow — render-only for now.
+        warnOnSlotLimitOverflow(resolvedSlot);
+
+        debugLog('EQUIP', `equip ${itemId} → ${resolvedSlot}`);
+        if (global.addMechanicsCallout) global.addMechanicsCallout(`Equipped ${item.name || itemId} (${resolvedSlot}).`);
+        updateCharacterDisplay();
+        if (global.saveGame) global.saveGame();
+        return true;
+    }
+
+    /**
+     * Move an item from an equipment slot back to the pack. `slot` is the
+     * runtime slot id (main_hand, body, etc.). opts.silent suppresses the
+     * callout (used during equip-swap flow so the swap reads as one action).
+     */
+    function unequipItem(slot, opts) {
+        const silent = !!(opts && opts.silent);
+        const v = gd()._v1;
+        if (!v || !v.character) return false;
+        if (!Array.isArray(v.character.equipment)) v.character.equipment = [];
+
+        const idx = v.character.equipment.findIndex(e => e && e.slot === slot);
+        if (idx === -1) return false;
+        const entry = v.character.equipment[idx];
+        const item = resolveV1Item(entry.item_id);
+        if (!item) {
+            v.character.equipment.splice(idx, 1);
+            return false;
+        }
+
+        // Remove from v1 equipment.
+        v.character.equipment.splice(idx, 1);
+
+        // Add to v1 pack — stack with an existing entry or push new.
+        if (!Array.isArray(v.character.pack)) v.character.pack = [];
+        const existing = v.character.pack.find(p => p && p.item_id === entry.item_id);
+        if (existing) existing.quantity = (existing.quantity || 1) + 1;
+        else v.character.pack.push({ item_id: entry.item_id, quantity: 1 });
+
+        // Mirror into legacy arrays: remove from equipment (by _v1_slot), add to inventory.
+        if (Array.isArray(gs().character.equipment)) {
+            const lidx = gs().character.equipment.findIndex(e => e && e._v1_slot === slot);
+            if (lidx !== -1) gs().character.equipment.splice(lidx, 1);
+        }
+        if (global.addToInventory) global.addToInventory(item.name, 1);
+
+        // If unequipping the readied weapon, clear the readiedWeaponName.
+        const readied = (gs().readiedWeaponName || '').toLowerCase();
+        if (readied && readied === String(item.name || '').toLowerCase()) {
+            gs().readiedWeaponName = null;
+        }
+
+        debugLog('EQUIP', `unequip ${entry.item_id} from ${slot}`);
+        if (!silent && global.addMechanicsCallout) {
+            global.addMechanicsCallout(`Unequipped ${item.name || entry.item_id} (${slot} → pack).`);
+        }
+        updateCharacterDisplay();
+        if (global.saveGame) global.saveGame();
+        return true;
+    }
+
+    /** Warn if a slot now holds more items than rules.character_model.slot_limits allows. Render-only; not enforced. */
+    function warnOnSlotLimitOverflow(slot) {
+        const v = gd()._v1;
+        const limits = v && v.rules && v.rules.character_model && v.rules.character_model.slot_limits;
+        if (!limits || typeof limits !== 'object') return;
+        const max = Number(limits[slot]);
+        if (!Number.isFinite(max) || max <= 0) return;
+        const count = (v.character.equipment || []).filter(e => e && e.slot === slot).length;
+        if (count > max && global.addSystemMessage) {
+            global.addSystemMessage(`[warn] Slot ${slot} now holds ${count} items (limit ${max}). Not enforced in this release.`);
+        }
+    }
+
     /** Remove a condition by id. */
     function removeCondition(id) {
         if (!id || typeof id !== 'string') return;
@@ -1148,6 +1353,9 @@
         resolveV1Item,
         findPackEntry,
         decrementPack,
+        equipItem,
+        unequipItem,
+        inferSlotForItem,
         _modifierFor: modifierFor,
         _hpMax: hpMax,
         _resolveItem: resolveItem,
@@ -1186,4 +1394,7 @@
     global.resolveV1Item                = resolveV1Item;
     global.findPackEntry                = findPackEntry;
     global.decrementPack                = decrementPack;
+    global.equipItem                    = equipItem;
+    global.unequipItem                  = unequipItem;
+    global.inferSlotForItem             = inferSlotForItem;
 })(typeof window !== 'undefined' ? window : globalThis);
