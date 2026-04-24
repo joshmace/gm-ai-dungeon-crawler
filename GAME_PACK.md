@@ -1,34 +1,37 @@
 # Game Pack Format
 
-A **Game Pack** is the unit of content for the GM-AI platform. It bundles everything needed to run an adventure: Setting, Rules, Bestiary, and Adventure Module.
+A **Game Pack** is the unit of content for the GM-AI platform. It bundles everything needed to run an adventure: Setting, Rules, Bestiary, Items, Adventure Module, and Character.
 
 ## Manifest
 
 The Game Pack is defined by a **manifest** JSON file (e.g. `game_pack.json`) with:
 
-- **`id`** — Unique identifier (e.g. `shattered_realms_rules_test`). Used for save compatibility and character association.
-- **`setting`** — Path or URL to the Setting JSON.
-- **`rules`** — Path or URL to the Rules JSON.
-- **`bestiary`** — Path or URL to the Bestiary JSON.
-- **`adventure_module`** — Path or URL to the Adventure Module JSON.
-- Optional: **`character`** — Path to a character sheet for this pack (if omitted, the app uses `CONFIG.DATA_FILES.character`).
-- Optional: `name`, `version`, `images`, `audio` for display or media references.
+- **`id`** — Unique identifier (e.g. `gauntlet_rules_test_v1`). Used for save compatibility and character association; the localStorage save slot for a pack is keyed by this id.
+- **`setting`** — Path to the Setting JSON.
+- **`rules`** — Path to the Rules JSON.
+- **`bestiary`** — Path to the Bestiary JSON.
+- **`items`** — Path to the shared Items library JSON.
+- **`adventure_module`** — Path to the Adventure Module JSON.
+- **`character`** — Path to the starting character sheet.
+- Optional sidecars: `setting.content`, `rules.guidance`, `module.guidance`, `character.guidance` — markdown files with extended lore / GM tips surfaced via `{{GUIDANCE_BLOCK}}`.
 
 ## Available Game Packs
 
 - **The Haunting of Three Knots** — `game_pack_village_three_knots.json`. One-shot: village haunting, linear tomb (puzzle, trap, boss), reward at the inn. Uses `character_village_three_knots.json`. Set `CONFIG.GAME_PACK` to this file to play (current default).
-- **Rules System Test** — `game_pack.json`. Testing hub for rules, combat, conditions, etc. Uses `character_aldric.json`. Set `CONFIG.GAME_PACK` to `./game_pack.json` to switch back.
+- **Crow's Hollow** — `game_pack_lantern_and_blade.json`. Uses Ren Callory + `module_crows_hollow.json`.
+- **Rules System Test (Gauntlet)** — `game_pack.json`. Testing hub for rules, combat, conditions, features, hazards, consumables, completion conditions. Uses `character_aldric.json` + `module_gauntlet.json`.
 
-The app loads the manifest first, then fetches each referenced document. See [JSON_SCHEMAS.md](JSON_SCHEMAS.md) for the expected shape of each document.
+The app loads the manifest first, then fetches each referenced document in parallel. See [JSON_SCHEMAS.md](JSON_SCHEMAS.md) for the expected shape of each document.
 
 ## Document roles
 
-- **Setting** — World, tone, regions, cosmology. Used for GM flavor and Travel mode. See GM_RULES_REWRITE.md §1.1.1.1.
-- **Rules** — Guidelines and mechanics the GM must follow (stats, combat, DCs, conditions, etc.). See GM_RULES_REWRITE.md §1.1.1.2.
-- **Bestiary** — Creatures and NPCs (stats, behavior, XP, treasure). Adventure Module encounters reference bestiary entries and may override. See GM_RULES_REWRITE.md §1.1.1.3 (Beastiary).
-- **Adventure Module** — Locations, story hooks, encounters, features. Overrides bestiary defaults when specified. See GM_RULES_REWRITE.md §1.1.1.4.
+- **Setting** — World, tone, regions, cosmology. Used for GM flavor and Travel mode.
+- **Rules** — Guidelines and mechanics the GM must follow (stats, combat, DCs, conditions, etc.). The rules engine (`scripts/rules-engine.js`) resolves d20 math, AC, attack/save/check outcomes; the prompt carries the narrative-facing slice.
+- **Bestiary** — Creatures and NPCs under `bestiary.monsters` (HP, AC, attacks, XP, damage resistances/immunities/vulnerabilities). Modules may override via `module.module_bestiary.monsters` (resolution order: module-scoped first, shared second).
+- **Items** — Shared weapons, armor, consumables, and magic items under `items.items`. Modules may override via `module.module_items.items`. Consumables declare `consumable.on_use` (`heal_player` / `cure_condition` / `gm_adjudicate`) which the items pipeline dispatches.
+- **Adventure Module** — Locations, connections, encounters, features, hazards; authored with a `completion_condition` that the engine evaluates (`defeat_encounter` / `reach_room` / `all_encounters_defeated`, or `null` for GM-judged).
 
-Current file mapping: Bestiary = `monster_manual` JSON with `monster_manual.monsters`. Adventure Module = JSON with `module` metadata and `rooms` object.
+Files: Bestiary = `bestiary_*.json` with `bestiary.monsters`. Items = `items_*.json` with `items.items`. Adventure Module = `module_*.json` with `module` metadata and `rooms` object.
 
 ## Character sheets
 

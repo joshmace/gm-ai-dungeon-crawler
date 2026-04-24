@@ -179,6 +179,74 @@ Each entry: one-line description + where it was surfaced + suggested approach.
 
 ---
 
+## Landed during Stage 7 (2026-04-24)
+
+Stage 7 delivered the v1 save-state envelope, the completion-condition
+pipeline, and the pre-v1 file cleanup. No POLISH_BACKLOG items closed
+structurally — the save rewrite is transparent to gameplay — but the
+doc footprint got a sweep:
+
+- `rules.json`, `monster_manual.json`, `test_module_rules.json`,
+  `test_module_arena.json` deleted (grep-verified no live code/data
+  referenced them).
+- `CLAUDE.md`, `GAME_PACK.md`, `JSON_DATA_AND_SWAPPING.md`,
+  `CREDITS_AND_USAGE.md`, `BACKLOG.md` updated to reflect the v1
+  `scripts/` layout + v1 archetype files + v1 save envelope.
+
+Stage 7 deliverables (for the record):
+
+- **Save envelope v1**: `schema_version: 1`, `game_pack_id`,
+  `module_id`, `saved_at`, `session_started_at` at the top level;
+  `module{}` (current_room, visited_rooms, encounters, hazards,
+  features, connections_modified); `combat{}`; `completion{}`;
+  `character_mutations{}` (hp_current, xp, gold, equipment, pack,
+  feature_resources, charged_items, conditions, basic_info.level);
+  and a `runtime{}` sidecar for app-state bits not in the spec
+  (mode, equippedInUse, conversation history, etc).
+- **Per-pack save slots** (`gm-ai-dungeon-save:<game_pack_id>`).
+  Switching Three Knots ↔ Gauntlet ↔ Crow's Hollow no longer
+  overwrites the others' saves.
+- **Schema gate on load**: pre-v1 envelopes are dropped with a
+  one-time system message ("Old save format from a pre-Stage-7
+  build — please start a new game"). `purgeStaleSaves()` runs
+  once at boot so the start-choice UI doesn't advertise a
+  Continue button over a save that will fail the gate.
+- **`RulesEngine.evaluateCompletion(module, moduleState)`** — pure
+  completion gate. Three condition types + null (GM-judged).
+  Returns `{ completed, kind, target? }`.
+- **`GameState.checkCompletion()`** — fires from `markRoomVisited`
+  (reach_room) and the monster-defeat tag path in response-parser
+  (defeat_encounter, all_encounters_defeated). Idempotent — flips
+  `gs().completion.completed` once and logs a COMPLETION debug
+  entry. Null conditions never fire (Gauntlet verified).
+- **End-of-module summary overlay** (`#completionOverlay`) — mirrors
+  the death-overlay pattern. Stats grid: Level / XP / Gold / Rooms
+  visited / Encounters defeated / Run duration from
+  sessionStartedAt. Restart + Load save buttons. Disables input
+  while shown; `finishGameStart` hides it on restart/load.
+- **Debug trail categories**: `SAVE_VERSION` (load detect +
+  schema/pack match) and `COMPLETION` (first-fire kind + target)
+  now populate the ring buffer for Copy Session Report diagnosis.
+- **Test helpers**: `test.dumpSave()`, `test.dumpSavedBlob()`,
+  `test.forceSave()`, `test.corruptSave()`, `test.fireCompletion()`,
+  `test.checkCompletion()`, `test.killCharacter()`,
+  `test.defeatAllEncounters()`, `test.defeatEncounter(id)` — all
+  for bypassing full playthroughs during regression.
+
+Regression gates (all three packs):
+
+- **Gauntlet** (null completion): `test.defeatAllEncounters()` +
+  clearing all nine chambers both leave `gs().completion.completed
+  === false` and never fire the summary overlay.
+- **Crow's Hollow** (defeat_encounter): Havel's defeat fires the
+  summary card with the Last Stand's defeat prose in the subtitle.
+- **Three Knots** (death-overlay + defeat_encounter): 0 HP still
+  fires the death overlay immediately (not the completion card).
+  Save blob carries `schema_version: 1` and
+  `game_pack_id: "three_knots_osr_v1"`.
+
+---
+
 ## Landed during Stage 6 (2026-04-24)
 
 Stage 6 delivered the items pipeline — equip/unequip UX, consumable

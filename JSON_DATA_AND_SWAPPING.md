@@ -1,73 +1,44 @@
 # JSON Data Usage and Swapping
 
-The app is designed so you can swap **rulesets**, **characters**, **monster manuals**, and **adventure modules** by changing the JSON files (or `CONFIG.DATA_FILES`). The GM is instructed to **honor the loaded data strictly** for all concrete values (numbers, stats, DCs, rewards, mechanics). This document summarizes how each JSON is used and how to swap safely.
+The app ships as a set of v1 Game Packs — each pack bundles six archetype JSON files (plus optional markdown sidecars) under a manifest. Swapping packs changes the whole experience (rules, setting, module, character, bestiary, items) in one move; swapping an individual archetype is a schema-safe drop-in as long as the new file follows the v1 shape in `JSON_SCHEMAS.md`.
+
+## How a pack loads
+
+1. The HTML points `CONFIG.GAME_PACK` at a manifest JSON (e.g. `./game_pack_village_three_knots.json`).
+2. `scripts/pack-loader.js` fetches the manifest, then fetches the six archetype files in parallel (`setting`, `rules`, `bestiary`, `items`, `adventure_module`, `character`) plus any sidecar `.md` files declared in `setting.content` / `rules.guidance` / `module.guidance` / `character.guidance`.
+3. The loader validates references (manifest id ↔ character `game_pack_id`, module `starting_room` resolves, every `monster_ref` / `item_id` / connection target / effect target resolves) and surfaces a scrollable error card on failure.
+4. A merged `gameData` object is handed to `GameState.init`, which also preserves the raw v1 payload under `gameData._v1` so the rules engine, items pipeline, and save serializer can read native shapes.
+
+See `GAME_PACK.md` for the manifest fields and `JSON_SCHEMAS.md` for each archetype's expected shape.
 
 ## Source of truth
 
-- **Numeric values, stats, DCs, rewards, and mechanics** in the prompt come from the loaded JSON. The system prompt tells the GM: *"Do NOT invent or substitute values."*
+- **Numeric values, stats, DCs, rewards, and mechanics** come from the loaded JSON. The system prompt tells the GM: *"Do NOT invent or substitute values."* The rules engine (`scripts/rules-engine.js`) enforces the numeric side — attack math, AC, save/check resolution, damage with resistance/immunity/vulnerability, feature prerequisites, effect dispatch, completion-condition evaluation.
 - **Narration, pacing, and tone** are left to the GM; only the data-driven facts are fixed.
 
-## Rules (`rules.json`)
+## Archetype roles
 
-- **Loaded as:** `gameData.rules` (the `rules` object from the file).
-- **Used for:**
-  - **RULESET block** in the GM prompt: system name, ability-check DC scale (`core_mechanics.ability_checks.dc_scale`), when to roll, attack/damage wording, hit points at zero, optional rules that are enabled.
-  - **ADJUDICATION** section: auto-success/auto-failure text and **DCs** are taken from `dc_scale` (e.g. trivial 5, easy 10, medium 15, hard 20, very_hard 25, nearly_impossible 30). If no rules are loaded, the prompt falls back to "Easy 10, Medium 15, Hard 20."
-- **Swapping:** Use a different `rules.json` with the same top-level shape (`rules.core_mechanics`, `rules.combat`, `rules.optional_rules`, etc.). DC scales and combat text will follow the new ruleset. **Optional:** If the rules file is missing or fails to load, the app still runs using fallback prompt text.
+- **Rules** (`rules_*.json`) — Character model (abilities, skills, saves type, modifier formula), resolution method (`roll_high_vs_dc` / `roll_under_score`), difficulty ladder (`difficulty.scale[]`), combat (`attack`, `damage`, `critical_hit`, `initiative`), conditions, progression (HP gain, level table, XP thresholds, `xp_sources`), encumbrance method. The engine reads these fields directly; switching to a pack with a different rules file re-derives everything.
+- **Bestiary** (`bestiary_*.json`) — `bestiary.monsters` keyed by monster id. Each monster: `name`, `hp`, `ac`, `attacks[]` (name, bonus, damage, damage_type, range), optional `damage_resistance` / `damage_immunity` / `damage_vulnerability` arrays, `xp_value`, `treasure`.
+- **Items** (`items_*.json`) — `items.items` keyed by item id. Weapons nest stats under `weapon.*`; armor under `armor.*`; consumables under `consumable.*` (with `on_use: "heal_player" | "cure_condition" | "gm_adjudicate"`); magic riders under `magic.*` (`attack_bonus`, `damage_bonus`, `bonus_damage`, `ac_bonus`, `save_bonus`, `skill_bonus`, `damage_resistance`, `damage_immunity`, `charges`).
+- **Module** (`module_*.json`) — `module` metadata + `rooms` object. Each room authors `connections` (simple or structured with `{state: open|locked|hidden, label?}`), `features` (lore / searchable / interactive / puzzle, with optional `prerequisites`), `encounters` (`groups[].monster_ref`, `trigger`, `rewards`, `on_defeat_effects`), `hazards` (`trigger`, `detection?`, `avoidance?`, `damage?`, `conditions?`). Optional `module_bestiary` and `module_items` scope monsters/items to the module only (resolution order: module-scoped first, shared second). `completion_condition` declares the win gate (`defeat_encounter` / `reach_room` / `all_encounters_defeated` / `null` for GM-judged).
+- **Character** (`character_*.json`) — `basic_info` (name, class, level), `ability_scores` (short keys: `str`/`dex`/…), `skills.proficient[]`, `saves.proficient[]` (per_ability) or `saves.values{}` (categorical), v1 `equipment[{item_id, slot}]`, v1 `pack[{item_id, quantity}]`, `feature_resources`, `charged_items`, `conditions`, `gold`, `xp`, `hp_current`. Must carry `game_pack_id` matching the manifest `id`.
+- **Setting** (`setting_*.json`) — World, tone, regions, cosmology; surfaced via `{{SETTING_BLOCK}}` and the sidecar `.md` lore.
 
-## Module / Adventure (`test_module_arena.json` or any module)
+## Swapping a pack
 
-- **Loaded as:** `gameData.module` (full file; rooms under `gameData.module.rooms`, metadata under `gameData.module.module`).
-- **Used for:**
-  - **Dungeon layout** in the prompt: room ids, names, descriptions, **exits only from `connections`**, features (name, description, text, note, contains, interaction).
-  - **Encounters:** Each room's `encounters` list; each encounter references `monster_ref` (id in the monster manual). **On death:** When an encounter has `on_death.xp_award` and/or `on_death.treasure`, the **module** values are used (and shown in the Active Encounters block). If the module does not list treasure for that encounter, the app falls back to the monster manual's `treasure` for that creature. So module on_death takes precedence over the manual.
-  - **Starting room:** `module.starting_room`.
-- **Swapping:** Point `CONFIG.DATA_FILES.module` to another JSON that has `module` (metadata) and `rooms` (object keyed by room id). Keep the same structure for rooms (id, name, description, connections, features, encounters with monster_ref and on_death).
+Change `CONFIG.GAME_PACK` in `playable-dungeon-crawler-v2.html` to the manifest of the target pack. Reload. Each pack's save lives under its own localStorage slot (`gm-ai-dungeon-save:<game_pack_id>`), so you can bounce between Three Knots / Gauntlet / Crow's Hollow without clobbering the others' progress.
 
-## Monster manual (`monster_manual.json`)
+## Swapping one archetype
 
-- **Loaded as:** `gameData.monsters` = `monster_manual.monsters` (object keyed by monster id).
-- **Used for:**
-  - **Active Encounters:** For each encounter in the current room, the app resolves `encounter.monster_ref` to the monster block and builds a line: name, **current/max HP** (tracked by the app), **AC**, and **attacks** (name, bonus, damage, damage_type, range). The GM is told to use these **exact** stats and not substitute.
-  - **On-death rewards:** **Module takes precedence.** For each encounter, the app uses the module's `on_death.xp_award` and `on_death.treasure` when present. If the module does not specify treasure (or it's empty), the app uses the monster manual's `treasure` (e.g. "1d6 silver pieces") for that creature. If the module doesn't specify XP, the app falls back to the manual's `xp_value`. So: module override for this encounter > monster manual default.
-- **Swapping:** Use another manual with the same shape (`monsters` object; each monster has e.g. name, hp, ac, attacks[], treasure?, xp_value?). Module `monster_ref` values must match the new manual's keys.
+Replace the target file and leave the manifest pointer alone (or re-point the manifest's archetype field to the new file). Requirements:
 
-## Character (`character_aldric.json`)
+- The new file matches the v1 schema for that archetype (`JSON_SCHEMAS.md`).
+- Every referenced id still resolves — monster refs in the module exist in the bestiary, item refs exist in the items library, connection targets exist in rooms, effect targets exist in features/connections, `completion_condition.target` exists.
+- The character's `game_pack_id` still equals the manifest id.
 
-- **Loaded as:** `gameData.character` (the `character` object). Converted at init into `gameState.character` (name, class, level, hp, maxHp, ac, xp, abilities, skills, equipment, inventory, conditions).
-- **Used for:**
-  - **Current game state** in the prompt: name, class, level, HP, AC, ability modifiers, skills, weapons (from equipment), readied weapon, conditions.
-  - **Rolls:** Attack modifier (STR/DEX + proficiency), weapon damage dice, skill modifiers, ability modifiers. All from the character sheet.
-- **Swapping:** Use another character JSON with the same schema: `basic_info`, `ability_scores`, `combat_stats`, `skills`, `equipment.worn`, `equipment.wielded`, `equipment.carried`, `equipment.backpack`, `equipment.coin`. The app maps these into the internal state; different names/values are fine as long as the structure matches.
+Mismatches fail at pack-load time with a clear error card (path + specific id that didn't resolve). The app won't start a broken game.
 
-## CONFIG
+## Save compatibility
 
-In `playable-dungeon-crawler-v2.html`, `CONFIG.DATA_FILES` points to the four JSON files. To swap:
-
-- Change the paths (e.g. `module: './my_campaign.json'`, `rules: './house_rules.json'`), or
-- Load different files at runtime (e.g. from a menu) and set `gameData.character` / `gameData.module` / `gameData.monsters` / `gameData.rules` before (re)starting the game.
-
-## Parsing and validation
-
-- **HP, XP, gold, items** are parsed from the GM's narrative with regex (e.g. "You gain 25 XP", "You discover 10 gold"). When XP or gold is parsed, the app **validates** against the current room's defeated encounter(s) `on_death`: if the value doesn't match any expected value, a small in-narrative hint appears ("Note: Module expected X or Y XP/gold for this encounter.") and a debug log is written. The parsed value is still applied.
-- **Monster HP** is tracked by the app (damage from narrative); the GM is not asked to output a number for monster HP, only to narrate using the "X/Y HP remaining" and "DEFEATED" text from the block.
-
-## Summary
-
-- **Rules:** Drive DCs, combat wording, optional rules, and (when present) XP level progression. Rules load is optional; app runs without it.
-- **Module:** Drives layout, exits, features, encounters, and **exact** on_death XP and treasure.
-- **Monsters:** Supply stats (HP, AC, attacks) for encounters; no inventing stats.
-- **Character:** Supplies all player stats and equipment for the prompt and for dice/roll logic.
-
-Swapping any of these files (with matching schema) changes the game while keeping the app's behavior consistent with the data.
-
----
-
-## Expected schema (minimum shape)
-
-Use these as a checklist when creating or swapping JSON files. The app may tolerate some missing optional fields with fallbacks.
-
-- **Rules:** Top-level `rules`. Need `system`, `core_mechanics.ability_checks.dc_scale`, `combat.attack_roll`, `combat.damage`, `combat.hit_points.at_zero`, `optional_rules`. Optional: `experience.level_progression` (object: level keys to XP thresholds) for XP bar and level thresholds.
-- **Module:** Top-level `module` (title, starting_room) and `rooms` (keyed by id; each room: id, name, description, connections?, features?, encounters? with monster_ref, on_death.xp_award, on_death.treasure).
-- **Monster manual:** `monster_manual.monsters` (keyed by id; each: name, hp, ac, attacks? with name, bonus, damage, damage_type, range).
-- **Character:** `character` with basic_info (name, class, level), ability_scores (score, modifier per ability), combat_stats (hit_points.current/maximum, armor_class, proficiency_bonus), skills, equipment (worn, wielded, carried, backpack, coin). Weapons need `damage` (e.g. "1d8").
+Saves written under the v1 envelope carry `schema_version: 1`, `game_pack_id`, `module_id` at the top level. Loading refuses any blob whose schema or pack id doesn't match the manifest — the pre-v1 shape is dropped with a one-time system message. See `REFACTOR_V1_PLAN.md §Stage 7` for the envelope spec and `JSON_SCHEMAS.md` for the field-by-field contract.
