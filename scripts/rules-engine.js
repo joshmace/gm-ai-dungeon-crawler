@@ -1525,6 +1525,91 @@
         return Object.assign({}, ctx, { tier, dc, target });
     }
 
+    // ------------------------------------------------------------
+    // Stage 6 — Consumable dispatch
+    //
+    // Pure function: given an items-library entry + character + rules,
+    // return a plan the caller drives. No state mutation, no DOM, no RNG
+    // on the caller's behalf — but heal_player DOES roll the amount via
+    // rollFormula (RNG injection supported for tests). Three on_use
+    // keywords from the v1 schema:
+    //
+    //   heal_player     amount = dice formula → roll and clamp at caller.
+    //   cure_condition  amount = condition id OR array of ids → caller
+    //                   removes each from character.conditions.
+    //   gm_adjudicate   amount = prose text → caller surfaces a confirm
+    //                   UI, then injects a hint into the next GM turn.
+    //
+    // Unknown / missing on_use falls through to gm_adjudicate with a
+    // descriptive confirmText so weird authored entries don't brick.
+    // ------------------------------------------------------------
+
+    /**
+     * Dispatch plan for a consumable item.
+     *
+     * Inputs:
+     *   item      — resolved items-library entry (has .consumable.on_use, .consumable.amount).
+     *   character — v1 character (for hp_current clamp on heal; caller applies).
+     *   rules     — v1 rules pack (unused today; reserved for per-ruleset variants).
+     *   opts.rng  — optional RNG for deterministic heal tests.
+     *
+     * Returns one of:
+     *   { kind: 'heal_player',    amount, formula, rolls, breakdown }
+     *   { kind: 'cure_condition', conditions: [id, id, ...] }
+     *   { kind: 'gm_adjudicate',  confirmText, prose }
+     *   { kind: 'none',           reason }   (item isn't a consumable / no on_use)
+     */
+    function useConsumable(item, character, rules, opts) {
+        if (!item || !item.consumable || !item.consumable.on_use) {
+            return { kind: 'none', reason: 'not_consumable' };
+        }
+        const on_use = String(item.consumable.on_use).toLowerCase().trim();
+        const amount = item.consumable.amount;
+        const itemName = item.name || item.id || 'item';
+        const rng = opts && opts.rng;
+
+        if (on_use === 'heal_player') {
+            if (amount == null) return { kind: 'none', reason: 'missing_amount' };
+            if (typeof amount === 'number') {
+                return { kind: 'heal_player', amount, formula: String(amount), rolls: [amount], breakdown: String(amount) };
+            }
+            const roll = rollFormula(String(amount), { rng });
+            return {
+                kind: 'heal_player',
+                amount: roll.total,
+                formula: String(amount),
+                rolls: roll.rolls,
+                breakdown: roll.breakdown
+            };
+        }
+
+        if (on_use === 'cure_condition') {
+            let conditions = [];
+            if (Array.isArray(amount)) conditions = amount.map(s => String(s).toLowerCase().trim()).filter(Boolean);
+            else if (typeof amount === 'string') {
+                // Accept comma-separated ids too, just in case an author writes "poisoned, wounded".
+                conditions = amount.split(',').map(s => s.toLowerCase().trim()).filter(Boolean);
+            }
+            return { kind: 'cure_condition', conditions };
+        }
+
+        if (on_use === 'gm_adjudicate') {
+            return {
+                kind: 'gm_adjudicate',
+                confirmText: `Use ${itemName}?`,
+                prose: typeof amount === 'string' ? amount : ''
+            };
+        }
+
+        // Unknown keyword → let the GM adjudicate rather than silently dropping.
+        return {
+            kind: 'gm_adjudicate',
+            confirmText: `Use ${itemName}?`,
+            prose: typeof amount === 'string' ? amount : `(Unrecognized on_use: ${on_use})`,
+            reason: 'unknown_on_use'
+        };
+    }
+
     global.RulesEngine = {
         rollDie,
         parseFormula,
@@ -1562,6 +1647,8 @@
         findFeatureById,
         findConnectionByKey,
         featureCheckSpec,
-        featureCheckInputs
+        featureCheckInputs,
+        // Stage 6 items / consumables:
+        useConsumable
     };
 })(typeof window !== 'undefined' ? window : globalThis);
