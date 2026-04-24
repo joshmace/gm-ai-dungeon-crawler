@@ -910,6 +910,198 @@
         debugLog('EFFECT', `reward unknown type: ${type}`);
     }
 
+    // ------------------------------------------------------------
+    // Stage 6 — Items pipeline
+    //
+    // Helpers:
+    //   useConsumableById(itemId)  — wraps RulesEngine.useConsumable with
+    //                                the side effects (heal, cure, pack
+    //                                decrement, confirm UX for gm_adjudicate).
+    //   equipItem(itemId, slot)    — moves pack → equipment; swap on collision.
+    //   unequipItem(slot)          — moves equipment → pack.
+    //
+    // All three mutate gd()._v1.character directly (the v1 source of truth)
+    // and mirror into the legacy gs().character buckets so the shimmed
+    // character-panel renderer stays correct. Re-render + save on every call.
+    // ------------------------------------------------------------
+
+    /** Merge module_items + items_library into a flat {id: item} dict. Module overrides. */
+    function v1ItemsIndex() {
+        const v = gd()._v1;
+        if (!v) return {};
+        const shared   = (v.items  && v.items.items) || {};
+        const modItems = (v.module && v.module.module_items && v.module.module_items.items) || {};
+        return Object.assign({}, shared, modItems);
+    }
+
+    /** Look up an item by id across the merged index. */
+    function resolveV1Item(itemId) {
+        const index = v1ItemsIndex();
+        return index[itemId] || null;
+    }
+
+    /** Find a pack entry by item_id. Returns the live object (for mutation) or null. */
+    function findPackEntry(itemId) {
+        const v = gd()._v1;
+        if (!v || !v.character || !Array.isArray(v.character.pack)) return null;
+        return v.character.pack.find(p => p && p.item_id === itemId) || null;
+    }
+
+    /**
+     * Decrement a pack entry's quantity by 1; remove the entry when it hits 0.
+     * Mirrors the legacy inventory decrement via removeFromInventory so the
+     * shimmed character panel reflects the change. Returns true on success.
+     */
+    function decrementPack(itemId) {
+        const entry = findPackEntry(itemId);
+        if (!entry) return false;
+        entry.quantity = Math.max(0, (entry.quantity || 1) - 1);
+        if (entry.quantity === 0) {
+            const pack = gd()._v1.character.pack;
+            const idx = pack.indexOf(entry);
+            if (idx !== -1) pack.splice(idx, 1);
+        }
+        const item = resolveV1Item(itemId);
+        const name = (item && item.name) || itemId;
+        if (global.removeFromInventory) global.removeFromInventory(name, 1);
+        return true;
+    }
+
+    /**
+     * Use a consumable by item_id. Wraps RulesEngine.useConsumable with the
+     * side effects (HP / conditions / pack decrement / callouts / confirm UX).
+     *
+     * For gm_adjudicate items, surfaces a Confirm/Cancel system message; on
+     * Confirm, decrements the pack and injects a prompt hint so the GM
+     * narrates the effect. Cancel dismisses without mutation.
+     */
+    function useConsumableById(itemId) {
+        const item = resolveV1Item(itemId);
+        if (!item) {
+            if (global.addSystemMessage) global.addSystemMessage(`[item] ${itemId} not found.`);
+            return false;
+        }
+        const entry = findPackEntry(itemId);
+        if (!entry || (entry.quantity || 0) <= 0) {
+            if (global.addSystemMessage) global.addSystemMessage(`You don't have ${item.name || itemId} in your pack.`);
+            return false;
+        }
+
+        const v = gd()._v1;
+        const plan = global.RulesEngine.useConsumable(item, v.character, v.rules);
+        debugLog('CONSUMABLE', `use ${itemId} (${item.name || ''}) → kind=${plan.kind}${plan.reason ? ' reason=' + plan.reason : ''}`);
+
+        if (plan.kind === 'heal_player') {
+            const beforeHP = gs().character.hp;
+            if (global.modifyHP) global.modifyHP(+plan.amount);
+            const afterHP  = gs().character.hp;
+            const actualHeal = afterHP - beforeHP;
+            decrementPack(itemId);
+            if (global.addMechanicsCallout) {
+                const suffix = actualHeal < plan.amount ? ` (${plan.amount - actualHeal} overheal)` : '';
+                global.addMechanicsCallout(`Used ${item.name || itemId}: ${plan.breakdown} → +${actualHeal} HP${suffix} (HP ${afterHP}/${gs().character.maxHp})`);
+            }
+            if (global.saveGame) global.saveGame();
+            updateCharacterDisplay();
+            return true;
+        }
+
+        if (plan.kind === 'cure_condition') {
+            const before = new Set((gs().character.conditions || []).map(c => (c.id || c.name || '').toLowerCase()));
+            for (const cid of plan.conditions) {
+                if (global.removeCondition) global.removeCondition(cid);
+            }
+            const removed = plan.conditions.filter(cid => before.has(cid));
+            decrementPack(itemId);
+            if (global.addMechanicsCallout) {
+                const what = removed.length ? removed.join(', ') : 'no matching condition (no effect)';
+                global.addMechanicsCallout(`Used ${item.name || itemId}: ${what}`);
+            }
+            if (global.saveGame) global.saveGame();
+            updateCharacterDisplay();
+            return true;
+        }
+
+        if (plan.kind === 'gm_adjudicate') {
+            // Surface a confirm/cancel system message. On confirm, decrement
+            // the pack and inject a prompt hint so the GM narrates.
+            promptGmAdjudicateConfirm(itemId, item, plan);
+            return true;
+        }
+
+        if (global.addSystemMessage) global.addSystemMessage(`${item.name || itemId} isn't usable.`);
+        return false;
+    }
+
+    /**
+     * Surface an inline Confirm/Cancel prompt for gm_adjudicate consumables.
+     * On Confirm: decrement the pack, push a user message describing the use
+     * + the item's prose, and fire callAIGM so the GM narrates.
+     * On Cancel: dismiss without mutation.
+     */
+    function promptGmAdjudicateConfirm(itemId, item, plan) {
+        const doc = global.document;
+        const scroll = doc.getElementById('narrativeScroll');
+        if (!scroll) return;
+
+        const entry = doc.createElement('div');
+        entry.className = 'narrative-entry gm-adjudicate-confirm';
+        const wrap = doc.createElement('div');
+        wrap.className = 'system-message';
+
+        const title = doc.createElement('div');
+        title.innerHTML = `<b>Use ${escapeHtml(item.name || itemId)}?</b>`;
+        wrap.appendChild(title);
+
+        if (plan.prose) {
+            const prose = doc.createElement('div');
+            prose.className = 'gm-adjudicate-prose';
+            prose.textContent = plan.prose;
+            wrap.appendChild(prose);
+        }
+
+        const btnRow = doc.createElement('div');
+        btnRow.className = 'gm-adjudicate-buttons';
+
+        const confirm = doc.createElement('button');
+        confirm.type = 'button';
+        confirm.className = 'primary-button';
+        confirm.textContent = 'Confirm use';
+        confirm.addEventListener('click', () => {
+            decrementPack(itemId);
+            debugLog('CONSUMABLE', `gm_adjudicate confirmed: ${itemId}`);
+            entry.remove();
+            if (global.addMechanicsCallout) global.addMechanicsCallout(`Used ${item.name || itemId} (GM adjudicates)`);
+            // Push a user turn that tells the GM what happened + the authored prose.
+            const hint = `I use ${item.name || itemId}. The item prose says: "${plan.prose}". Narrate the effect per the fiction and the player's target (if any).`;
+            gs().conversationHistory.push({ role: 'user', content: hint });
+            if (global.saveGame) global.saveGame();
+            updateCharacterDisplay();
+            if (global.callAIGM) global.callAIGM();
+        });
+        btnRow.appendChild(confirm);
+
+        const cancel = doc.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'secondary-button';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', () => {
+            debugLog('CONSUMABLE', `gm_adjudicate cancelled: ${itemId}`);
+            entry.remove();
+        });
+        btnRow.appendChild(cancel);
+
+        wrap.appendChild(btnRow);
+        entry.appendChild(wrap);
+        scroll.appendChild(entry);
+        if (global.scrollToBottom) global.scrollToBottom();
+    }
+
+    function escapeHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, ch =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
     /** Remove a condition by id. */
     function removeCondition(id) {
         if (!id || typeof id !== 'string') return;
@@ -951,6 +1143,11 @@
         buildModuleState,
         markRoomVisited,
         applyReward,
+        // Stage 6:
+        useConsumableById,
+        resolveV1Item,
+        findPackEntry,
+        decrementPack,
         _modifierFor: modifierFor,
         _hpMax: hpMax,
         _resolveItem: resolveItem,
@@ -984,4 +1181,9 @@
     global.buildModuleState             = buildModuleState;
     global.markRoomVisited              = markRoomVisited;
     global.applyReward                  = applyReward;
+    // Stage 6 legacy globals.
+    global.useConsumableById            = useConsumableById;
+    global.resolveV1Item                = resolveV1Item;
+    global.findPackEntry                = findPackEntry;
+    global.decrementPack                = decrementPack;
 })(typeof window !== 'undefined' ? window : globalThis);
