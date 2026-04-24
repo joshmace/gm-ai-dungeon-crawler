@@ -10,6 +10,55 @@ Each entry: one-line description + where it was surfaced + suggested approach.
 
 ## Open items
 
+### Player can't roll magic bonus-damage dice physically (Stage 6)
+
+- **Surfaced:** Stage 6 smoke test (2026-04-24) — Oathblade regression.
+- **Behavior:** After an attack hits, the damage callout shows two
+  lines — the weapon dice (e.g. `1d8: 5 (+3) = 8`) and the magic rider
+  (`Bonus 1d4 radiant: 3`). The player rolls the weapon die manually
+  (or clicks Roll), but the bonus die is auto-rolled by the engine in
+  the same pass. Feel gap: half the dice for a given swing get to be
+  "the player's roll" and half don't.
+- **Fix direction:** polish pass. Two options:
+  - Chain a second dice-section prompt after the weapon damage resolves
+    when `bonus_damage` is present — the player rolls the bonus die
+    explicitly. More clicks per attack, but consistent.
+  - Show the bonus die as a visual animation (die-face reveal) so the
+    auto-roll still "feels" rolled without demanding a second click.
+- Not a correctness issue; engine math is right either way.
+
+### Inventory management — drop / give / transfer items (v2)
+
+- **Surfaced:** Stage 6 smoke test (2026-04-24).
+- **Behavior:** Pack items can be used (consumables) or equipped
+  (weapons/armor), but there's no way to drop an item, give it to an
+  NPC, or transfer it between characters. A player who picks up 50
+  crossbow bolts has them forever.
+- **Fix direction:** v2 feature (party support + richer item
+  interactions). Not blocking solo play. When tackled, add a third
+  action button per pack row ("Drop") that removes without side
+  effect and optionally surfaces a "You drop the X." narrative entry
+  so the GM can react. Give / transfer hooks into the NPC flow.
+
+### System prompt back in RED zone (21k on Gauntlet mid-play)
+
+- **Surfaced:** Stage 6 smoke test (2026-04-24) — session report from
+  chamber_oathblade showed 21,140 chars (RED ≥ 16k). Stage 1 trim
+  brought us to 12.1k; Stage 5 LAYOUT additions ~+3.5k; Stage 6
+  PACK ITEM USE rewrite ~+1.2k; plus L&B RULESET_BLOCK (conditions
+  list, level table, difficulty ladder) and the current-room
+  ENCOUNTER_INFO block pushing above estimate.
+- **Behavior risk:** instruction drift (GM forgets tag contract,
+  narrates past the 150-word cap, mixes combat sequencing). Stage 4
+  hit this at 23k and mitigated via the "current room full, others
+  compact" LAYOUT pass. The same direction still applies.
+- **Fix direction:** another trim pass, probably targeting the
+  RULESET_BLOCK (conditions list is already 90-char clamped;
+  difficulty ladder and saves section could compress). Also worth
+  reviewing whether ENCOUNTER_INFO's "exact stats" block can shrink
+  now that the engine owns combat. Defer until we see real behavior
+  drift, but log it here so it doesn't slip.
+
 ### Cross-room combat re-entry when extra attack issued after combat ends
 
 - **Surfaced:** Stage 3 smoke test (2026-04-22, Crow's Hollow). Ren fought
