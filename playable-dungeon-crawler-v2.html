@@ -458,6 +458,11 @@
             // same save-then-flip sequence but the GM typically narrates
             // unconsciousness — check that the save blob carried
             // schema_version:1 either way.
+            //
+            // In normal play the overlay is rendered by the response
+            // parser after the GM narrates the killing blow. Here we
+            // bypass the GM round-trip, so call showDeathOverlay
+            // directly after modifyHP flips isDead.
             killCharacter() {
                 if (!window.modifyHP || !gameState.character) {
                     addSystemMessage('[DEBUG] killCharacter: state not ready');
@@ -466,6 +471,9 @@
                 const hp = gameState.character.hp || 0;
                 addSystemMessage(`[DEBUG] killCharacter: HP ${hp} → 0`);
                 window.modifyHP(-hp - 1);
+                if (gameState.isDead && window.showDeathOverlay) {
+                    window.showDeathOverlay('');
+                }
             },
 
             // Stage 7: mark every authored encounter resolved in one
