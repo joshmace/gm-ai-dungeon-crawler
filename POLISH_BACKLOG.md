@@ -94,23 +94,6 @@ Each entry: one-line description + where it was surfaced + suggested approach.
   features). Delete `ensureCombatRoomHasEncounters` then. Don't patch
   in the shim — it would be fragile.
 
-### Healing-potion flow is prompt-brittle
-
-- **Surfaced:** Stage 1e-vii smoke test (2026-04-22).
-- **Behavior:** drinking a healing potion sometimes doesn't decrement
-  the pack count or restore HP.
-- **Root cause:** two separate mechanisms must fire:
-  1. `tryParsePackItemUse` regex requires the GM to phrase it as
-     "drink/drank/use/used a healing potion". "Quaff", "down", "take",
-     or "the elixir restores you" don't match → no decrement.
-  2. HP only changes when the GM explicitly emits `[HEAL_PLAYER: N]`
-     after the roll. If the GM narrates "you feel restored, +N HP"
-     without the tag, HP stays unchanged.
-- **Fix direction:** Stage 6 (items pipeline) owns consumable dispatch
-  with `on_use: heal_player` — the app parses the player action and
-  applies both effects, no GM coordination required. Don't bandaid
-  the regex.
-
 ### XP bar label — revisit during polish pass
 
 - **Surfaced:** Stage 2 smoke test (2026-04-22).
@@ -144,6 +127,75 @@ Each entry: one-line description + where it was surfaced + suggested approach.
   to `"average_class_hd_plus_con"` so it matches the per-level rule.
   One-line data-pack edit — not a code change. Same check applies to any
   future pack that declares both keys.
+
+---
+
+## Landed during Stage 6 (2026-04-24)
+
+Stage 6 delivered the items pipeline — equip/unequip UX, consumable
+dispatch for the three `on_use` keywords, and the prompt retuned to
+match. Along the way:
+
+- **Healing-potion flow is prompt-brittle** — closed. The Use button
+  is now the authoritative path; `useConsumableById` rolls the amount
+  via the engine and applies HP directly (no GM coordination required).
+  The prose-based fallback (`tryParsePackItemUse` regex) is guarded by
+  `gs()._consumableUsedThisTurn` so Use-button decrements + GM-echo
+  prose can't double-count. Non-consumable gear (torch, rope, rations)
+  keeps its existing prose heuristics.
+
+Stage 6 deliverables (for the record):
+
+- **RulesEngine.useConsumable(item, character, rules, opts)** — pure
+  dispatch returning a plan the caller applies. Three on_use keywords
+  + two fall-throughs (not_consumable, unknown keyword → gm_adjudicate).
+  heal_player rolls via rollFormula (test-friendly via opts.rng).
+- **GameState.useConsumableById(itemId)** — wraps the plan with side
+  effects: modifyHP + callout for heal, removeCondition for cure,
+  inline Confirm/Cancel system message for gm_adjudicate (on Confirm,
+  decrements pack + injects a user turn with the authored prose + fires
+  callAIGM; on Cancel, dismisses without mutation).
+- **GameState.equipItem(itemId, slot?) + unequipItem(slot)** — move
+  items between v1 character.pack ↔ character.equipment. Slot
+  inferred from item.slot / item.weapon / item.armor when not passed.
+  Slot collision swaps the current occupant back to the pack;
+  two_handed vs main_hand + off_hand conflict is handled. Mirrors into
+  legacy gs().character.equipment + .inventory so the shimmed panel
+  stays correct. rules.character_model.slot_limits warned but not
+  enforced (deferred).
+- **GameState.resolveV1Item / findPackEntry / decrementPack /
+  inferSlotForItem** — item-index + pack helpers supporting the
+  above.
+- **UI.character — action buttons** — Equip / Unequip / Use buttons
+  inline on equipment and pack rows. Matches inventory rows to v1 pack
+  entries by name; Gold and legacy GM-narrated pickups stay buttonless.
+  Gated during in-flight rolls / active hazard steps.
+- **gm_adjudicate confirm UX** — inline narrative-panel entry with
+  Confirm/Cancel buttons + the item's authored prose styled as a
+  left-bar italic quote. No new modal infrastructure.
+- **Prompt: PACK ITEM USE rewritten** — explicit app-drives contract
+  for heal_player / cure_condition / gm_adjudicate; prose fallback
+  retained. Prompt grew 12.1k → 13.2k (still yellow zone).
+- **readiedWeaponName auto-tracking** — equip/unequip flips it so
+  attack-flow heuristics work without the player typing "I switch to
+  my Oathblade" after an Equip click.
+- **Debug trail: CONSUMABLE + EQUIP categories** now populate the ring
+  buffer for Copy Session Report diagnosis.
+
+Regression gates (Gauntlet):
+- **Oathblade in practice** (primary): Search the rack → Oathblade in
+  pack → Equip → attack the dummy → attack callout includes
+  `+1 attack_bonus` and the damage callout shows the `1d4 radiant`
+  bonus-damage rider line.
+- **Apothecary ↔ Breath-Held round-trip**: pick up antitoxin → fail
+  CON save in Breath-Held → `poisoned` applied → click Use on
+  antitoxin in the pack → `poisoned` removed + antitoxin quantity
+  drops to 0 + entry removed.
+- **Healing potion after damage**: take HP loss → Use potion → amount
+  rolls via engine → HP clamps to max, over-heal annotated in callout.
+- **Holy water (gm_adjudicate)**: Use → confirm dialog with authored
+  prose (undead / living / hallowed-vessel guidance) → Confirm → GM
+  narrates per the prose + target in fiction.
 
 ---
 
