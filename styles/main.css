@@ -513,6 +513,60 @@ body {
 }
 
 /* ============================================
+   Stage 6: Item action buttons (Equip / Unequip / Use)
+   ============================================ */
+.item-action-button {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 0.72em;
+  font-family: "Fraunces", serif;
+  background: var(--dkColor);
+  border: 1px solid var(--ltColor);
+  border-radius: 3px;
+  color: #ffffff;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.item-action-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.item-action-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.equipment-item .item-action-button {
+  float: right;
+  margin-top: 2px;
+}
+
+.inventory-item .item-action-button {
+  flex-shrink: 0;
+}
+
+/* ============================================
+   Stage 6: gm_adjudicate confirm UI
+   ============================================ */
+.gm-adjudicate-confirm .gm-adjudicate-prose {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid var(--ltColor);
+  font-style: italic;
+  font-size: 0.9em;
+  line-height: 1.35;
+}
+
+.gm-adjudicate-confirm .gm-adjudicate-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ============================================
    Narrative Panel (Center Column - 60%)
    ============================================ */
 .narrative-panel {
