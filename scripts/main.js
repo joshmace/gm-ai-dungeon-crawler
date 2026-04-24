@@ -467,10 +467,11 @@
     function submitAction() {
         const input = document.getElementById('playerInput');
         const action = input.value.trim();
-        
+
         if (!action || gs().waitingForRoll) return;
-        
+
         gs().lastCombatRoom = null; // clear lingering monster panel when player takes another action
+        gs()._consumableUsedThisTurn = false; // Stage 6: reset the Use-button guard for this turn
         tryParseWeaponAway(action);
         tryParseWeaponSwitch(action);
         tryParseArmorState(action);

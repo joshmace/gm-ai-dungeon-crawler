@@ -867,18 +867,32 @@
 
     /** Parse when player uses Pack items (potion, rope, rations, torch) and decrement quantity.
      * @param {string} text - GM or player narrative text
-     * @param {boolean} fromPlayer - if true, set torchUseParsedThisTurn to avoid double-count when GM also confirms */
+     * @param {boolean} fromPlayer - if true, set torchUseParsedThisTurn to avoid double-count when GM also confirms
+     *
+     * Stage 6: gs()._consumableUsedThisTurn gates the healing-potion branch so
+     * the Use-button path doesn't double-decrement via the GM's response
+     * narration. Flag is set by useConsumableById + by this parser's own
+     * prose match; it clears at the start of the next submitAction. Closes
+     * POLISH_BACKLOG's "Healing-potion flow is prompt-brittle" by making
+     * the card-click path authoritative and the prose path fall-through.
+     */
     function tryParsePackItemUse(text, fromPlayer = false) {
         if (!text) return;
         const t = text.toLowerCase();
-        // Healing potion
-        if (/\b(?:you\s+)?(?:drink|drank|consume|consumed|use|used)\s+(?:a|the)?\s*healing\s+potion\b/i.test(t) ||
-            /\bhealing\s+potion\s+(?:restores?|heals?)\b/i.test(t)) {
+        // Healing potion — gated by the Stage 6 guard flag.
+        const consumableAlreadyFired = !!gs()._consumableUsedThisTurn;
+        if (!consumableAlreadyFired && (
+                /\b(?:you\s+)?(?:drink|drank|consume|consumed|use|used)\s+(?:a|the)?\s*healing\s+potion\b/i.test(t) ||
+                /\bhealing\s+potion\s+(?:restores?|heals?)\b/i.test(t)
+        )) {
             const before = gs().character.inventory.find(i => i.name === 'Healing Potion');
             if (before && (typeof before.quantity === 'number') && before.quantity > 0) {
                 removeFromInventory('Healing Potion', 1);
-                debugLog('PARSE', 'Detected potion usage');
+                gs()._consumableUsedThisTurn = true;   // block the GM-side match later in the same cycle
+                debugLog('PARSE', 'Detected potion usage (prose path)');
             }
+        } else if (consumableAlreadyFired) {
+            debugLog('PARSE', 'Skipping potion heuristic — Use-button path already decremented');
         }
         // Rope
         if (/\b(?:you\s+)?(?:use|used|employ)\s+(?:the\s+)?rope\b/i.test(t) ||

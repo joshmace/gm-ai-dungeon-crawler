@@ -997,6 +997,7 @@
             const afterHP  = gs().character.hp;
             const actualHeal = afterHP - beforeHP;
             decrementPack(itemId);
+            gs()._consumableUsedThisTurn = true;   // tryParsePackItemUse reads + clears on next submitAction
             if (global.addMechanicsCallout) {
                 const suffix = actualHeal < plan.amount ? ` (${plan.amount - actualHeal} overheal)` : '';
                 global.addMechanicsCallout(`Used ${item.name || itemId}: ${plan.breakdown} → +${actualHeal} HP${suffix} (HP ${afterHP}/${gs().character.maxHp})`);
@@ -1013,6 +1014,7 @@
             }
             const removed = plan.conditions.filter(cid => before.has(cid));
             decrementPack(itemId);
+            gs()._consumableUsedThisTurn = true;
             if (global.addMechanicsCallout) {
                 const what = removed.length ? removed.join(', ') : 'no matching condition (no effect)';
                 global.addMechanicsCallout(`Used ${item.name || itemId}: ${what}`);
@@ -1069,6 +1071,7 @@
         confirm.textContent = 'Confirm use';
         confirm.addEventListener('click', () => {
             decrementPack(itemId);
+            gs()._consumableUsedThisTurn = true;
             debugLog('CONSUMABLE', `gm_adjudicate confirmed: ${itemId}`);
             entry.remove();
             if (global.addMechanicsCallout) global.addMechanicsCallout(`Used ${item.name || itemId} (GM adjudicates)`);
