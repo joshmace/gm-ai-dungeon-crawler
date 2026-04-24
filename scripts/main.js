@@ -273,7 +273,12 @@
                 isWeapon,
                 isArmor,
                 weaponType: typeInfo.type,
-                weaponRange: typeInfo.range
+                weaponRange: typeInfo.range,
+                // Stage 6 back-fill: preserve the v1 slot + id so equipItem /
+                // unequipItem can find this entry on the legacy side (the Unequip
+                // button also checks _v1_slot to decide whether to render).
+                _v1_slot: item.slot || null,
+                _v1_id:   item.id   || null
             };
             if (isArmor && item.ac != null) eq.ac = item.ac;
             if (isWeapon && item.damage) {

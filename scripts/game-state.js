@@ -635,10 +635,17 @@
     
     function removeFromInventory(itemName, quantity = 1) {
         debugLog('STATE', `Removing from inventory: ${itemName} x${quantity}`);
-        const item = gs().character.inventory.find(i => i.name === itemName);
-        if (item) {
+        const inv = gs().character.inventory;
+        const idx = inv.findIndex(i => i.name === itemName);
+        if (idx !== -1) {
+            const item = inv[idx];
             if (typeof item.quantity === 'number') {
                 item.quantity = Math.max(0, item.quantity - quantity);
+                // Stage 6: splice zero-quantity entries so the Pack panel doesn't
+                // render "Warden's Oathblade x0" after the item's been equipped
+                // (or any consumable that's been fully used up). Gold is kept at
+                // 0 intentionally via the string branch below.
+                if (item.quantity === 0) inv.splice(idx, 1);
             } else if (typeof item.quantity === 'string' && item.name === 'Gold') {
                 const m = item.quantity.match(/(\d+)/);
                 if (m) {
