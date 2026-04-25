@@ -940,7 +940,7 @@ button:disabled {
 }
 
 .feature-card {
-  padding: 10px 12px;
+  padding: 8px 12px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--ltColor);
   border-radius: 6px;
@@ -954,6 +954,26 @@ button:disabled {
 .feature-card.feature-locked {
   opacity: 0.55;
   border-style: dashed;
+}
+
+/* Collapsible cards: click on the body toggles description visibility.
+   Action buttons inside the card keep their own click behavior. */
+.feature-card-collapsible {
+  cursor: pointer;
+}
+
+.feature-card-collapsed .feature-card-desc,
+.feature-card-collapsed .feature-card-hint {
+  display: none;
+}
+
+.feature-card-chevron {
+  display: inline-block;
+  width: 0.9em;
+  margin-right: 4px;
+  font-size: 0.75em;
+  opacity: 0.6;
+  transition: transform 0.12s ease;
 }
 
 .feature-card-header {
