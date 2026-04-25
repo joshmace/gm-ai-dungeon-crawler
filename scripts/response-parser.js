@@ -175,6 +175,12 @@
 
         if (gs().isDead) {
             const textToShow = displayResponse.replace(rollRequestPattern, '').trim() || displayResponse.trim();
+            // Streaming: the GM's killing-blow narration was rendering
+            // into #streamingNarration during the stream. The overlay
+            // covers the panel visually, but we still want to clean up
+            // the streaming div so it doesn't hang around as an empty/
+            // partial entry once the player dismisses the overlay.
+            if (typeof removeStreamingNarration === 'function') removeStreamingNarration();
             showDeathOverlay(textToShow);
             disableInput(true);
         } else if (match) {
