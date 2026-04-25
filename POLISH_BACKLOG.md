@@ -116,15 +116,8 @@ Each entry: one-line description + where it was surfaced + suggested approach.
 ### Streaming narration re-renders on completion
 
 - **Surfaced:** Stage 1e-ii smoke test (2026-04-22).
-- **Behavior:** Words appear several at a time during streaming (chunky), then
-  the entire message visibly re-renders when the stream finishes.
-- **Root cause:** `callAIGM()` removes the `#streamingNarration` div and then
-  `processAIResponse` calls `addNarration()` to create a fresh entry with the
-  fully-parsed text. Two DOM nodes, one swap.
-- **Fix direction:** keep the streaming div in place and swap its innerHTML
-  with the final parsed content, rather than removing + re-adding. Also
-  investigate whether the "several words at a time" pacing is the SSE chunk
-  size or the `updateStreamingNarration` debounce.
+- **Landed post-Stage-7 (2026-04-24, PR #6).** See "Landed
+  post-Stage-7" section below.
 
 ### Combat jumps to wrong room when GM starts combat outside a scripted encounter
 
@@ -158,6 +151,111 @@ Each entry: one-line description + where it was surfaced + suggested approach.
     current XP in absolute terms). Needs width math but reads most
     intuitively.
 - Not a blocker; the current form is correct and consistent.
+
+---
+
+## Landed post-Stage-7 (2026-04-24)
+
+Three small follow-up PRs after the Stage 7 merge, each shipped on
+its own branch + smoke-tested independently:
+
+### PR #4 — Prompt trim, template-focused (~1.7k chars)
+
+Measurement-driven: `test.promptSizeReport()` revealed the master
+template (`ai-gm-system-prompt.md`) was 13.2k of static text, **62%**
+of every prompt regardless of game state. RULESET_BLOCK +
+LAYOUT_BLOCK + ENCOUNTER_INFO together were only 30%. Trimming the
+template was the highest-leverage move.
+
+Trim aligned to user-stated GM priorities (mechanics awareness >
+setting > flavor coaching). Every mechanical contract (tag
+vocabulary, adjudication buckets, app-handles boundaries,
+monster-death-language gating, Stage 6 consumable/equip flow)
+preserved verbatim. Cuts:
+- NARRATION section: flavor-example list + duplicated
+  combat-attack-flow paragraph (lives in `{{COMBAT_FLOW_BLOCK}}`
+  and `## COMBAT TURN STRUCTURE`). −1,036 chars.
+- PACK ITEM USE: intro + flavor elaborations. All five Stage 6
+  contracts (heal_player, cure_condition, gm_adjudicate Confirm
+  flow, Equip/Unequip, prose fallback) kept verbatim. −457 chars.
+- Redundancy pass: tightened DUNGEON LAYOUT prose; dropped the
+  duplicated "Do NOT request damage rolls" suffix on the
+  readied-weapon line (canonical statement lives in
+  `## WHO ROLLS`). −246 chars.
+
+Template: 13,166 → 11,427 (−13%). Full prompt on Gauntlet
+mid-play: ~21.3k → ~19.6k. Still RED but ~9% lighter every turn
+and well below the 21k peak that surfaced the drift risk in
+Stage 4.
+
+Also closed: **L&B `max_formula` contradicts `hp_gain_per_level`**
+— retired from Open (was already landed in Stage 4 per the
+landings section, just hadn't been removed from the open list).
+
+`test.promptSizeReport()` ships with the PR for future trim
+passes.
+
+### PR #5 — Feature cards default-collapsed
+
+Stopgap UI fix. On Three Knots's `inn_three_knots` boot, three
+feature cards (Mara Thornwood, Mayor Corbin's Commission, The
+Mayor's Reward) were crowding the narrative panel down to a
+single line of GM prose. Cards now collapse to a single header
+row (chevron ▸ + title + type tag) plus action buttons. Click
+the card body to expand the description; chevron flips ▸ → ▾.
+Action buttons (Examine, Search, Use, etc.) still trigger their
+authored behavior without expanding — `wireExpandToggle`
+ignores clicks on `button, input, textarea, select, label`.
+
+Locked cards (unmet prereqs with an authored `prereq_hint`)
+follow the same pattern — collapsed by default, hint reveals
+on click.
+
+Reclaims ~80% of the vertical space cards were taking.
+Implementation is a CSS class toggle, easy to migrate when the
+eventual card UI redesign lands (likely a horizontal chip strip
+or sidebar drawer; not in scope yet).
+
+### PR #6 — Streaming response polish
+
+Streaming was already wired pre-Stage-7 (`CONFIG.STREAM = true`,
+`readAnthropicStream` reading SSE deltas, `updateStreamingNarration`
+rendering tag-stripped text). Two visible bugs blocked the UX
+win, plus a death-overlay edge case:
+
+- **Tag flashes mid-stream**: `CONTROL_TAG_RE` only matched
+  COMPLETE `[TAG: ...]` patterns. Mid-stream chunks like
+  `"She turns. [ROLL_REQ"` displayed the partial bracket until
+  the closing `]` arrived.
+- **Re-render flash on completion**: `callAIGM` removed the
+  streaming div, then `processAIResponse` called `addNarration`
+  to create a fresh entry. Visible DOM swap.
+- **Death-overlay orphan**: death narration rendered into the
+  streaming div, but the `isDead` branch in `processAIResponse`
+  skipped `addNarration`, so the streaming div hung around as
+  an orphan under the overlay (visible after Restart / Load
+  save).
+
+Fixes:
+- `streamSafeText(rawText)` helper hides everything from the
+  last unclosed `[` to the buffer end, then strips complete tags
+  from what remains. Tail unfreezes naturally as soon as the
+  closing `]` arrives.
+- `addNarration` upgrades the existing `#streamingNarration` div
+  in place when present (replaces content + drops the id so
+  subsequent calls in the same turn create new entries).
+  Non-streaming path unchanged.
+- `processAIResponse`'s `isDead` branch calls
+  `removeStreamingNarration()` before `showDeathOverlay()`.
+
+Result: smooth word arrival, no tag flashes, no completion
+flash, death overlay clean. Total time end-to-end is the same
+(actually slightly longer for SSE overhead) but the perceived
+wait drops by ~10x since the first words appear in
+~200–500ms instead of after a 4–8 second silent block.
+
+Closed: **Streaming narration re-renders on completion**
+(Stage 1e-ii smoke-test item).
 
 ---
 
