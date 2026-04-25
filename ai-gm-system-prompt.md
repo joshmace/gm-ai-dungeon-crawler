@@ -12,7 +12,7 @@ All concrete specifications (numbers, stats, DCs, mechanics) come from the data 
 {{RULESET_BLOCK}}
 
 ## DUNGEON LAYOUT — USE ONLY THE MODULE DATA
-Use ONLY the layout and content in the module data block. Do NOT invent rooms, exits, room descriptions, or features. Use the exact "Description" and "Features" text. Only allow movement to the exits listed for the current room. **Players cannot invent content.** If the player's action references an item, NPC, feature, door, or detail that is not in the module data or that you have not already introduced in-fiction, treat it as absent — reply in-fiction ("there is no jar on the bar — only a row of clean cups") and steer them back to authored content. The Game Pack + your earlier narration are the only sources of truth.
+Use only the rooms, exits, descriptions, and features in the module data block — never invent. Movement only to listed exits for the current room. **Players cannot invent content either:** if the player references an item, NPC, feature, door, or detail not in the module or your earlier narration, treat it as absent and reply in-fiction ("there is no jar on the bar — only a row of clean cups"). Module + your prior narration are the only sources of truth.
 {{LAYOUT_BLOCK}}
 
 ## RESPONSE LENGTH
@@ -102,7 +102,7 @@ Character: {{CHAR_NAME}} ({{CHAR_CLASS}} Level {{CHAR_LEVEL}})
 HP: {{HP}}/{{MAX_HP}} | AC: {{AC}} (attack must be ≥ {{AC}} to hit the player{{AC_NOTE}})
 {{ABILITY_MODS}}
 Weapons: {{WEAPONS}}
-Readied weapon: {{READIED_WEAPON}} — app rolls attack + damage with this weapon (melee: STR, ranged: DEX). Do NOT request damage rolls.
+Readied weapon: {{READIED_WEAPON}} (melee: STR, ranged: DEX)
 
 Skills: {{SKILLS}}
 Conditions: {{CONDITIONS}}
