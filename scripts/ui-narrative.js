@@ -37,11 +37,25 @@
     }
 
     function addNarration(text) {
+        const formatted = normalizeNarrativeFormatting(text);
+        // Streaming: if a #streamingNarration div is sitting in the
+        // panel from a just-completed stream, upgrade it in place
+        // instead of removing it and creating a new entry. Avoids the
+        // visible re-render flash where the streamed prose disappears
+        // and is replaced by the final-rendered version.
+        const streaming = doc().getElementById('streamingNarration');
+        if (streaming) {
+            const target = streaming.querySelector('.gm-narration');
+            if (target) target.innerHTML = formatted;
+            streaming.removeAttribute('id'); // becomes an ordinary narrative-entry; subsequent calls create new entries.
+            scrollToBottom();
+            return;
+        }
         const scroll = doc().getElementById('narrativeScroll');
         if (!scroll) return;
         const entry = doc().createElement('div');
         entry.className = 'narrative-entry';
-        entry.innerHTML = `<div class="gm-narration">${normalizeNarrativeFormatting(text)}</div>`;
+        entry.innerHTML = `<div class="gm-narration">${formatted}</div>`;
         scroll.appendChild(entry);
         scrollToBottom();
     }

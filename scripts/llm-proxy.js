@@ -90,7 +90,10 @@
                 aiResponse = data.content[0].text;
             }
             global.removeLoadingIndicator && global.removeLoadingIndicator();
-            global.removeStreamingNarration && global.removeStreamingNarration();
+            // NOTE: do NOT remove the streaming narration div here. addNarration
+            // (called from processAIResponse) upgrades it in place to avoid the
+            // visible re-render flash. The error path below still removes it on
+            // failure so we don't leave an empty pane on a broken stream.
 
             debugLog('AI', 'Received AI response', { length: aiResponse.length });
 
