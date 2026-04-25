@@ -122,14 +122,27 @@
         card.dataset.featureType = type;
         if (!prereqsMet) card.classList.add('feature-locked');
 
-        // Header: title + type tag.
+        const hasDescription = !!feature.description || (!prereqsMet && !!feature.prereq_hint);
+        // Collapsed-by-default: description / hint hide behind a click on the
+        // card body. Action buttons (Examine, Search, etc.) and the puzzle
+        // input row stay visible at all times so the player can act without
+        // expanding. Non-description cards skip the collapsible wiring.
+        if (hasDescription) {
+            card.classList.add('feature-card-collapsible');
+            card.classList.add('feature-card-collapsed');
+        }
+
+        // Header: title + chevron (when collapsible) + type tag.
         const header = doc().createElement('div');
         header.className = 'feature-card-header';
-        header.innerHTML = `<span class="feature-card-title">${escapeHtml(feature.name || feature.id)}</span>`
+        const chevron = hasDescription
+            ? `<span class="feature-card-chevron" aria-hidden="true">▸</span>`
+            : '';
+        header.innerHTML = `<span class="feature-card-title">${chevron}${escapeHtml(feature.name || feature.id)}</span>`
             + `<span class="feature-card-type">${escapeHtml(type)}</span>`;
         card.appendChild(header);
 
-        // Description (always shown).
+        // Description (hidden via CSS while card has feature-card-collapsed).
         if (feature.description) {
             const desc = doc().createElement('div');
             desc.className = 'feature-card-desc';
@@ -146,6 +159,7 @@
                 card.appendChild(hint);
             }
             // Do not render action buttons when locked.
+            wireExpandToggle(card);
             return card;
         }
 
@@ -156,7 +170,24 @@
         else if (type === 'puzzle')      renderPuzzlePlaceholder(card, feature, rt);
         else renderLoreActions(card, feature, rt); // unknown type → safe lore shape.
 
+        wireExpandToggle(card);
         return card;
+    }
+
+    /**
+     * Click anywhere on the card body toggles the description collapse.
+     * Action buttons + form inputs (puzzle "Propose a solution" text field)
+     * keep their own behavior — they bubble up but we ignore the toggle when
+     * the click landed on or inside one of them.
+     */
+    function wireExpandToggle(card) {
+        if (!card.classList.contains('feature-card-collapsible')) return;
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('button, input, textarea, select, label')) return;
+            card.classList.toggle('feature-card-collapsed');
+            const chev = card.querySelector('.feature-card-chevron');
+            if (chev) chev.textContent = card.classList.contains('feature-card-collapsed') ? '▸' : '▾';
+        });
     }
 
     // ---- Lore sub-type ----------------------------------------------------
