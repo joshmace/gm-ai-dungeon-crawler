@@ -504,6 +504,55 @@
                 if (typeof saveGame === 'function') saveGame();
             },
 
+            // Post-Stage-7: measure the current system prompt size and
+            // break it down by major contributor. Non-destructive — just
+            // builds the prompt + per-block strings and reports bytes.
+            // Used to target the prompt-trim pass (POLISH_BACKLOG RED-
+            // zone item). Yellow zone at 8–16k, red at 16k+.
+            promptSizeReport() {
+                if (!window.PromptBuilder || !window.PromptBuilder.buildSystemPrompt) {
+                    addSystemMessage('[DEBUG] promptSizeReport: PromptBuilder not ready');
+                    return null;
+                }
+                let fullPrompt = '';
+                try { fullPrompt = window.PromptBuilder.buildSystemPrompt(); }
+                catch (e) {
+                    addSystemMessage('[DEBUG] promptSizeReport: buildSystemPrompt threw — ' + e.message);
+                    return null;
+                }
+                const ruleset = (window.PromptBuilder.buildRulesetBlockForPrompt || (() => ''))() || '';
+                const setting = (window.PromptBuilder.buildSettingBlockForPrompt || (() => ''))() || '';
+                const layout  = (window.PromptBuilder.buildModuleLayoutForPrompt || (() => ''))() || '';
+
+                const room = gameData.module && gameData.module.rooms && gameData.module.rooms[gameState.currentRoom];
+                let encounterInfo = '';
+                if (room && room.encounters && room.encounters.length > 0 && window.buildEncounterDescription) {
+                    encounterInfo = '\n\n## Active Encounters — use these EXACT stats; current HP is tracked by the app (monster is DEFEATED at 0 HP; you MUST narrate death and must NOT have it act further):\n';
+                    for (const enc of room.encounters) encounterInfo += window.buildEncounterDescription(enc, true) + '\n';
+                } else {
+                    encounterInfo = '\n\n## Active Encounters: NONE — there are no monsters in this room. Do not add or invent any monsters.\n';
+                }
+
+                const template = window.SYSTEM_PROMPT_TEMPLATE || '';
+                const total = fullPrompt.length;
+                const zone  = total >= 16000 ? 'RED (16k+)'
+                            : total >= 8000  ? 'YELLOW (8–16k)'
+                            :                  'GREEN (<8k)';
+
+                const rows = [
+                    { block: '{{RULESET_BLOCK}}',  bytes: ruleset.length,      share: (ruleset.length/total*100).toFixed(1) + '%' },
+                    { block: '{{SETTING_BLOCK}}',  bytes: setting.length,      share: (setting.length/total*100).toFixed(1) + '%' },
+                    { block: '{{LAYOUT_BLOCK}}',   bytes: layout.length,       share: (layout.length/total*100).toFixed(1) + '%' },
+                    { block: '{{ENCOUNTER_INFO}}', bytes: encounterInfo.length, share: (encounterInfo.length/total*100).toFixed(1) + '%' },
+                    { block: 'template (raw, pre-interpolation)', bytes: template.length, share: '—' },
+                    { block: 'TOTAL (built prompt)', bytes: total, share: '100%' }
+                ];
+                console.log(`[DEBUG] promptSizeReport — pack=${CONFIG.GAME_PACK}, room=${gameState.currentRoom}, mode=${gameState.mode}, zone=${zone}`);
+                console.table(rows);
+                addSystemMessage(`[DEBUG] promptSizeReport: total=${total} chars, zone=${zone} (breakdown in console)`);
+                return { total, zone, breakdown: rows, fullPrompt };
+            },
+
             // Stage 7: helper for defeat_encounter conditions — mark
             // exactly the target encounter resolved. On Crow's Hollow
             // that's warden_lieutenants_last_stand; on Three Knots it's

@@ -159,24 +159,6 @@ Each entry: one-line description + where it was surfaced + suggested approach.
     intuitively.
 - Not a blocker; the current form is correct and consistent.
 
-### L&B `resources.hit_points.max_formula` contradicts `progression.hp_gain_per_level`
-
-- **Surfaced:** Stage 2a derivation smoke test (2026-04-22).
-- **Behavior:** Aldric's authored `hp_current: 28` is consistent with the
-  `average_class_hd_plus_con` formula (`10 + 2×6 + 3×2 = 28`), but
-  `rules_lantern_and_blade.json → resources.hit_points.max_formula` says
-  `"class_hd_plus_con"` which yields `3×10 + 3×2 = 36`. Result: the panel
-  will show "28/36" on a freshly-loaded character, implying damage that
-  never happened.
-- **Root cause:** the pack declares two formulas that disagree.
-  `progression.hp_gain_per_level: "average_class_hd_plus_con"` is the
-  per-level rule; `resources.hit_points.max_formula: "class_hd_plus_con"`
-  is the derived-max rule. `deriveSheet`/the shim read the latter.
-- **Fix direction:** change `rules_lantern_and_blade.json → resources.hit_points.max_formula`
-  to `"average_class_hd_plus_con"` so it matches the per-level rule.
-  One-line data-pack edit — not a code change. Same check applies to any
-  future pack that declares both keys.
-
 ---
 
 ## Landed during Stage 7 (2026-04-24)
