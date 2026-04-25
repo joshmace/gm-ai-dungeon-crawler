@@ -127,6 +127,31 @@
     /** Control tags that must not render mid-stream (still parsed on completion). */
     const CONTROL_TAG_RE = /\[[A-Z][A-Z_]*(?:\s*:\s*[^\]]*)?\]/g;
 
+    /**
+     * Compute the safe display text for a partial stream buffer. Strips
+     * complete control tags AND hides any text from an unclosed `[` to
+     * the end of the buffer — without this, mid-stream chunks like
+     * "She turns. [ROLL_REQ" would flash the partial tag until the
+     * closing `]` arrives.
+     *
+     * The hidden tail unfreezes naturally as soon as either the closing
+     * `]` arrives (regex sweeps the whole tag) or the model writes
+     * something after a `]` and a new (potentially unclosed) `[` further
+     * down the stream.
+     */
+    function streamSafeText(rawText) {
+        if (!rawText) return '';
+        // Find the last `[` that has no `]` after it — anything from
+        // there onwards is an in-progress control tag, hide it.
+        const lastOpen = rawText.lastIndexOf('[');
+        let visible = rawText;
+        if (lastOpen !== -1) {
+            const tail = rawText.slice(lastOpen);
+            if (!tail.includes(']')) visible = rawText.slice(0, lastOpen);
+        }
+        return visible.replace(CONTROL_TAG_RE, '').replace(/\s{2,}/g, ' ').trim();
+    }
+
     function ensureStreamingNarration() {
         let entry = doc().getElementById('streamingNarration');
         if (entry) return entry.querySelector('.gm-narration');
@@ -144,8 +169,7 @@
     function updateStreamingNarration(fullText) {
         const target = ensureStreamingNarration();
         if (!target) return;
-        const cleaned = fullText.replace(CONTROL_TAG_RE, '').replace(/\s{2,}/g, ' ').trim();
-        target.innerHTML = normalizeNarrativeFormatting(cleaned);
+        target.innerHTML = normalizeNarrativeFormatting(streamSafeText(fullText));
         scrollToBottom();
     }
 
