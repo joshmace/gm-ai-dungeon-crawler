@@ -252,7 +252,7 @@ Confirmed via inspection:
 - `monster_manual.json` — pre-v1 `monster_manual.version / system` shape. **Delete at end of stage 7.** Superseded by `bestiary_lantern_and_blade.json` and `bestiary_three_knots.json`.
 - `test_module_rules.json`, `test_module_arena.json` — pre-v1 module shapes. **Delete at end of stage 7.** The Gauntlet (`module_gauntlet.json`) replaces them.
 - `character_aldric.json` — confirmed already v1 (`game_pack_id: "gauntlet_test_hub_v1"`, `schema_version: 1`, v1 `equipment[]` + `pack[]` + `feature_resources` + `saves.proficient`). **Keep.**
-- `SESSION_3_CHANGELOG.md`, `RULES_TESTING.md`, `GM_RULES_REWRITE.md`, `JSON_DATA_AND_SWAPPING.md` — historical planning docs. Leave alone; not code.
+- `JSON_DATA_AND_SWAPPING.md` — historical planning doc. Leave alone; not code. (Companion pre-v1 docs `SESSION_3_CHANGELOG.md`, `RULES_TESTING.md`, `GM_RULES_REWRITE.md` were archived to `~/mace-and-marrow/sessions/_archive/` on 2026-04-27.)
 
 Also drop any leftover inline module/hardcoded-rules paths in the frontend — `CONFIG.DATA_FILES`, fallback `XP_LEVELS_DEFAULT`, and the `DEFAULT_EQUIPMENT_SPECS` equipment catalog (all of it is now authored in the items library).
 

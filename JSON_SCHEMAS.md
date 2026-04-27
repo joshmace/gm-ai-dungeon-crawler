@@ -1,6 +1,6 @@
 # Game Pack JSON Schemas — v1 Reference
 
-> **Purpose:** a concise, field-level reference for pack authors. Tells you *what* goes in each file; the *why* and the full design rationale live in `RULES_SCHEMA_PLAN.md`.
+> **Purpose:** a concise, field-level reference for pack authors. Tells you *what* goes in each file; the *why* and the full design rationale live in `~/mace-and-marrow/RULES_SCHEMA_PLAN.md` (canonical, in Drive).
 >
 > **Status:** v1 schemas, April 2026. Breaking changes from the pre-v1 format; no backwards compatibility.
 
@@ -1720,7 +1720,7 @@ The `consumable.on_use` field takes one of the three keywords below. The shape o
 
 ## Deferred to v2
 
-The full deferred-feature list lives in `RULES_SCHEMA_PLAN.md` (search for "Deferred to v2"). Summary:
+The full deferred-feature list lives in `~/mace-and-marrow/RULES_SCHEMA_PLAN.md` (search for "Deferred to v2"). Summary:
 
 - Tier 2 systems (PbtA, Blades, FATE, Savage Worlds)
 - 2d10 resolution, descending AC, death saves
@@ -1755,4 +1755,4 @@ The full v1 starter pack lives in the repo root:
 - `module_crows_hollow.json` + `crows_hollow_guidance.md`
 - `character_ren_callory.json` + `ren_callory_guidance.md`
 
-When the schema and this doc disagree, the plan doc (`RULES_SCHEMA_PLAN.md`) is the tiebreaker.
+When the schema and this doc disagree, the plan doc (`~/mace-and-marrow/RULES_SCHEMA_PLAN.md`) is the tiebreaker.

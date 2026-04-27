@@ -1,7 +1,11 @@
-# AI Dungeon Crawler - Development Backlog
+# AI Dungeon Crawler — Development Backlog
 
-**Last Updated:** April 24, 2026
-**Status:** v1 refactor complete (Stages 1–7). Streaming + character creation are the next top items.
+**Last Updated:** April 27, 2026  
+**Status:** v1 refactor complete (Stages 1–7). Streaming + character creation are the next top items. Horizon-tagged against `~/mace-and-marrow/ROADMAP.md` on 2026-04-27.
+
+**Horizon legend:** `[N]` Now (1–2 wk) · `[S]` Soon (1–2 mo) · `[L]` Later (3+ mo)
+
+This is the engineering-facing backlog. The strategy/sequencing layer above lives in `~/mace-and-marrow/ROADMAP.md`. Untagged items either don't fit the horizon model (history, status tables) or need triage before they're tagged.
 
 ---
 
@@ -22,9 +26,9 @@ Stages 1 through 7 from `REFACTOR_V1_PLAN.md` all shipped. Highlights:
 
 Next top items:
 
-1. **Streaming** — single-file hookup in `scripts/llm-proxy.js` to the existing SSE `/api/messages` path. Proxy already supports it.
-2. **Character creation** flow (Tier 3 from the pre-long-adventure plan).
-3. **Prompt trim pass** — see `POLISH_BACKLOG.md` for the RED-zone note.
+1. **`[N]` Streaming** — single-file hookup in `scripts/llm-proxy.js` to the existing SSE `/api/messages` path. Proxy already supports it.
+2. **`[S]` Character creation** flow (Tier 3 from the pre-long-adventure plan).
+3. **`[N]` Prompt trim pass** — see `POLISH_BACKLOG.md` for the RED-zone note.
 
 ---
 
@@ -57,50 +61,50 @@ These 16 features are prioritized so you can run and test longer adventures. Ord
 
 **Phase 1 – Foundation (must-have for long play)**  
 1. **Game state saving** — localStorage (or IndexedDB) save/load; save on key events + manual; load on start.  
-2. **Player death** — Death screen, “Restart adventure” / “New character” / “Load save”; no input until choice.  
+2. **Player death** — Death screen, "Restart adventure" / "New character" / "Load save"; no input until choice.  
 3. **Leveling 1–10** — Level-up when XP ≥ threshold; apply HP/ability bumps per rules; max level 10; UI update.
 
 **Phase 2 – Equipment & economy**  
 4. **Individual weapon and armor stats** — Ensure module/character data has per-item stats; UI shows and uses them.  
-5. **Finding/buying weapons and equipping** — Parse “find/buy [weapon]”; add to inventory; equip/readied flow.  
-6. **Finding/buying armor and equipping** — Same for armor; AC and “armor equipped” state.  
-7. **Shop visits and purchases** — Shop room/state; parse “buy X for Y gp”; deduct gold, add item; optional shop UI.  
+5. **Finding/buying weapons and equipping** — Parse "find/buy [weapon]"; add to inventory; equip/readied flow.  
+6. **Finding/buying armor and equipping** — Same for armor; AC and "armor equipped" state.  
+7. **Shop visits and purchases** — Shop room/state; parse "buy X for Y gp"; deduct gold, add item; optional shop UI.  
 8. **Pack inventory management** — Explicit add/drop/use from pack; parsing + UI (e.g. use/drop from pack list).  
 9. **Remove debug panel** — Hide or remove from layout; keep code for later.
 
 **Phase 3 – Encounters & characters**  
-10. **Non-combat NPCs and skill checks** — NPCs in modules; skill-check outcomes; state flags for “talked to X”.  
+10. **Non-combat NPCs and skill checks** — NPCs in modules; skill-check outcomes; state flags for "talked to X".  
 11. **Spell casting and spell management** — Spell list, slots, slot recovery; level scaling; roll requests for spells.  
 12. **Character builder / management** — Create character (abilities, class, name, starting gear); save/load character.  
 13. **Custom character portraits** — Upload or pick portrait; store with character; show in panel.
 
 **Phase 4 – Content & party**  
-14. **Map support** — Module-defined map image; “found/purchased” flag; show in character panel; optional room highlight.  
+14. **Map support** — Module-defined map image; "found/purchased" flag; show in character panel; optional room highlight.  
 15. **Pre-made images** — References in module/monster manual; show room/monster/NPC image at appropriate time in narrative.  
 16. **Multiple characters (party)** — Party list, active character, turn/initiative; shared inventory or per-character; single user.
 
 ### Status (Pre–Long-Adventure)
 
-| # | Feature | Status |
-|---|--------|--------|
-| 1 | Leveling 1–10 | Done |
-| 2 | Weapons: find/buy & equip | Done |
-| 3 | Armor: find/buy & equip | Done |
-| 4 | Shop and purchases | Done |
-| 5 | Pack inventory management | Done (drop/leave parsing; use already existed) |
-| 6 | NPCs and skill-check encounters | Not started |
-| 7 | Spell casting and spell management | Not started |
-| 8 | Multiple characters (party) | Not started |
-| 9 | Pre-made image references | Not started |
-| 10 | Map support | Not started |
-| 11 | Remove debug panel | Done |
-| 12 | Individual weapon/armor stats | Done |
-| 13 | Character builder/management | Not started |
-| 14 | Game state saving | Done |
-| 15 | Player death | Done |
-| 16 | Custom character portraits | Not started |
+| # | Feature | Status | Horizon |
+|---|--------|--------|---------|
+| 1 | Leveling 1–10 | Done | — |
+| 2 | Weapons: find/buy & equip | Done | — |
+| 3 | Armor: find/buy & equip | Done | — |
+| 4 | Shop and purchases | Done | — |
+| 5 | Pack inventory management | Done (drop/leave parsing; use already existed) | — |
+| 6 | NPCs and skill-check encounters | Not started | `[S]` |
+| 7 | Spell casting and spell management | Not started | `[S]` |
+| 8 | Multiple characters (party) | Not started | `[L]` |
+| 9 | Pre-made image references | Not started | `[L]` (Track 5 — player-tier media) |
+| 10 | Map support | Not started | `[L]` |
+| 11 | Remove debug panel | Done | — |
+| 12 | Individual weapon/armor stats | Done | — |
+| 13 | Character builder/management | Not started | `[S]` |
+| 14 | Game state saving | Done | — |
+| 15 | Player death | Done | — |
+| 16 | Custom character portraits | Not started | `[L]` |
 
-*Update the Status column as work progresses (e.g. “In progress”, “Done”).*
+*Update the Status column as work progresses (e.g. "In progress", "Done").*
 
 ---
 
@@ -109,150 +113,154 @@ These 16 features are prioritized so you can run and test longer adventures. Ord
 ### From Initial Review
 
 #### State Management & Parsing
-- [ ] Improve HP damage parsing patterns to catch more variations ("8 damage to you", "suffers 5", "6 HP lost")
-- [ ] Add manual HP override button in case parsing fails
-- [ ] Add conversation history pruning to avoid hitting context limits on long sessions
-- [ ] Better state sync validation between AI responses and game state
-- [ ] Validate AI is following all rules (automated checks)
+- [ ] `[S]` Improve HP damage parsing patterns to catch more variations ("8 damage to you", "suffers 5", "6 HP lost")
+- [ ] `[S]` Add manual HP override button in case parsing fails
+- [ ] `[S]` Add conversation history pruning to avoid hitting context limits on long sessions
+- [ ] `[S]` Better state sync validation between AI responses and game state
+- [ ] `[S]` Validate AI is following all rules (automated checks) — Track 4 (Automated QA)
 
 #### Persistence & Storage
 - [x] Implement localStorage for basic save/load functionality
-- [ ] Consider IndexedDB for more robust storage
-- [ ] Add browser refresh warning ("unsaved progress will be lost")
-- [ ] Cloud save system (future)
-- [ ] Export save files for backup
+- [ ] `[L]` Consider IndexedDB for more robust storage
+- [ ] `[S]` Add browser refresh warning ("unsaved progress will be lost")
+- [ ] `[L]` Cloud save system — depends on user accounts (Track 7)
+- [ ] `[S]` Export save files for backup
 
 #### Error Handling
-- [ ] Error boundaries around AI API calls
-- [ ] Recovery flow when AI outputs malformed responses
-- [ ] Validation of AI response format before processing
-- [ ] Fallback behavior when API is down
-- [ ] Retry logic with exponential backoff
+- [ ] `[S]` Error boundaries around AI API calls
+- [ ] `[S]` Recovery flow when AI outputs malformed responses
+- [ ] `[S]` Validation of AI response format before processing
+- [ ] `[S]` Fallback behavior when API is down
+- [ ] `[S]` Retry logic with exponential backoff
 
 #### Death & Game Over
 - [x] Proper death handling flow (currently just disables input)
-- [ ] Character sheet save on death
-- [ ] Option to create new character after death
+- [ ] `[S]` Character sheet save on death
+- [ ] `[S]` Option to create new character after death — depends on character creation flow
 - [x] Option to restart adventure
-- [ ] Death statistics/memorial
+- [ ] `[L]` Death statistics/memorial
 
 #### Character Creation
-- [ ] Character creation wizard/flow
-- [ ] Ability score generation methods
-- [ ] Class selection
-- [ ] Equipment selection based on class
-- [ ] Background/personality options
-- [ ] Name generator option
+*(All items below: Track 3 — Soon. Bundled into the character creation flow.)*
+- [ ] `[S]` Character creation wizard/flow
+- [ ] `[S]` Ability score generation methods
+- [ ] `[S]` Class selection
+- [ ] `[S]` Equipment selection based on class
+- [ ] `[S]` Background/personality options
+- [ ] `[L]` Name generator option
 
 #### Module Integration
-- [ ] Full integration of module JSON data into system prompt
-- [ ] Use monster stats directly from JSON
-- [ ] Use treasure data from JSON
-- [ ] Use DC values from JSON
-- [ ] Parse room connections dynamically
-- [ ] Module file upload interface
-- [ ] Module validation/linting
+*(Most items in this section were addressed in the v1 refactor — review and check off.)*
+- [ ] (likely done in v1) Full integration of module JSON data into system prompt
+- [ ] (likely done in v1) Use monster stats directly from JSON
+- [ ] (likely done in v1) Use treasure data from JSON
+- [ ] (likely done in v1) Use DC values from JSON
+- [ ] (likely done in v1) Parse room connections dynamically
+- [ ] `[L]` Module file upload interface — Track 6 (Author/Wright tier)
+- [ ] `[L]` Module validation/linting — `json-validator.html` exists; expand for Author tier (Track 6)
 
 #### UI/UX Polish
-- [ ] Loading animations during AI calls (beyond text indicator)
-- [ ] Sound effects for dice rolls
-- [ ] Sound effects for combat hits/misses
-- [ ] Ambient music or atmospheric sound
-- [ ] Image generation integration (placeholders ready)
-- [ ] Dice roll animation (3D rolling dice?)
-- [ ] Character portrait upload/generation
-- [ ] Toast notifications for XP/items/conditions
+- [ ] `[L]` Loading animations during AI calls (beyond text indicator)
+- [ ] `[L]` Sound effects for dice rolls
+- [ ] `[L]` Sound effects for combat hits/misses
+- [ ] `[L]` Ambient music or atmospheric sound
+- [ ] `[L]` Image generation integration (placeholders ready) — Track 5 (player-tier media), needs cost-model decision
+- [ ] `[L]` Dice roll animation (3D rolling dice?)
+- [ ] `[L]` Character portrait upload/generation
+- [ ] `[S]` Toast notifications for XP/items/conditions
 
 #### Combat & Rules
-- [ ] Separate combat log (scrollable, filterable)
-- [ ] Export combat log as text/PDF
-- [ ] Export full narrative as PDF/markdown
-- [ ] Initiative tracking display (for future multi-enemy fights)
-- [ ] Enemy health bars (optional setting)
-- [ ] Advantage/disadvantage roll system
-- [ ] Critical hit/fumble rules
-- [ ] Status effect duration tracking
+- [ ] `[L]` Separate combat log (scrollable, filterable)
+- [ ] `[L]` Export combat log as text/PDF
+- [ ] `[L]` Export full narrative as PDF/markdown
+- [ ] `[S]` Initiative tracking display (for future multi-enemy fights)
+- [ ] `[S]` Enemy health bars (optional setting)
+- [ ] `[S]` Advantage/disadvantage roll system
+- [ ] `[S]` Critical hit/fumble rules
+- [ ] `[S]` Status effect duration tracking
 
 #### Architecture & Code Quality
-- [ ] Externalize system prompt from HTML (too embedded currently)
-- [ ] Move API key to environment variable
-- [ ] Add TypeScript or JSDoc for type safety
-- [ ] Unit tests for state parsing functions
-- [ ] Integration tests for AI interactions
-- [ ] Code splitting for larger feature sets
-- [ ] Performance optimization for long conversations
+- [x] Externalize system prompt from HTML — done (`ai-gm-system-prompt.md` is loaded at runtime)
+- [x] Move API key to environment variable — done (`.env` + `dotenv` per `CLAUDE.md`)
+- [ ] `[L]` Add TypeScript or JSDoc for type safety
+- [ ] `[S]` Unit tests for state parsing functions — Track 4
+- [ ] `[S]` Integration tests for AI interactions — Track 4
+- [ ] `[L]` Code splitting for larger feature sets
+- [ ] `[S]` Performance optimization for long conversations — overlaps with conversation history pruning
 
 #### Content & Features
-- [ ] Multiple dungeon modules
-- [ ] Module marketplace/library browser
-- [ ] Adventure builder tool (GUI for creating JSON modules)
-- [ ] Character advancement/leveling system with choices
-- [ ] Skill point allocation on level up
-- [ ] New ability unlocks at certain levels
-- [ ] Branching storyline support in modules
-- [ ] Random encounter tables
-- [ ] NPC dialogue trees
-- [ ] Puzzle mechanics
-- [ ] Trap mechanics with varied solutions
+- [ ] `[L]` Multiple dungeon modules — depends on authoring tools (Track 6)
+- [ ] `[L]` Module marketplace/library browser — Track 6
+- [ ] `[L]` Adventure builder tool (GUI for creating JSON modules) — Track 6
+- [ ] `[S]` Character advancement/leveling system with choices
+- [ ] `[S]` Skill point allocation on level up
+- [ ] `[L]` New ability unlocks at certain levels
+- [ ] `[L]` Branching storyline support in modules
+- [ ] `[L]` Random encounter tables
+- [ ] `[L]` NPC dialogue trees
+- [ ] `[L]` Puzzle mechanics
+- [ ] `[L]` Trap mechanics with varied solutions
 
 #### Multiplayer/Party Prep
-- [ ] Multiple character management
-- [ ] Turn order for party members
-- [ ] Party inventory (shared/personal distinction)
-- [ ] Character switching interface
-- [ ] Real-time multiplayer (ambitious)
+*(All Later — multiplayer is a v3+ vision per `~/mace-and-marrow/PRODUCT_BRIEF.md`.)*
+- [ ] `[L]` Multiple character management
+- [ ] `[L]` Turn order for party members
+- [ ] `[L]` Party inventory (shared/personal distinction)
+- [ ] `[L]` Character switching interface
+- [ ] `[L]` Real-time multiplayer (ambitious)
 
 #### Platform & Distribution
-- [ ] Mobile responsive design
-- [ ] Progressive Web App (PWA) conversion
-- [ ] Electron wrapper for desktop app
-- [ ] Mobile app (React Native or similar)
-- [ ] User accounts system
-- [ ] Social features (share adventures, compare stats)
-- [ ] Leaderboards (speedruns, challenge modes)
+- [ ] `[S]` Mobile responsive design — named in ROADMAP as a top Soon item
+- [ ] `[L]` Progressive Web App (PWA) conversion
+- [ ] `[L]` Electron wrapper for desktop app
+- [ ] `[L]` Mobile app (React Native or similar)
+- [ ] `[L]` User accounts system — Track 7 (production launch)
+- [ ] `[L]` Social features (share adventures, compare stats)
+- [ ] `[L]` Leaderboards (speedruns, challenge modes)
 
 #### AI GM Improvements
-- [ ] Better impossible action handling ("you try but..." + world rules explanation)
-- [ ] More consistent tone across responses
-- [ ] Personality settings for GM style (serious/humorous/dramatic)
-- [ ] Remember player preferences across sessions
-- [ ] Meta-commentary from GM (occasional tips, jokes, etc.)
-- [ ] Dynamic difficulty adjustment based on player success
-- [ ] Alternative models support (different Claude versions, other LLMs)
+- [ ] `[S]` Better impossible action handling ("you try but..." + world rules explanation)
+- [ ] `[S]` More consistent tone across responses
+- [ ] `[L]` Personality settings for GM style (serious/humorous/dramatic)
+- [ ] `[L]` Remember player preferences across sessions
+- [ ] `[L]` Meta-commentary from GM (occasional tips, jokes, etc.)
+- [ ] `[L]` Dynamic difficulty adjustment based on player success
+- [ ] `[L]` Alternative models support (different Claude versions, other LLMs)
 
 #### Settings & Configuration
-- [ ] Difficulty/ruleset configuration UI
-- [ ] House rules toggles
-- [ ] Death save rules option
-- [ ] Critical hit rules option
-- [ ] Starting gold/equipment customization
-- [ ] Response length preference
-- [ ] Auto-roll vs manual roll preference
-- [ ] Theme selection (dark mode, different color schemes)
+- [ ] `[L]` Difficulty/ruleset configuration UI
+- [ ] `[L]` House rules toggles
+- [ ] `[L]` Death save rules option
+- [ ] `[L]` Critical hit rules option
+- [ ] `[L]` Starting gold/equipment customization
+- [ ] `[S]` Response length preference
+- [ ] `[L]` Auto-roll vs manual roll preference
+- [ ] `[L]` Theme selection (dark mode, different color schemes)
 
 #### Documentation
-- [ ] Player's guide/tutorial
-- [ ] Module creation guide
-- [ ] API documentation for extending the system
-- [ ] Video tutorial for setup
-- [ ] FAQ document
-- [ ] Known issues list
+- [ ] `[L]` Player's guide/tutorial — Track 7 (external presence)
+- [ ] `[L]` Module creation guide — Track 6 (Author tier)
+- [ ] `[L]` API documentation for extending the system
+- [ ] `[L]` Video tutorial for setup
+- [ ] `[L]` FAQ document
+- [ ] `[L]` Known issues list
 
 #### Testing & QA
-- [ ] Test combat thoroughly with all enemy types
-- [ ] Test all skill checks
-- [ ] Test all room transitions
-- [ ] Edge case testing (0 HP, negative HP, overflow values)
-- [ ] Cross-browser compatibility testing
-- [ ] Mobile device testing
-- [ ] Screen reader accessibility testing
-- [ ] Performance testing with long sessions
+*(All Track 4 — Automated QA. Most are Soon, blocked on the browser-automation spike.)*
+- [ ] `[S]` Test combat thoroughly with all enemy types
+- [ ] `[S]` Test all skill checks
+- [ ] `[S]` Test all room transitions
+- [ ] `[S]` Edge case testing (0 HP, negative HP, overflow values)
+- [ ] `[S]` Cross-browser compatibility testing
+- [ ] `[S]` Mobile device testing
+- [ ] `[L]` Screen reader accessibility testing
+- [ ] `[S]` Performance testing with long sessions
 
 ---
 
 ## Ideas Pending Categorization
 
-- **Caster pregen for the Gauntlet test hub.** The Gauntlet ships with a Fighter pregen (Aldric) to exercise combat, hazards, and equipment flows. A second pregen — a Cleric or Magic-User — is needed to cover spellcasting, spell slots, per-rest recharge, and save-or-suffer rider adjudication. Add after task #4 (rules-engine refactor), once spell resolution is stable.
+- `[S]` **Caster pregen for the Gauntlet test hub.** The Gauntlet ships with a Fighter pregen (Aldric) to exercise combat, hazards, and equipment flows. A second pregen — a Cleric or Magic-User — is needed to cover spellcasting, spell slots, per-rest recharge, and save-or-suffer rider adjudication. Add after spell-casting work (Pre-Long-Adventure #7) lands.
 
 *(New ideas will be added here, then sorted into categories above)*
 
@@ -261,9 +269,11 @@ These 16 features are prioritized so you can run and test longer adventures. Ord
 ## Notes
 
 - Items marked with [ ] are not started; [x] = completed.
+- Horizon tags (`[N]` / `[S]` / `[L]`) mirror the strategy doc at `~/mace-and-marrow/ROADMAP.md`. When ROADMAP shifts, retag here.
 - **Pre–Long-Adventure** (top section) is the source of truth for the 16 features and their implementation order; update the Status table as work completes.
 - Older backlog items below remain for later prioritization; some overlap with Pre–Long-Adventure (e.g. death, save/load, character creation).
 - Dependencies between items are reflected in the Phase order in the implementation plan.
+- The "(likely done in v1)" markers in **Module Integration** are flags for review — not definitive. Confirm against current code before checking off.
 
 ---
 
@@ -271,7 +281,4 @@ These 16 features are prioritized so you can run and test longer adventures. Ord
 
 *(Use this area for rapid capture - will be organized into main backlog periodically)*
 
-- [ ] Equipped gear should be highlighted based on player actions - parse equipment changes from player input (e.g., "I stow my shortbow and draw my sword" should unhighlight shortbow and highlight longsword in character panel)
-
-
-
+- [ ] `[S]` Equipped gear should be highlighted based on player actions — parse equipment changes from player input (e.g., "I stow my shortbow and draw my sword" should unhighlight shortbow and highlight longsword in character panel)
