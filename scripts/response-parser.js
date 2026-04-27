@@ -882,8 +882,8 @@
      * the Use-button path doesn't double-decrement via the GM's response
      * narration. Flag is set by useConsumableById + by this parser's own
      * prose match; it clears at the start of the next submitAction. Closes
-     * POLISH_BACKLOG's "Healing-potion flow is prompt-brittle" by making
-     * the card-click path authoritative and the prose path fall-through.
+     * the "Healing-potion flow is prompt-brittle" polish item (see
+     * `CHANGELOG.md` → Stage 6 landings).
      */
     function tryParsePackItemUse(text, fromPlayer = false) {
         if (!text) return;
