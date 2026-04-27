@@ -73,7 +73,7 @@ json-validator.html                   dev tool for validating game-data JSON
 | Death overlay | ✅ stable | gated on rules `at_zero` (Three Knots: dead immediately, others: unconscious) |
 | Streaming responses | ✅ stable | smooth word arrival, no tag flashes, no completion re-render flash |
 | Feature-card collapse UX | 🚧 stopgap | default-collapsed; full UX redesign deferred |
-| `[REWARD:]` tag for prose rewards | ❌ not built | NPC card-game gold doesn't apply to inventory; logged in POLISH_BACKLOG |
+| `[REWARD:]` tag for prose rewards | ❌ not built | NPC card-game gold doesn't apply to inventory; logged in `BACKLOG.md` (Polish & smoke-test items) |
 | Per-instance encounter HP | ⚠️ partial | save envelope ships `encounters[id].instances: []` per spec; runtime tracks per-group damage only |
 | Bonus-damage player roll | 🚧 auto-rolled | Oathblade `1d4 radiant` rider auto-rolls; physical roll deferred to polish pass |
 | Drop / give / transfer items | ❌ not built | v2 feature; pack panel only has Use/Equip/Unequip |
@@ -84,11 +84,9 @@ json-validator.html                   dev tool for validating game-data JSON
 
 ## Active branches / open PRs
 
-- **`main`** at `1fbde84` — refactor-complete + post-refactor polish (trim, card collapse, streaming) all merged.
-- **`claude/polish-backlog-streaming-cleanup`** (PR #7 open, doc-only) — logs the three post-Stage-7 follow-ups in POLISH_BACKLOG. Safe to merge anytime.
-- **`claude/dev-state-handoff`** (this branch) — adds this `DEV_STATUS.md` file.
+- **`main`** — refactor-complete + post-refactor polish (trim, card collapse, streaming) all merged. PR #9 (planning audit + ROADMAP/horizon-tagging) merged 2026-04-27. POLISH_BACKLOG consolidated into `BACKLOG.md` + `CHANGELOG.md` 2026-04-28.
 
-No other branches in flight.
+No other branches in flight at handoff time. (This file is a snapshot; check `git branch -a` for current state.)
 
 ## Known issues / technical debt
 
@@ -96,14 +94,14 @@ Active rough edges, ordered by likelihood of biting in real play:
 
 1. **System prompt at ~19.6k chars (RED zone, 16k+ threshold).** Post-trim improvement from 21.3k. Real GM behavior risk: instruction drift (forgets tag contract, exceeds 150-word cap, mixes combat sequencing). Stage 4 hit drift symptoms at 23k. Comfortable target for an instructional-heavy prompt is ~12–15k. Next levers: trim RULESET conditions list (dynamic block), trim LAYOUT_BLOCK per-room verbosity (dynamic block), or another template pass. Held-back template trim from PR #4 has ~400–500 chars more available in HAZARDS / FEATURES / WHO ROLLS verbose intros — left untouched to keep risk surface small.
 2. **Pre-existing `[MONSTER] WARNING: Monster undefined not found in manual` noise** — three warnings on Three Knots boot + every state change. Surfaces in session reports; not breaking, just clutter. Likely a missing `monster_ref` on a Three Knots encounter that the encounter-panel resolver tries to look up.
-3. **Per-instance encounter HP** — runtime damage tracking is per-group (single `damageToEncounters[id]` per encounter row). Multi-instance authored encounters (e.g. three goblins in one group) are tracked as one HP pool. Save envelope ships `instances: []` empty until the runtime rewrite lands. **Symptom:** the cross-room combat re-entry bug (POLISH_BACKLOG item) — defeating one of two goblins in a study marks the encounter resolved; attacking "the other goblin" triggers `ensureCombatRoomHasEncounters` which jumps to the boss's room.
-4. **Streaming chunkiness** — words sometimes arrive several at a time rather than truly one-by-one. POLISH_BACKLOG flags this as possibly the SSE chunk size or the `updateStreamingNarration` debounce. Largely cosmetic post-fix; the bigger flashes are gone.
-5. **Card UI is a stopgap.** Default-collapsed buys narrative panel space but the long-term answer is probably a chip strip or sidebar drawer. Logged in `POLISH_BACKLOG` as future redesign.
+3. **Per-instance encounter HP** — runtime damage tracking is per-group (single `damageToEncounters[id]` per encounter row). Multi-instance authored encounters (e.g. three goblins in one group) are tracked as one HP pool. Save envelope ships `instances: []` empty until the runtime rewrite lands. **Symptom:** the cross-room combat re-entry bug (see `BACKLOG.md` Polish & smoke-test items) — defeating one of two goblins in a study marks the encounter resolved; attacking "the other goblin" triggers `ensureCombatRoomHasEncounters` which jumps to the boss's room.
+4. **Streaming chunkiness** — words sometimes arrive several at a time rather than truly one-by-one. Possibly the SSE chunk size or the `updateStreamingNarration` debounce. Largely cosmetic post-fix; the bigger flashes are gone.
+5. **Card UI is a stopgap.** Default-collapsed buys narrative panel space but the long-term answer is probably a chip strip or sidebar drawer. Logged in `BACKLOG.md` as future redesign.
 6. **No `[REWARD:]` tag family.** Prose rewards from NPC card games / social encounters / non-encounter interactions don't apply to inventory. GM narrates "you win 5 gold coins"; the gold doesn't increment.
 7. **Bonus-damage feel gap** — Oathblade's `1d4 radiant` rider is auto-rolled while the weapon die is a click. Half the dice for a swing get the player's roll, half don't.
 8. **XP bar label cryptic** — "0 / 1,800" reads as "you earned 0 XP" without context; band-relative meaning takes a moment to parse.
 
-Full list with reproduction details: `POLISH_BACKLOG.md`.
+Full list with reproduction details: `BACKLOG.md` → "Polish & smoke-test items" section.
 
 ## Test infrastructure
 
@@ -137,7 +135,7 @@ Full list with reproduction details: `POLISH_BACKLOG.md`.
 | #4 | Prompt trim | template trimmed from 13.2k → 11.4k; full prompt 21.3k → 19.6k; `test.promptSizeReport` ships |
 | #5 | Feature cards default-collapsed | narrative panel breathes; click-to-expand description |
 | #6 | Streaming polish | tag buffering for unclosed brackets; re-render-flash fix; death-overlay cleanup |
-| #7 | POLISH_BACKLOG cleanup | (open, doc-only) logs the three post-Stage-7 follow-ups |
+| #7 | POLISH_BACKLOG cleanup | doc-only — logged the three post-Stage-7 follow-ups in POLISH_BACKLOG (since folded into `BACKLOG.md` + `CHANGELOG.md`) |
 
 ## Where the docs live
 
@@ -148,8 +146,8 @@ Full list with reproduction details: `POLISH_BACKLOG.md`.
 | `GAME_PACK.md` | manifest fields, archetype roles, available packs |
 | `JSON_DATA_AND_SWAPPING.md` | how packs load, source-of-truth contract, swap workflow |
 | `REFACTOR_V1_PLAN.md` | the 7-stage refactor plan + design decisions |
-| `BACKLOG.md` | feature roadmap + status (Phases 1–4) |
-| `POLISH_BACKLOG.md` | open polish items + per-stage Landed sections (history) |
+| `BACKLOG.md` | feature roadmap + status (Phases 1–4) + Polish & smoke-test items (consolidated 2026-04-28) |
+| `CHANGELOG.md` | per-PR + per-stage rundowns of what shipped (lifted from POLISH_BACKLOG on 2026-04-28) |
 | `~/mace-and-marrow/PRODUCT_BRIEF.md` | product vision (canonical, in Drive — read for product-strategy context) |
 | `CONFIG.md` | system-level config (AI model, env vars) |
 | `CREDITS_AND_USAGE.md` | API cost levers + token budget guidance |

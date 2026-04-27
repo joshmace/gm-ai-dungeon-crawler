@@ -507,8 +507,9 @@
             // Post-Stage-7: measure the current system prompt size and
             // break it down by major contributor. Non-destructive — just
             // builds the prompt + per-block strings and reports bytes.
-            // Used to target the prompt-trim pass (POLISH_BACKLOG RED-
-            // zone item). Yellow zone at 8–16k, red at 16k+.
+            // Used to target the prompt-trim pass (BACKLOG Polish &
+            // smoke-test items, RED-zone item). Yellow zone at 8–16k,
+            // red at 16k+.
             promptSizeReport() {
                 if (!window.PromptBuilder || !window.PromptBuilder.buildSystemPrompt) {
                     addSystemMessage('[DEBUG] promptSizeReport: PromptBuilder not ready');

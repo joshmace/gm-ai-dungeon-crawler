@@ -1,11 +1,11 @@
 # AI Dungeon Crawler — Development Backlog
 
-**Last Updated:** April 27, 2026  
-**Status:** v1 refactor complete (Stages 1–7). Streaming + character creation are the next top items. Horizon-tagged against `~/mace-and-marrow/ROADMAP.md` on 2026-04-27.
+**Last Updated:** April 28, 2026  
+**Status:** v1 refactor complete (Stages 1–7). Streaming shipped (PR #6). Character creation is the next top item. Horizon-tagged against `~/mace-and-marrow/ROADMAP.md`.
 
 **Horizon legend:** `[N]` Now (1–2 wk) · `[S]` Soon (1–2 mo) · `[L]` Later (3+ mo)
 
-This is the engineering-facing backlog. The strategy/sequencing layer above lives in `~/mace-and-marrow/ROADMAP.md`. Untagged items either don't fit the horizon model (history, status tables) or need triage before they're tagged.
+This is the engineering-facing backlog. The strategy/sequencing layer above lives in `~/mace-and-marrow/ROADMAP.md`. Per-PR and per-stage history of what's already shipped lives in `CHANGELOG.md`.
 
 ---
 
@@ -22,13 +22,14 @@ Stages 1 through 7 from `REFACTOR_V1_PLAN.md` all shipped. Highlights:
 - **Save state** follows the v1 envelope (`schema_version: 1`, `game_pack_id`, `module_id`, `module{}` / `combat{}` / `completion{}` / `character_mutations{}` / `runtime{}`). Per-pack localStorage slots so switching packs doesn't overwrite the other packs' saves. Pre-v1 saves drop with a one-time system message on first load.
 - **Completion condition**: end-of-module summary card fires from `GameState.checkCompletion`; overlay shows XP, gold, level, rooms visited, encounters defeated, run duration; Restart / Load save buttons.
 - **Pre-v1 files deleted**: `rules.json`, `monster_manual.json`, `test_module_rules.json`, `test_module_arena.json`.
+- **Streaming responses (PR #6 + cleanup PR #7)**: words flow in as the model generates them, control tags hide while incomplete (`streamSafeText`), no re-render flash on completion. See `CHANGELOG.md` for details.
 - **Debug + test infrastructure**: ring-buffered debug trail covers PARSE / HAZARD / CHECK / PROMPT / FEATURE / CONNECTION / EFFECT / CONSUMABLE / EQUIP / STATE / SAVE / SAVE_VERSION / COMPLETION / AI / HISTORY. Copy-session-report button pastes state + trail + narrative. `test.*` console helpers cover teleport, HP mod, XP, gold, conditions, rolls, feature/connection effects, save dump, and Stage 7 completion triggers.
 
 Next top items:
 
-1. **`[N]` Streaming** — single-file hookup in `scripts/llm-proxy.js` to the existing SSE `/api/messages` path. Proxy already supports it.
+1. ✅ **Streaming** — shipped via PR #6 + cleanup PR #7. See `CHANGELOG.md` for the full rundown.
 2. **`[S]` Character creation** flow (Tier 3 from the pre-long-adventure plan).
-3. **`[N]` Prompt trim pass** — see `POLISH_BACKLOG.md` for the RED-zone note.
+3. **`[S]` Future prompt trim pass** — see "Polish & smoke-test items" below. Logged but deferred until behavior drift surfaces; PR #4 already shipped a 1.7k template trim.
 
 ---
 
@@ -105,6 +106,127 @@ These 16 features are prioritized so you can run and test longer adventures. Ord
 | 16 | Custom character portraits | Not started | `[L]` |
 
 *Update the Status column as work progresses (e.g. "In progress", "Done").*
+
+---
+
+## Polish & smoke-test items
+
+Open polish items surfaced during the v1 refactor smoke tests, folded in from `POLISH_BACKLOG.md` (since retired) on 2026-04-28. Each entry preserves its full Surfaced / Behavior / Fix-direction format with a horizon tag added.
+
+### `[S]` Card-game / prose rewards don't update inventory (Crow's Hollow)
+
+- **Surfaced:** Stage 3 smoke test (2026-04-22). Ren played a card game
+  during a social encounter and the GM narrated "you win 5 gold coins",
+  but the pack's Gold line didn't increment.
+- **Root cause:** the tag contract only surfaces rewards on encounter
+  defeat (via `encounter.rewards` wired in Stage 3) and on searchable/
+  interactive features (Stage 5). Ad-hoc prose rewards from NPC or
+  non-encounter interactions have no tag surface; the GM would need to
+  emit something like `[REWARD: gold 5]` or `[GOLD: +5]` for the app to
+  apply it.
+- **Fix direction:** add a `[REWARD: ...]` tag family. Spec'd shape:
+  `[REWARD: gold N]`, `[REWARD: item <item_id> [xN]]`, `[REWARD: xp N]`.
+  Prompt additions to instruct the GM to emit these whenever they
+  narrate a reward the app should apply. Until then, these prose rewards
+  are manual.
+
+### `[S]` Cross-room combat re-entry when extra attack issued after combat ends
+
+- **Surfaced:** Stage 3 smoke test (2026-04-22, Crow's Hollow). Ren fought
+  two goblins in the study. They rendered as a single "Goblin Scavengers"
+  stat block and were defeated as one target; [COMBAT: off] fired. When
+  Ren attacked "the other goblin", combat re-entered — but against the
+  Warden's Lieutenant Orick Havel in the Warden's Crypt room, not the
+  remaining goblin.
+- **Root cause 1 (single-block encounter):** pre-v1 rendering collapses
+  every encounter group into one entry. Per-instance HP is needed —
+  `gameState.module.encounters[id].instances[]` should track each goblin
+  separately with its own HP bar. (Save envelope ships the field; runtime
+  rewrite still pending.)
+- **Root cause 2 (cross-room teleport):** when `[COMBAT: on]` fires and
+  the current room has no active encounters (because the study's sole
+  encounter is already defeated), `ensureCombatRoomHasEncounters()` in
+  `scripts/ui-encounters.js` falls back to the first alphabetically-sorted
+  room with encounters — in Crow's Hollow that's the Warden's Crypt boss.
+- **Fix direction:** rewrite encounter instance tracking and retire
+  `ensureCombatRoomHasEncounters`. For the cross-room fallback specifically:
+  when combat triggers in a room with no active encounter, the correct
+  move is to surface an error callout ("no active enemy in current room")
+  and keep the player put, not to reassign currentRoom.
+
+### `[L]` Player can't roll magic bonus-damage dice physically
+
+- **Surfaced:** Stage 6 smoke test (2026-04-24) — Oathblade regression.
+- **Behavior:** After an attack hits, the damage callout shows two
+  lines — the weapon dice (e.g. `1d8: 5 (+3) = 8`) and the magic rider
+  (`Bonus 1d4 radiant: 3`). The player rolls the weapon die manually
+  (or clicks Roll), but the bonus die is auto-rolled by the engine in
+  the same pass. Feel gap: half the dice for a given swing get to be
+  "the player's roll" and half don't.
+- **Fix direction:** polish pass. Two options:
+  - Chain a second dice-section prompt after the weapon damage resolves
+    when `bonus_damage` is present — the player rolls the bonus die
+    explicitly. More clicks per attack, but consistent.
+  - Show the bonus die as a visual animation (die-face reveal) so the
+    auto-roll still "feels" rolled without demanding a second click.
+- Not a correctness issue; engine math is right either way.
+
+### `[L]` Inventory management — drop / give / transfer items (v2)
+
+- **Surfaced:** Stage 6 smoke test (2026-04-24).
+- **Behavior:** Pack items can be used (consumables) or equipped
+  (weapons/armor), but there's no way to drop an item, give it to an
+  NPC, or transfer it between characters. A player who picks up 50
+  crossbow bolts has them forever.
+- **Fix direction:** v2 feature (party support + richer item
+  interactions). Not blocking solo play. When tackled, add a third
+  action button per pack row ("Drop") that removes without side
+  effect and optionally surfaces a "You drop the X." narrative entry
+  so the GM can react. Give / transfer hooks into the NPC flow.
+
+### `[L]` System prompt back in RED zone (~19.6k post-PR-#4)
+
+- **Surfaced:** Stage 6 smoke test (2026-04-24) — session report from
+  chamber_oathblade showed 21,140 chars (RED ≥ 16k). PR #4 trimmed
+  template content by 1.7k; full prompt now ~19.6k mid-play. Still RED.
+- **Behavior risk:** instruction drift (GM forgets tag contract,
+  narrates past the 150-word cap, mixes combat sequencing). Stage 4
+  hit this at 23k and mitigated via the "current room full, others
+  compact" LAYOUT pass. The same direction still applies.
+- **Fix direction:** another trim pass, probably targeting the
+  RULESET_BLOCK (conditions list is already 90-char clamped;
+  difficulty ladder and saves section could compress). Also worth
+  reviewing whether ENCOUNTER_INFO's "exact stats" block can shrink
+  now that the engine owns combat. Defer until we see real behavior
+  drift, but log it here so it doesn't slip.
+
+### `[L]` Damage callout should show dice face × 2 separately on crit
+
+- **Surfaced:** Stage 3 smoke test (2026-04-22) — addressed partially by
+  the Stage 3-post callout rewrite (the damage callout now reads "Damage
+  Roll 1d8: 5 ×2 = 10 (+ 3) = 13 slashing" on crit). Follow-up polish
+  that's still open: the pre-crit total and post-crit total are both shown
+  on one line; a designer might prefer dice face / post-crit face / total
+  on their own lines, or a small dice-icon badge.
+- **Fix direction:** polish pass — pick a visual treatment (indented
+  breakdown block, dice icons, monospace columns) and apply to the
+  `formatEngineDamageCallout` helper in `scripts/ui-dice.js`.
+
+### `[L]` XP bar label — revisit during polish pass
+
+- **Surfaced:** Stage 2 smoke test (2026-04-22).
+- **Behavior:** Stage 2c aligned the XP bar's text and fill to the same
+  reference frame (band-relative: `xp earned this level / xp needed
+  for next level`). The numbers now match the bar, but the text reads
+  a little cryptically out of context — "0 / 1,800" on a freshly-dinged
+  L3 character doesn't obviously say "you earned 0 XP toward level 4".
+- **Fix direction:** revisit during the broader polish pass. Options:
+  - Add a label prefix: "To level {N+1}: {xpProgress} / {xpNeeded}".
+  - Show both bars: a thin absolute bar + the band-relative bar.
+  - Switch to a level-tick progress bar (ticks at each level, fill to
+    current XP in absolute terms). Needs width math but reads most
+    intuitively.
+- Not a blocker; the current form is correct and consistent.
 
 ---
 
@@ -271,9 +393,11 @@ These 16 features are prioritized so you can run and test longer adventures. Ord
 - Items marked with [ ] are not started; [x] = completed.
 - Horizon tags (`[N]` / `[S]` / `[L]`) mirror the strategy doc at `~/mace-and-marrow/ROADMAP.md`. When ROADMAP shifts, retag here.
 - **Pre–Long-Adventure** (top section) is the source of truth for the 16 features and their implementation order; update the Status table as work completes.
+- **Polish & smoke-test items** holds the open polish entries with full surfaced / behavior / fix-direction prose. Folded in from the retired `POLISH_BACKLOG.md` on 2026-04-28.
 - Older backlog items below remain for later prioritization; some overlap with Pre–Long-Adventure (e.g. death, save/load, character creation).
 - Dependencies between items are reflected in the Phase order in the implementation plan.
 - The "(likely done in v1)" markers in **Module Integration** are flags for review — not definitive. Confirm against current code before checking off.
+- Per-PR and per-stage history of what's already shipped lives in `CHANGELOG.md`.
 
 ---
 

@@ -102,17 +102,16 @@ project/
 ## Current Status & Known Issues
 - v1 refactor complete (Stages 1–7, 2026-04). Rules engine in JS, character panel renders natively from v1 data, module runtime state (features/connections/visited rooms) rides with the save, items pipeline + consumable dispatch work, save-state follows the v1 envelope, completion-condition fires the end-of-module summary.
 - MVP is functional: narrative, dice rolling, combat sequencing, inventory, conditions, XP/leveling, hazards, feature cards, connections as exit buttons, equip/unequip, consumable use, save/load all work.
-- Streaming responses land as a follow-up (SSE wiring is already in `scripts/llm-proxy.js`).
+- Streaming responses shipped (PR #6 + cleanup PR #7) — words flow in as the model generates, control tags hide while incomplete, no completion flash. See `CHANGELOG.md`.
 - Image placeholders exist but no actual image generation.
-- See `POLISH_BACKLOG.md` for open UX items (prompt size yellow/red, XP bar label, drop/transfer items, etc.).
+- See `BACKLOG.md` (Polish & smoke-test items section) for open UX items (prompt size yellow/red, XP bar label, drop/transfer items, etc.).
 
 ## Planned Features (in rough priority order)
-1. Streaming API responses (SSE hookup in `scripts/llm-proxy.js` is ready)
-2. Character creation flow
-3. Module authoring tools / additional modules
-4. Group/multiplayer support
-5. Image generation integration for scenes
-6. Mobile-responsive layout improvements
+1. Character creation flow
+2. Module authoring tools / additional modules
+3. Group/multiplayer support
+4. Image generation integration for scenes
+5. Mobile-responsive layout improvements
 
 ## How to Run
 1. Put your Anthropic API key in `.env` as `ANTHROPIC_API_KEY=sk-ant-...`
