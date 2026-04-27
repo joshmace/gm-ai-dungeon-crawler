@@ -150,7 +150,7 @@ Full list with reproduction details: `POLISH_BACKLOG.md`.
 | `REFACTOR_V1_PLAN.md` | the 7-stage refactor plan + design decisions |
 | `BACKLOG.md` | feature roadmap + status (Phases 1–4) |
 | `POLISH_BACKLOG.md` | open polish items + per-stage Landed sections (history) |
-| `PRODUCT_BRIEF.md` | product vision (read for product-strategy context) |
+| `~/mace-and-marrow/PRODUCT_BRIEF.md` | product vision (canonical, in Drive — read for product-strategy context) |
 | `CONFIG.md` | system-level config (AI model, env vars) |
 | `CREDITS_AND_USAGE.md` | API cost levers + token budget guidance |
 | `~/mace-and-marrow/RULES_SCHEMA_PLAN.md` | v1 schema design rationale (the *why* behind `JSON_SCHEMAS.md`); canonical schema tiebreaker — lives in Drive alongside `PRODUCT_BRIEF.md` |
