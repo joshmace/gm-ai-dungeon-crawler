@@ -146,7 +146,7 @@ const server = http.createServer((req, res) => {
 
     // Static file serving: GET requests
     if (req.method === 'GET') {
-        let filePath = req.url === '/' ? '/playable-dungeon-crawler-v2.html' : req.url;
+        let filePath = req.url === '/' ? '/index.html' : req.url;
 
         // Strip query strings
         filePath = filePath.split('?')[0];

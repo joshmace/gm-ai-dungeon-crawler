@@ -17,7 +17,7 @@ Streaming responses ship: words flow in as the model generates them, control tag
 ## Architecture
 
 ```
-playable-dungeon-crawler-v2.html      thin shell — bootstrap, CONFIG, gameState init, TestUtils
+index.html                            thin shell — bootstrap, CONFIG, gameState init, TestUtils
 ai-gm-system-prompt.md                GM template, {{PLACEHOLDER}} interpolation at request time
 server.js                             ~160-line Node http server + Anthropic /v1/messages proxy
 templates/                            HTML panel templates loaded at runtime

@@ -27,7 +27,7 @@ See `GAME_PACK.md` for the manifest fields and `JSON_SCHEMAS.md` for each archet
 
 ## Swapping a pack
 
-Change `CONFIG.GAME_PACK` in `playable-dungeon-crawler-v2.html` to the manifest of the target pack. Reload. Each pack's save lives under its own localStorage slot (`gm-ai-dungeon-save:<game_pack_id>`), so you can bounce between Three Knots / Gauntlet / Crow's Hollow without clobbering the others' progress.
+Change `CONFIG.GAME_PACK` in `index.html` to the manifest of the target pack. Reload. Each pack's save lives under its own localStorage slot (`gm-ai-dungeon-save:<game_pack_id>`), so you can bounce between Three Knots / Gauntlet / Crow's Hollow without clobbering the others' progress.
 
 ## Swapping one archetype
 
