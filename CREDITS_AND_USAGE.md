@@ -30,7 +30,7 @@ So **each turn** costs: *(system prompt size + history size)* as input + *(lengt
 
 ## Ways to use fewer credits
 
-1. **Lower `MAX_TOKENS`** (in `playable-dungeon-crawler-v2.html` CONFIG)  
+1. **Lower `MAX_TOKENS`** (in `index.html` CONFIG)  
    - e.g. from 2000 to 1200. Shortens the maximum reply length and can reduce output cost per turn.
 
 2. **Lower `MAX_HISTORY_TURNS`** (same CONFIG)  
@@ -54,7 +54,7 @@ So **each turn** costs: *(system prompt size + history size)* as input + *(lengt
 
 Changes apply immediately to the next API call; no refresh needed.
 
-**In code** (**playable-dungeon-crawler-v2.html**, search for `CONFIG`):
+**In code** (**index.html**, search for `CONFIG`):
 
 - **`MAX_TOKENS: 1200`** – Default max length of the GM reply. Overridden by the Debug Panel input when present.
 - **`MAX_HISTORY_TURNS: 10`** – Default number of turns sent with each request. Overridden by the Debug Panel input when present.

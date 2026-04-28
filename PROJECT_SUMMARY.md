@@ -11,7 +11,7 @@ An AI-powered solo tabletop RPG dungeon crawler that uses Claude as the Game Mas
 
 ## What We've Built
 
-### 1. Web Interface (`playable-dungeon-crawler.html`)
+### 1. Web Interface (`index.html`)
 A complete single-page application with:
 - **Character Panel** (left sidebar, fixed, scrollable)
   - Character stats, abilities, skills
@@ -225,7 +225,7 @@ Comprehensive instructions for Claude acting as GM:
 
 ```
 project/
-├── playable-dungeon-crawler.html    # Main game interface (~1500 lines)
+├── index.html    # Main game interface (~1500 lines)
 ├── server.js                         # Proxy server for API calls
 ├── forgotten-crypt-module.json       # Sample dungeon module
 ├── ai-gm-system-prompt.md           # Full detailed GM prompt (reference)
@@ -245,7 +245,7 @@ project/
 2. Edit `server.js` line 7: Add your API key
 3. Open terminal in project folder
 4. Run: `node server.js`
-5. Open `playable-dungeon-crawler.html` in browser
+5. Open `index.html` in browser
 6. Play!
 
 ### Troubleshooting

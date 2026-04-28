@@ -5,7 +5,7 @@ An AI-powered solo tabletop RPG where Claude acts as the Game Master. Players in
 
 ## Architecture
 
-### Frontend — `playable-dungeon-crawler-v2.html`
+### Frontend — `index.html`
 Single-page application. Vanilla JS, CSS, and HTML — no build step, no framework. Panel templates live in `./templates/`, CSS in `./styles/main.css`, and the extracted modules (pack loader, rules engine, game-state, prompt builder, response parser, per-panel UI) live under `./scripts/` — each attaches to a `window.<Namespace>` and loads via `<script src>` in dependency order. Only the boot shim (templates, `CONFIG`, `gameState` construction, `TestUtils`) stays inline in the HTML.
 
 - **Character Panel** (left sidebar): stats, abilities, inventory, HP/AC/XP, conditions
@@ -24,7 +24,7 @@ Minimal Node.js server (~160 lines). Serves static files AND proxies API calls t
 - Endpoints:
   - `GET /api/config` — returns model name for client display
   - `POST /api/messages` — proxies to Anthropic Messages API
-  - `GET /*` — serves static files; `/` maps to `playable-dungeon-crawler-v2.html`
+  - `GET /*` — serves static files; `/` maps to `index.html`
 
 ### Game Pack Format
 A "Game Pack" is a manifest JSON (e.g. `game_pack_village_three_knots.json`) that bundles six archetype files for one playable experience (v1 schema; see `JSON_SCHEMAS.md`):
@@ -74,7 +74,7 @@ The source of truth for GM behavior. Loaded at runtime by the frontend and fille
 ```
 project/
 ├── CLAUDE.md                               # This file
-├── playable-dungeon-crawler-v2.html        # Main game interface (thin shell; inline bootstrap + TestUtils)
+├── index.html        # Main game interface (thin shell; inline bootstrap + TestUtils)
 ├── server.js                               # Static server + Anthropic proxy
 ├── ai-gm-system-prompt.md                  # GM system prompt (loaded at runtime)
 ├── styles/main.css                         # All styling
@@ -100,6 +100,7 @@ project/
 ```
 
 ## Current Status & Known Issues
+- **App version:** `0.x` (currently `0.7.0` in `package.json`) — pre-launch policy. The "v1.0" milestone is reserved for the public launch of Threshold (the Mace & Marrow product), not the post-refactor MVP. Note: "v1" *also* refers to the schema/data model version in this codebase (`schema_version: 1` in saves, `REFACTOR_V1_PLAN.md`, `RULES_SCHEMA_PLAN.md`); those are the data model, not the app.
 - v1 refactor complete (Stages 1–7, 2026-04). Rules engine in JS, character panel renders natively from v1 data, module runtime state (features/connections/visited rooms) rides with the save, items pipeline + consumable dispatch work, save-state follows the v1 envelope, completion-condition fires the end-of-module summary.
 - MVP is functional: narrative, dice rolling, combat sequencing, inventory, conditions, XP/leveling, hazards, feature cards, connections as exit buttons, equip/unequip, consumable use, save/load all work.
 - Streaming responses shipped (PR #6 + cleanup PR #7) — words flow in as the model generates, control tags hide while incomplete, no completion flash. See `CHANGELOG.md`.
