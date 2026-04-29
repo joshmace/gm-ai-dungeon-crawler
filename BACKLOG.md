@@ -113,22 +113,18 @@ These 16 features are prioritized so you can run and test longer adventures. Ord
 
 Open polish items surfaced during the v1 refactor smoke tests, folded in from `POLISH_BACKLOG.md` (since retired) on 2026-04-28. Each entry preserves its full Surfaced / Behavior / Fix-direction format with a horizon tag added.
 
-### `[S]` Card-game / prose rewards don't update inventory (Crow's Hollow)
+### ✅ Card-game / prose rewards don't update inventory (Crow's Hollow) — shipped 2026-04-27
 
 - **Surfaced:** Stage 3 smoke test (2026-04-22). Ren played a card game
   during a social encounter and the GM narrated "you win 5 gold coins",
   but the pack's Gold line didn't increment.
-- **Root cause:** the tag contract only surfaces rewards on encounter
-  defeat (via `encounter.rewards` wired in Stage 3) and on searchable/
-  interactive features (Stage 5). Ad-hoc prose rewards from NPC or
-  non-encounter interactions have no tag surface; the GM would need to
-  emit something like `[REWARD: gold 5]` or `[GOLD: +5]` for the app to
-  apply it.
-- **Fix direction:** add a `[REWARD: ...]` tag family. Spec'd shape:
-  `[REWARD: gold N]`, `[REWARD: item <item_id> [xN]]`, `[REWARD: xp N]`.
-  Prompt additions to instruct the GM to emit these whenever they
-  narrate a reward the app should apply. Until then, these prose rewards
-  are manual.
+- **Resolution:** added the `[REWARD:]` tag family
+  (`[REWARD: gold N]`, `[REWARD: xp N]`, `[REWARD: item <id> [xN]]`).
+  Parser delegates to the existing `applyReward()`, so dice formulas,
+  item-library lookup, mechanics callouts, and Three Knots'
+  treasure_recovered XP-doubling all work out of the box. System-prompt
+  reference includes a "do NOT use for authored encounter/feature/hazard
+  rewards" guard. See `CHANGELOG.md`.
 
 ### `[S]` Cross-room combat re-entry when extra attack issued after combat ends
 

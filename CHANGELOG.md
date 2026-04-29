@@ -8,6 +8,38 @@ Newest sections first.
 
 ---
 
+## `[REWARD:]` tag — ad-hoc prose rewards (2026-04-27)
+
+Closes the prose-rewards gap surfaced in the Crow's Hollow Stage 3
+smoke test (Ren wins a card-game pot, GM narrates "you win 5 gold",
+inventory doesn't update). Authored encounter / feature / hazard
+rewards already auto-fire from JSON; ad-hoc prose rewards from NPCs
+and social events had no tag surface to land on.
+
+New tag (case-insensitive, multiple per response honored):
+
+- `[REWARD: gold N]` — N is a number or dice formula
+- `[REWARD: xp N]` — same
+- `[REWARD: item <item_id>]` or `[REWARD: item <item_id> xN]`
+
+Implementation:
+- `tryParseRewardTag()` in `scripts/response-parser.js` matches the
+  tag, builds a reward object, and delegates to the existing
+  `applyReward()` in `scripts/game-state.js`. That helper already
+  handles dice formulas, item-library lookup, mechanics callouts,
+  and the treasure_recovered XP-doubling convention for Three Knots.
+- Strip line added to `displayResponse` cleanup chain. The generic
+  uppercase `CONTROL_TAG_RE` in `streamSafeText` already hides the
+  tag during streaming.
+- `ai-gm-system-prompt.md` adds the tag to CONTROL TAGS with a
+  one-paragraph "ad-hoc prose only — do NOT use for authored
+  rewards" instruction.
+- `test.reward(payload)` console helper for testing without coaxing
+  the GM. Examples: `test.reward('gold 5')`,
+  `test.reward('item healing_potion x2')`.
+
+---
+
 ## Landed post-Stage-7 (2026-04-24)
 
 Three small follow-up PRs after the Stage 7 merge, each shipped on

@@ -559,6 +559,20 @@
             // that's warden_lieutenants_last_stand; on Three Knots it's
             // the tomb guardian. Shortcut for `test.defeatEncounter('id')`
             // without walking the pack down to the room and fighting.
+            // Run the [REWARD:] tag parser against an arbitrary payload so
+            // the designer can verify the prose-rewards flow without coaxing
+            // the GM. Examples:
+            //   test.reward('gold 5')
+            //   test.reward('xp 50')
+            //   test.reward('item healing_potion x2')
+            reward(payload) {
+                const fakeText = `[REWARD: ${payload}]`;
+                addSystemMessage(`[DEBUG] Forced ${fakeText}`);
+                if (typeof parseStateChanges === 'function') {
+                    parseStateChanges(fakeText);
+                }
+            },
+
             defeatEncounter(encounterId) {
                 const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
                 if (!rooms) return;

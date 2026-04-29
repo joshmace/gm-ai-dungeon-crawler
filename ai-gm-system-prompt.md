@@ -48,6 +48,7 @@ Every tag is stripped from the displayed text. The player never sees them.
 - `[RESOURCE_USE: <pool_id>]` — when the player spends a feature resource (Second Wind, Action Surge, etc.).
 - `[MODE: travel]` / `[MODE: exploration]` — when changing travel mode.
 - `[FEATURE_SOLVED: <feature_id>]` — when the player solves a puzzle feature by narrative (no roll). The app then fires the puzzle's `on_success` effects and rewards. Only for features of type `puzzle`.
+- `[REWARD: gold N]` / `[REWARD: xp N]` / `[REWARD: item <item_id> [xN]]` — for ad-hoc prose rewards from NPCs or social/non-combat events (a card-game pot, a quest payout, a found coin purse). N may be a number or dice formula (e.g. `2d6`). Item id must come from the pack's items library or module items. **Do NOT use** for authored encounter / feature / hazard rewards — those fire automatically from their JSON blocks. Multiple `[REWARD:]` tags in one response are all honored.
 
 ## ROOM TRANSITIONS
 Include `[ROOM: <room_id>]` on every transition. The player won't see it; the app relies on it.
