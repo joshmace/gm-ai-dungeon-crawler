@@ -161,6 +161,7 @@
             .replace(/\[MODE:\s*(travel|exploration)\]/gi, '')
             .replace(/\[ROOM:\s*[a-z0-9_]+\]/gi, '')
             .replace(/\[FEATURE_SOLVED:\s*[a-z0-9_]+\]/gi, '')
+            .replace(/\[REWARD:\s*[^\]]+\]/gi, '')
             .replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, '')
             .trim();
         
@@ -720,6 +721,59 @@
         if (count > 1) debugLog('PARSE', `[FEATURE_SOLVED:] tag appeared ${count} times in one response`);
     }
 
+    /**
+     * Parse [REWARD:] tags so the GM can grant ad-hoc rewards from prose
+     * (NPCs paying out, social-encounter winnings, found goods) that aren't
+     * tied to an authored encounter/feature/hazard reward block. Authored
+     * rewards still fire automatically — this tag is for the gap.
+     *
+     * Shapes (case-insensitive):
+     *   [REWARD: gold N]              — N is a number or dice formula
+     *   [REWARD: xp N]                — N is a number or dice formula
+     *   [REWARD: item <item_id>]      — quantity defaults to 1
+     *   [REWARD: item <item_id> xN]   — quantity N
+     *
+     * Multiple tags in one response are all honored. Each call delegates to
+     * applyReward(), which handles formulas, item-library lookup, mechanics
+     * callouts, and the treasure_recovered XP convention.
+     */
+    function tryParseRewardTag(text) {
+        if (!text) return;
+        const re = /\[REWARD:\s*([^\]]+)\]/gi;
+        let m;
+        let count = 0;
+        while ((m = re.exec(text)) !== null) {
+            const payload = m[1].trim();
+            const reward = parseRewardPayload(payload);
+            if (!reward) {
+                debugLog('PARSE', `[REWARD: ${payload}] unrecognized — skipped`);
+                continue;
+            }
+            if (global.applyReward) {
+                global.applyReward(reward, gd());
+                debugLog('PARSE', `[REWARD: ${payload}] → applied`);
+            } else {
+                debugLog('PARSE', `[REWARD: ${payload}] seen but applyReward not wired`);
+            }
+            count++;
+        }
+        if (count > 1) debugLog('PARSE', `[REWARD:] tag appeared ${count} times in one response`);
+    }
+
+    function parseRewardPayload(payload) {
+        const goldMatch = payload.match(/^gold\s+(.+)$/i);
+        if (goldMatch) return { type: 'gold', amount: goldMatch[1].trim() };
+        const xpMatch = payload.match(/^xp\s+(.+)$/i);
+        if (xpMatch) return { type: 'xp', amount: xpMatch[1].trim() };
+        const itemMatch = payload.match(/^item\s+([a-z0-9_]+)(?:\s+x(\d+))?$/i);
+        if (itemMatch) {
+            const reward = { type: 'item', item_id: itemMatch[1] };
+            if (itemMatch[2]) reward.quantity = parseInt(itemMatch[2], 10);
+            return reward;
+        }
+        return null;
+    }
+
     function parseStateChanges(text) {
         debugLog('PARSE', 'Parsing state changes from AI response');
         gs().combatStateFromTag = false; // reset; set true if GM used [COMBAT: on/off]
@@ -730,6 +784,7 @@
         tryParseRoomChange(plainText);
         tryParseModeTag(plainText);
         tryParseFeatureSolved(plainText);  // Stage 5: [FEATURE_SOLVED: <id>] → markSolved.
+        tryParseRewardTag(plainText);      // Ad-hoc prose rewards: [REWARD: gold/xp/item ...] → applyReward.
         tryParseCombatTag(plainText);   // GM tag takes precedence
         tryParseCombatBegins(plainText);
         tryParseRetreat(plainText);
