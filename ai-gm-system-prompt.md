@@ -42,7 +42,9 @@ Every tag is stripped from the displayed text. The player never sees them.
 - `[ROOM: <room_id>]` — **REQUIRED on every room transition.** Use the `id` from the module (e.g. `[ROOM: chamber_careful_foot]`). Without it, hazards don't fire, state drifts. Do NOT emit when staying in the same room or merely referencing another room by name.
 - `[COMBAT: on]` / `[COMBAT: off]` — see COMBAT STATE below.
 - `[MONSTER_ATTACK]` — monster's turn (setup flavor only).
-- `[MONSTER_DEFEATED: encounter_id]` / `[MONSTER_FLED: encounter_id]` — explicit state.
+- `[ATTACK_TARGET: <instance_id>]` — emitted alongside `[ROLL_REQUEST: Attack]` when the player named a specific creature; pre-selects the target in the attack dropdown. See COMBAT TURN STRUCTURE.
+- `[DAMAGE_TO_MONSTER: <id>, N]` — apply N damage to an enemy. `<id>` is the **instance_id** (preferred — e.g. `goblin_scout_2`, listed in Active Encounters) when you know which specific creature took the hit; the **encounter_id** as a fallback (the app picks the most-wounded active instance). Use this when a hit happens outside the dice flow (e.g. an NPC ally's strike, an environmental kill).
+- `[MONSTER_DEFEATED: <id>]` / `[MONSTER_FLED: <id>]` — explicit state. `<id>` may be an **instance_id** (defeats just that creature) or an **encounter_id** (defeats every remaining instance — for "the goblins flee" hand-waves). Prefer instance_id when only one creature is gone.
 - `[DAMAGE_TO_PLAYER: N]` / `[HEAL_PLAYER: N]` — when narrating non-monster HP changes (trap, hazard, healing). Do NOT use for monster hits.
 - `[CONDITION: add <id>]` / `[CONDITION: remove <id>]` — when the player gains/loses a condition from the ruleset. Id vocabulary is authored (poisoned, blessed, stunned, wounded, exhausted, etc.).
 - `[RESOURCE_USE: <pool_id>]` — when the player spends a feature resource (Second Wind, Action Surge, etc.).
@@ -72,6 +74,10 @@ By default the player acts first. Enemies attack first only on surprise (ambush,
 
 ## COMBAT TURN STRUCTURE
 When the player declares an attack, respond with flavor and `[ROLL_REQUEST: Attack]` — nothing else. Wait for the outcome. Never ask the player to roll for monsters. Never narrate enemy actions in the same response as the player's attack declaration.
+
+**Multi-creature encounters: do NOT ask the player to choose a target in prose.** When an encounter has 2+ active instances, the app surfaces a Target dropdown on the attack-roll dice control. Just narrate the swing in flavor and emit `[ROLL_REQUEST: Attack]` — the player picks the specific creature in the UI, and the resolved-attack message will tell you which instance was hit.
+
+**If the player NAMED a specific creature in their declaration** (e.g. "I attack the brute", "I swing at the wounded scout"), also emit `[ATTACK_TARGET: <instance_id>]` alongside the roll request to pre-select that target in the dropdown. Use the exact `instance_id` from the Active Encounters block (e.g. `goblin_brute_1`, `goblin_scout_2`). The player can still change it; the tag just saves them a click. Omit the tag when the player's intent is ambiguous.
 {{COMBAT_FLOW_BLOCK}}
 
 ## MELEE VS RANGED

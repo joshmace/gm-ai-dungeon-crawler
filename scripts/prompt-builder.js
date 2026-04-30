@@ -392,7 +392,11 @@
 
         let encounterInfo;
         if (room.encounters && room.encounters.length > 0) {
-            encounterInfo = '\n\n## Active Encounters — use these EXACT stats; current HP is tracked by the app (monster is DEFEATED at 0 HP; you MUST narrate death and must NOT have it act further):\n';
+            // Phase 2: each enemy is tracked as its own instance with its own
+            // HP. Multi-instance encounters print one header line + one line
+            // per instance (with a stable instance_id). Solo encounters keep
+            // the compact one-line shape.
+            encounterInfo = '\n\n## Active Encounters — use these EXACT stats; current HP is tracked by the app (a creature is DEFEATED at 0 HP; you MUST narrate its death and must NOT have it act further). Each enemy has its own HP; target a specific creature with [DAMAGE_TO_MONSTER: <instance_id>, N] (preferred), or use [DAMAGE_TO_MONSTER: <encounter_id>, N] and the app will hit the most-wounded active instance.\n';
             for (const enc of room.encounters) {
                 encounterInfo += global.buildEncounterDescription(enc, true) + '\n';
             }

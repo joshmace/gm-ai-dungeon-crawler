@@ -520,16 +520,100 @@
         return 'ability';
     }
 
+    /**
+     * Phase 2: when an encounter has 2+ active instances, surface a small
+     * Target picker on the ATTACK roll step. The chosen instance's
+     * monster_ref drives the AC the d20 rolls against (heterogeneous
+     * encounters like 2 scouts + 1 brute almost always have different ACs;
+     * picking after the d20 would make the AC choice silently wrong).
+     * The damage step inherits the choice from pendingAttackResolution
+     * and shows no second picker.
+     *
+     * Default = lowest current_hp non-defeated instance (matches
+     * applyDamageToEncounter so dice and tag paths agree on what an
+     * un-targeted hit means).
+     *
+     * The picker is a `<select id="targetPicker">` injected into
+     * #diceSection and removed on hideDiceSection.
+     */
+    function clearTargetPicker() {
+        const row = document.getElementById('diceTargetRow');
+        if (row && row.parentNode) row.parentNode.removeChild(row);
+    }
+
+    function maybeShowTargetPicker(rollType) {
+        clearTargetPicker();
+        if (rollType !== 'attack') return;
+        const enc = getFirstActiveEncounterInCurrentRoom();
+        if (!enc || !Array.isArray(enc.instances)) return;
+        const active = enc.instances.filter(inst => !inst.defeated && (Number(inst.current_hp) || 0) > 0);
+        if (active.length < 2) return;
+
+        // Phase 2: default selection priority — (a) GM's [ATTACK_TARGET:]
+        // hint when the player named a creature ("I attack the brute"),
+        // then (b) lowest current_hp among active instances, ties broken by
+        // ordinal. Hint is single-use: cleared after the picker reads it
+        // so a stale hint can't pin a future picker.
+        const hintId = gs().pendingAttackTargetId || null;
+        let defaultInst = null;
+        if (hintId) {
+            defaultInst = active.find(inst => inst.instance_id === hintId) || null;
+        }
+        if (!defaultInst) {
+            defaultInst = active[0];
+            for (const inst of active) {
+                if (Number(inst.current_hp) < Number(defaultInst.current_hp)) defaultInst = inst;
+            }
+        }
+        gs().pendingAttackTargetId = null;
+
+        const diceSection = document.getElementById('diceSection');
+        if (!diceSection) return;
+
+        const row = document.createElement('div');
+        row.className = 'dice-target-row';
+        row.id = 'diceTargetRow';
+
+        const label = document.createElement('span');
+        label.className = 'dice-label';
+        label.textContent = 'Target:';
+        row.appendChild(label);
+
+        const select = document.createElement('select');
+        select.className = 'dice-target-picker';
+        select.id = 'targetPicker';
+        for (const inst of active) {
+            const monster = resolveMonster(inst.monster_ref);
+            const monsterName = (monster && monster.name) || inst.monster_ref || 'Creature';
+            const acStr = (monster && monster.ac != null) ? `, AC ${monster.ac}` : '';
+            const opt = document.createElement('option');
+            opt.value = inst.instance_id;
+            opt.textContent = `${monsterName} (${inst.instance_id}${acStr}) — HP ${inst.current_hp}/${inst.max_hp}`;
+            if (inst.instance_id === defaultInst.instance_id) opt.selected = true;
+            select.appendChild(opt);
+        }
+        row.appendChild(select);
+
+        diceSection.insertBefore(row, diceSection.firstChild);
+    }
+
+    function readTargetInstanceId() {
+        const select = document.getElementById('targetPicker');
+        return select ? (select.value || null) : null;
+    }
+
     function showDiceSection(prompt = "Roll requested:", rollType = null) {
         const diceSection = document.getElementById('diceSection');
         const rollPrompt = document.getElementById('rollPrompt');
         const rollBtn = document.getElementById('rollBtn');
         const diceInput = document.getElementById('diceInput');
         const signed = (n) => (n >= 0 ? `+${n}` : `${n}`);
-        
+
         const rt = rollType || (prompt.match(/Roll\s+(.+?)(?::|$)/i)?.[1]?.trim() || '');
         const dice = getDiceForRollRequest(rt);
         const contextType = inferRollContextType(rt);
+        // Always strip a stale picker first; only the damage step re-renders one.
+        clearTargetPicker();
         if (global.debugLog) {
             if (dice.v1Check) {
                 const v = dice.v1Check;
@@ -606,12 +690,17 @@
         diceSection.classList.add('active');
         gs().waitingForRoll = true;
         gs().pendingRollContext = { dice, rollType: contextType, abilityName: rt };
+        // Phase 2: only the damage step gets the target picker. Surfaces
+        // exactly the active instances of the current room's encounter
+        // when there are 2+; one-on-one fights stay click-to-roll.
+        maybeShowTargetPicker(contextType);
         disableInput(true);
     }
 
     function hideDiceSection() {
         const diceSection = document.getElementById('diceSection');
         diceSection.classList.remove('active');
+        clearTargetPicker();
         gs().waitingForRoll = false;
         gs().pendingRollContext = null;
         disableInput(false);
@@ -859,8 +948,27 @@
             // it as naturalRoll so the engine evaluates hit/crit/fumble but
             // doesn't re-roll. Damage rolls happen on the next click (engine
             // handles that via computeDamage in the damage branch).
+            //
+            // Phase 2: read the target picker (when shown) and resolve the
+            // attack against the CHOSEN instance's monster_ref. Heterogeneous
+            // encounters (2 scouts + 1 brute) almost always have different
+            // ACs, and the d20 must roll against the right one. If no picker
+            // (≤ 1 active instance), fall back to the first active instance's
+            // monster_ref via getFirstActiveInstance — that's correct for
+            // homogeneous encounters and for solos.
             const enc = getFirstActiveEncounterInCurrentRoom();
-            const monster = enc ? resolveMonster(enc.monster_ref) : null;
+            const targetInstanceId = readTargetInstanceId();
+            let chosenInstance = null;
+            if (enc && Array.isArray(enc.instances)) {
+                if (targetInstanceId) {
+                    chosenInstance = enc.instances.find(i => i && i.instance_id === targetInstanceId && !i.defeated) || null;
+                }
+                if (!chosenInstance && global.getFirstActiveInstance) {
+                    chosenInstance = global.getFirstActiveInstance(enc);
+                }
+            }
+            const monsterRef = chosenInstance ? chosenInstance.monster_ref : (enc ? enc.monster_ref : null);
+            const monster = monsterRef ? resolveMonster(monsterRef) : null;
             const ac = monster && (monster.ac != null) ? monster.ac
                 : (gd().character && gd().character.combat_stats ? gd().character.combat_stats.armor_class : 13);
 
@@ -873,15 +981,19 @@
 
             const weaponLabel = `${(inputs._weaponName || 'weapon').toLowerCase().replace(/\s+/g, ' ')}/${inputs._isRanged ? 'ranged' : 'melee'}`;
             const outcomeLabel = isHit ? (isCrit ? 'CRITICAL HIT' : 'HIT') : (isFumble ? 'FUMBLE' : 'MISS');
-            const callout = `Attack Roll 1d20: ${roll} (${signed(inputs.attackBonus)}) = ${totalToSend} (${weaponLabel})\n${outcomeLabel}: ${totalToSend} vs AC ${ac}`;
+            const targetLabel = chosenInstance
+                ? `${(monster && monster.name) || chosenInstance.monster_ref} (${chosenInstance.instance_id})`
+                : null;
+            const callout = `Attack Roll 1d20: ${roll} (${signed(inputs.attackBonus)}) = ${totalToSend} (${weaponLabel})${targetLabel ? `\nTarget: ${targetLabel}` : ''}\n${outcomeLabel}: ${totalToSend} vs AC ${ac}`;
             addMechanicsCallout(callout);
 
             if (isHit && enc && inputs._weaponName) {
-                const mon = resolveMonster(enc.monster_ref);
-                const encName = enc.name || (mon && mon.name) || 'Enemy';
+                const encName = enc.name || (monster && monster.name) || 'Enemy';
                 gs().pendingAttackResolution = {
                     encounterId: enc.id,
                     encounterName: encName,
+                    // Phase 2: damage step inherits this id; no second picker.
+                    instance_id: chosenInstance ? chosenInstance.instance_id : null,
                     attackTotal: totalToSend,
                     attackAC: ac,
                     isCrit,
@@ -893,7 +1005,8 @@
                 showDiceSection('Roll Damage', 'Damage');
                 return;
             } else if (!isHit) {
-                autoResolvedMessage = `I attacked. Attack ${totalToSend} vs AC ${ac} — ${isFumble ? 'FUMBLE' : 'MISS'}. Narrate the ${isFumble ? 'fumble' : 'miss'}; do not request a damage roll.`;
+                const targetClause = targetLabel ? ` against ${targetLabel}` : '';
+                autoResolvedMessage = `I attacked${targetClause}. Attack ${totalToSend} vs AC ${ac} — ${isFumble ? 'FUMBLE' : 'MISS'}. Narrate the ${isFumble ? 'fumble' : 'miss'}; do not request a damage roll.`;
             }
         } else if (rollType === 'damage' && (ctx.type === 'weapon' || ctx.type === 'custom')) {
             // Stage 3c: route chained damage through RulesEngine.computeDamage
@@ -942,20 +1055,32 @@
 
             let hpLine = '';
             let defeatedEncForReward = null;
+            let damageInstanceTag = null;   // Phase 2: the instance that took the hit (used in the auto-resolved msg below).
+            let damageInstanceKilled = false;
             if (ctx.type === 'weapon') {
                 const enc = getFirstActiveEncounterInCurrentRoom();
                 if (enc) {
-                    // Phase 1: route through applyDamageToEncounter. Targeting
-                    // rule (lowest-HP active instance) is the helper's default
-                    // when no instance_id is supplied — Phase 2 will surface a
-                    // target picker that stamps an instance_id onto
-                    // pendingAttackResolution so the dice flow can pass it in.
-                    const result = global.applyDamageToEncounter(enc, totalDamage);
+                    // Phase 2: prefer (a) the player's explicit pick from
+                    // the target picker, captured on pendingAttackResolution
+                    // at the attack-roll step or read live from the picker
+                    // here, then (b) the helper's default = lowest-HP
+                    // active instance.
+                    const pickedFromPicker = readTargetInstanceId();
+                    const pickedFromAtk    = atk && atk.instance_id;
+                    const targetInstanceId = pickedFromPicker || pickedFromAtk || null;
+                    const opts = targetInstanceId ? { instance_id: targetInstanceId } : undefined;
+                    const result = global.applyDamageToEncounter(enc, totalDamage, opts);
+                    if (result && result.instance) {
+                        damageInstanceTag    = result.instance.instance_id;
+                        damageInstanceKilled = !!result.killed;
+                    }
                     gs().inCombat = true;
                     gs().mode = 'combat';
                     const hpInfo = getEncounterHP(enc);
                     const mon = resolveMonster(enc.monster_ref);
-                    hpLine = `\n${enc.name || (mon && mon.name) || 'Enemy'}: HP ${Math.max(0, hpInfo.current)}/${hpInfo.max}`;
+                    const tgt = result && result.instance ? result.instance.instance_id : null;
+                    const tgtSuffix = tgt ? ` (target: ${tgt})` : '';
+                    hpLine = `\n${enc.name || (mon && mon.name) || 'Enemy'}: HP ${Math.max(0, hpInfo.current)}/${hpInfo.max}${tgtSuffix}`;
                     const room = gd().module && gd().module.rooms && gd().module.rooms[gs().currentRoom];
                     if (room && room.encounters && room.encounters.every(e => getEncounterHP(e).defeated)) {
                         gs().inCombat = false;
@@ -1019,10 +1144,18 @@
                     || (gd().module && gd().module.rooms && gd().module.rooms[gs().currentRoom]
                         && (gd().module.rooms[gs().currentRoom].encounters || []).find(e => e.id === atk2.encounterId));
                 const hpInfo = enc ? getEncounterHP(enc) : null;
+                // Phase 2: name the specific instance that took the hit so the
+                // GM narrates the right creature being wounded / killed.
+                // damageInstanceTag is captured at damage-apply time above.
+                const targetClause = damageInstanceTag
+                    ? (damageInstanceKilled
+                        ? `; instance ${damageInstanceTag} is DEFEATED — narrate its death and do not let it act further`
+                        : `; instance ${damageInstanceTag} took the hit`)
+                    : '';
                 const status = hpInfo && hpInfo.defeated
                     ? `${atk2.encounterName} is defeated`
                     : hpInfo
-                        ? `${atk2.encounterName} is still standing (${hpInfo.current}/${hpInfo.max} HP)`
+                        ? `${atk2.encounterName} is still standing (${hpInfo.current}/${hpInfo.max} HP${targetClause})`
                         : `${atk2.encounterName}`;
                 const critNote = atk2.isCrit ? ' (critical hit)' : '';
                 autoResolvedMessage = `I attacked ${atk2.encounterName}. Attack ${atk2.attackTotal} vs AC ${atk2.attackAC} — HIT${critNote} for ${totalDamage} damage. ${status}. The app has resolved the attack and applied damage; narrate the outcome and, if any enemy remains, proceed to the monster's turn.`;

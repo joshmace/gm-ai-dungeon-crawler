@@ -235,7 +235,31 @@
         }
     }
 
-    /** Populate the right-side monster panel from persistent encounter history. */
+    /** Pretty per-instance label, e.g. "Goblin Scout #2" or "Goblin Brute". */
+    function instanceDisplayName(inst, monster) {
+        const monsterName = (monster && monster.name) || inst.monster_ref || 'Creature';
+        // Suppress the "#1" suffix when an encounter has only one instance of
+        // this monster_ref — most encounters are solos and reading "Goblin
+        // Brute #1" beside no second brute is just noise.
+        const suffix = /(_\d+)$/.test(inst.instance_id) ? inst.instance_id.match(/_(\d+)$/)[1] : null;
+        return suffix ? `${monsterName} #${suffix}` : monsterName;
+    }
+
+    function escapePanelHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, ch =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    /**
+     * Phase 2: render per-instance rows under each encounter header.
+     *
+     * Encounter header keeps the monster's AC + attacks (the bestiary block
+     * applies to every instance of that monster_ref). Rows underneath give
+     * one HP bar per instance, dimmed/strikethrough on defeat. Heterogeneous
+     * encounters (2 scouts + 1 brute) read the per-instance ref off the
+     * snapshot so the row name matches the actual creature, not the first
+     * group's monster_ref.
+     */
     function updateMonsterPanel() {
         const container = doc().getElementById('monsterStatsPanel');
         if (!container) return;
@@ -267,26 +291,74 @@
                 max:      hist.lastKnownMaxHp != null ? hist.lastKnownMaxHp : 0,
                 defeated: !!hist.defeated
             };
+            // Live instances when the encounter is still in the room data;
+            // otherwise fall back to the snapshot we stashed on combat exit.
+            const liveInstances     = (enc && Array.isArray(enc.instances)) ? enc.instances : [];
+            const snapshotInstances = Array.isArray(hist.instancesSnapshot) ? hist.instancesSnapshot : [];
+            const instances = liveInstances.length ? liveInstances : snapshotInstances;
+            const totalCount    = instances.length;
+            const defeatedCount = instances.filter(i => i && i.defeated).length;
+
             if (!monster) {
                 const status = hpInfo.defeated ? 'Defeated' : 'Active';
-                html += `<div class="monster-stat-block${hpInfo.defeated ? ' defeated' : ''}"><div class="monster-stat-name">${hist.displayName}</div><div class="monster-stat-line">Status: ${status}</div><div class="monster-stat-line">Unknown monster: ${monsterRef || '—'}</div></div>`;
+                html += `<div class="monster-stat-block${hpInfo.defeated ? ' defeated' : ''}"><div class="monster-stat-name">${escapePanelHtml(hist.displayName)}</div><div class="monster-stat-line">Status: ${status}</div><div class="monster-stat-line">Unknown monster: ${escapePanelHtml(monsterRef || '—')}</div></div>`;
                 continue;
             }
             const ac = monster.ac != null ? monster.ac : (monster.AC != null ? monster.AC : (hist.acSnapshot != null ? hist.acSnapshot : '—'));
             const defeatedClass = hpInfo.defeated ? ' defeated' : '';
+            const headerStatus = hpInfo.defeated
+                ? 'Defeated'
+                : (totalCount > 1 ? `Active — ${totalCount - defeatedCount} of ${totalCount} remaining` : 'Active');
+            // Phase 2: heterogeneous encounters (mixed monster_refs) carry
+            // per-instance AC on each row instead. Suppressing the encounter-
+            // header AC line keeps it honest — a single AC value would be
+            // wrong half the time.
+            const refs = new Set(instances.map(i => i && i.monster_ref).filter(Boolean));
+            const homogeneous = refs.size <= 1;
             html += `<div class="monster-stat-block${defeatedClass}">`;
-            html += `<div class="monster-stat-name">${hist.displayName}</div>`;
-            html += `<div class="monster-stat-line">Status: ${hpInfo.defeated ? 'Defeated' : 'Active'}</div>`;
-            if (hist.roomName) html += `<div class="monster-stat-line">Room: ${hist.roomName}</div>`;
-            html += `<div class="monster-stat-line">AC ${ac}</div>`;
+            html += `<div class="monster-stat-name">${escapePanelHtml(hist.displayName)}</div>`;
+            html += `<div class="monster-stat-line">Status: ${headerStatus}</div>`;
+            if (hist.roomName) html += `<div class="monster-stat-line">Room: ${escapePanelHtml(hist.roomName)}</div>`;
+            if (homogeneous) html += `<div class="monster-stat-line">AC ${ac}</div>`;
+            // Aggregate HP — sum across instances. Useful for at-a-glance
+            // "how much fight left in this group" reads.
             html += `<div class="monster-stat-line">HP ${hpInfo.current}/${hpInfo.max}</div>`;
+
+            // Per-instance rows — only when the encounter has 2+ instances.
+            // Single-instance encounters keep the unobtrusive Phase 1 look.
+            // Phase 2: each row carries its own AC, since heterogeneous
+            // encounters (e.g. 2 scouts + 1 brute) almost always have
+            // different per-monster ACs and the player needs to see them
+            // before picking a target on the attack-roll step.
+            if (instances.length >= 2) {
+                html += '<div class="monster-instances">';
+                for (const inst of instances) {
+                    const instMonster = resolveMonster(inst.monster_ref) || monster;
+                    const name   = instanceDisplayName(inst, instMonster);
+                    const max    = Number(inst.max_hp) || 0;
+                    const cur    = Math.max(0, Number(inst.current_hp) || 0);
+                    const pct    = max > 0 ? Math.round((cur / max) * 100) : 0;
+                    const instAc = (instMonster && instMonster.ac != null)
+                        ? instMonster.ac
+                        : (instMonster && instMonster.AC != null ? instMonster.AC : '—');
+                    const rowCls = inst.defeated ? 'monster-instance-row defeated' : 'monster-instance-row';
+                    html += `<div class="${rowCls}" title="${escapePanelHtml(inst.instance_id)}">`;
+                    html += `<span class="monster-instance-name">${escapePanelHtml(name)}</span>`;
+                    html += `<span class="monster-instance-ac">AC ${instAc}</span>`;
+                    html += `<span class="monster-instance-hp">${cur}/${max}</span>`;
+                    html += `<span class="monster-instance-bar"><span class="monster-instance-bar-fill" style="width: ${pct}%"></span></span>`;
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
             const attacks = (monster.attacks && monster.attacks.length > 0) ? monster.attacks : (hist.attacksSnapshot || []);
             if (attacks.length > 0) {
                 html += '<div class="monster-stat-attacks">';
                 for (const a of attacks) {
                     const range = (a.range || 'melee').toString().toLowerCase();
                     const rangeStr = range === 'melee' ? 'melee' : `ranged ${a.range}`;
-                    html += `<div class="monster-stat-attack">${a.name}: +${a.bonus != null ? a.bonus : '0'} to hit, ${(a.damage || '—')} ${(a.damage_type || '')} (${rangeStr})</div>`;
+                    html += `<div class="monster-stat-attack">${escapePanelHtml(a.name)}: +${a.bonus != null ? a.bonus : '0'} to hit, ${escapePanelHtml(a.damage || '—')} ${escapePanelHtml(a.damage_type || '')} (${rangeStr})</div>`;
                 }
                 html += '</div>';
             }
@@ -337,18 +409,51 @@
         return { xpValues, goldAmounts };
     }
 
+    /**
+     * Phase 2: GM-facing encounter description grows from one line to a
+     * header line plus one indented per-instance line. The header carries
+     * encounter-level info (id, AC of the first-group monster, attacks,
+     * rewards). Each instance line gives the GM the stable instance_id it
+     * should target with [DAMAGE_TO_MONSTER: <instance_id>, N], the
+     * monster name + current HP, and (for defeated instances) a reminder
+     * NOT to let it act further.
+     *
+     * Single-instance encounters fall back to the compact one-line shape so
+     * the prompt budget doesn't grow on solo fights.
+     */
     function buildEncounterDescription(encounter, includeCurrentHP = false) {
         const monster = resolveMonster(encounter.monster_ref);
         if (!monster) return `Unknown monster: ${encounter.monster_ref}`;
 
+        const instances = Array.isArray(encounter.instances) ? encounter.instances : [];
         const hpInfo = includeCurrentHP ? getEncounterHP(encounter) : null;
-        let hpStr;
-        if (hpInfo && hpInfo.defeated) {
-            hpStr = `DEFEATED (0/${hpInfo.max} HP) — narrate death, award XP/treasure from On death`;
-        } else if (hpInfo) {
-            hpStr = `${hpInfo.current}/${hpInfo.max} HP remaining`;
-        } else {
-            hpStr = `HP ${monster.hp}`;
+
+        // Build the rewards suffix once — applied to both the single-instance
+        // and multi-instance shapes so the GM hears about XP / treasure
+        // exactly once per encounter regardless of layout.
+        const rewards = resolveEncounterRewards(encounter, monster);
+        const xp = rewards.xp;
+        let rewardSuffix = '';
+        if (encounter.on_death || (monster.xp_value != null) || (monster.treasure != null) || rewards.moduleHasXP || rewards.moduleHasTreasure) {
+            if (xp != null) rewardSuffix += ` | On death: award exactly ${xp} XP`;
+            if (rewards.moduleHasTreasure) {
+                const treasureList = Array.isArray(rewards.treasure) ? rewards.treasure : [];
+                const treasureStr = treasureList.length > 0
+                    ? treasureList.map(t => t.item === 'gold' ? `${t.quantity} gp` : t.item).join(', ')
+                    : 'none';
+                rewardSuffix += ` | Treasure (module): ${treasureStr}`;
+                const goldEntry = treasureList.find(t => (t.item || '').toLowerCase() === 'gold');
+                const goldQty = goldEntry && goldEntry.quantity != null ? Number(goldEntry.quantity) : null;
+                const phrases = [];
+                if (xp != null) phrases.push(`say "You gain ${xp} XP"`);
+                if (goldQty != null) phrases.push(`say "You discover ${goldQty} gold" (or "${goldQty} gp")`);
+                if (phrases.length) rewardSuffix += ` | Use these exact numbers: ${phrases.join('; ')}`;
+            } else if (rewards.treasure != null && String(rewards.treasure).trim() !== '') {
+                rewardSuffix += ` | Treasure (from monster manual): ${rewards.treasure}`;
+                if (xp != null) rewardSuffix += ` | Say "You gain ${xp} XP"`;
+            } else if (xp != null) {
+                rewardSuffix += ` | Say "You gain ${xp} XP"`;
+            }
         }
 
         const attackLines = (monster.attacks || []).map(a => {
@@ -358,32 +463,52 @@
         }).join(' | ');
         const attackStr = attackLines || 'no attacks';
 
-        let line = `${encounter.name} (${monster.name}, id ${encounter.id}): ${hpStr}, AC ${monster.ac} (use this exact AC for hit/miss). Attacks: ${attackStr}`;
-
-        const rewards = resolveEncounterRewards(encounter, monster);
-        const xp = rewards.xp;
-        if (encounter.on_death || (monster.xp_value != null) || (monster.treasure != null) || rewards.moduleHasXP || rewards.moduleHasTreasure) {
-            if (xp != null) line += ` | On death: award exactly ${xp} XP`;
-            if (rewards.moduleHasTreasure) {
-                const treasureList = Array.isArray(rewards.treasure) ? rewards.treasure : [];
-                const treasureStr = treasureList.length > 0
-                    ? treasureList.map(t => t.item === 'gold' ? `${t.quantity} gp` : t.item).join(', ')
-                    : 'none';
-                line += ` | Treasure (module): ${treasureStr}`;
-                const goldEntry = treasureList.find(t => (t.item || '').toLowerCase() === 'gold');
-                const goldQty = goldEntry && goldEntry.quantity != null ? Number(goldEntry.quantity) : null;
-                const phrases = [];
-                if (xp != null) phrases.push(`say "You gain ${xp} XP"`);
-                if (goldQty != null) phrases.push(`say "You discover ${goldQty} gold" (or "${goldQty} gp")`);
-                if (phrases.length) line += ` | Use these exact numbers: ${phrases.join('; ')}`;
-            } else if (rewards.treasure != null && String(rewards.treasure).trim() !== '') {
-                line += ` | Treasure (from monster manual): ${rewards.treasure}`;
-                if (xp != null) line += ` | Say "You gain ${xp} XP"`;
-            } else if (xp != null) {
-                line += ` | Say "You gain ${xp} XP"`;
+        // Single-instance: keep the compact one-line shape (saves prompt size
+        // on the common solo-fight case).
+        if (instances.length <= 1) {
+            let hpStr;
+            if (hpInfo && hpInfo.defeated) {
+                hpStr = `DEFEATED (0/${hpInfo.max} HP) — narrate death, award XP/treasure from On death`;
+            } else if (hpInfo) {
+                hpStr = `${hpInfo.current}/${hpInfo.max} HP remaining`;
+            } else {
+                hpStr = `HP ${monster.hp}`;
             }
+            const idTrail = instances.length === 1
+                ? `, instance ${instances[0].instance_id}`
+                : '';
+            return `${encounter.name} (${monster.name}, id ${encounter.id}${idTrail}): ${hpStr}, AC ${monster.ac} (use this exact AC for hit/miss). Attacks: ${attackStr}${rewardSuffix}`;
         }
-        return line;
+
+        // Multi-instance: header + per-instance lines. The GM should target
+        // by instance_id when it knows which creature took the hit; otherwise
+        // the encounter id falls back to the lowest-HP active instance.
+        //
+        // Heterogeneous encounters (mixed monster_refs, e.g. 2 scouts + 1
+        // brute) carry per-instance AC on each line instead of a single
+        // header AC, since a single AC would be wrong for at least one
+        // creature. Homogeneous encounters keep the encounter-level AC.
+        const activeCount = instances.filter(i => !i.defeated).length;
+        const statusStr = hpInfo && hpInfo.defeated
+            ? `DEFEATED — narrate the last death, award XP/treasure from On death`
+            : `ACTIVE — ${activeCount} of ${instances.length} instances remaining`;
+        const refs = new Set(instances.map(i => i && i.monster_ref).filter(Boolean));
+        const homogeneous = refs.size <= 1;
+
+        const acFragment = homogeneous ? `AC ${monster.ac}. ` : '';
+        let header = `${encounter.name} (id ${encounter.id}): ${acFragment}Status: ${statusStr}. Attacks: ${attackStr}${rewardSuffix}`;
+        let lines = [header];
+        for (const inst of instances) {
+            const im = resolveMonster(inst.monster_ref) || monster;
+            const max = Number(inst.max_hp) || 0;
+            const cur = Math.max(0, Number(inst.current_hp) || 0);
+            const acStr = homogeneous ? '' : (im.ac != null ? `AC ${im.ac}, ` : '');
+            const status = inst.defeated
+                ? `DEFEATED, ${cur}/${max} — narrate the death; do NOT let this creature act`
+                : `${acStr}HP ${cur}/${max}`;
+            lines.push(`  - ${inst.instance_id} (${im.name || inst.monster_ref}, ${status})`);
+        }
+        return lines.join('\n');
     }
 
     global.UI = global.UI || {};

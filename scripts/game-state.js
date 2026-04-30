@@ -618,12 +618,10 @@
     }
 
     // Build the encounters{} map for the save envelope. Per JSON_SCHEMAS.md
-    // the shape is `{ [id]: { resolved, instances[] } }` keyed by encounter
-    // id. Phase 1 now writes real per-instance state. We also keep the
-    // pre-Phase-1 `damage_dealt` companion for one save-version overlap so
-    // a Phase-1 save remains loadable by a pre-Phase-1 build during testing;
-    // Phase 2 drops the legacy field. The encounters live on the shimmed
-    // module (`gd().module.rooms`), not the raw v1 source.
+    // the shape is `{ [id]: { resolved, instances[] } }` keyed by encounter id.
+    // The encounters live on the shimmed module (`gd().module.rooms`), not the
+    // raw v1 source. Phase 2 dropped the pre-Phase-1 `damage_dealt` companion;
+    // legacy saves with that field still load via the loadGame migration path.
     function buildEncountersForSave() {
         const out = {};
         const rooms = (gd().module && gd().module.rooms) || {};
@@ -638,14 +636,9 @@
                     defeated:    !!inst.defeated
                 }));
                 const resolved = instances.length > 0 && instances.every(inst => inst.defeated);
-                const damageDealt = instances.reduce(
-                    (s, inst) => s + Math.max(0, (Number(inst.max_hp) || 0) - (Number(inst.current_hp) || 0)),
-                    0
-                );
                 out[enc.id] = {
                     resolved,
-                    instances:    savedInstances,
-                    damage_dealt: damageDealt
+                    instances: savedInstances
                 };
             }
         }
@@ -886,16 +879,13 @@
         gs().featureState        = m.features             ? clone(m.features)             : {};
         gs().connectionsModified = m.connections_modified ? clone(m.connections_modified) : {};
 
-        // Phase 1: rehydrate per-instance HP from the save. Two shapes:
+        // Rehydrate per-instance HP from the save. Two shapes:
         //  (a) instances[] populated  → restore current_hp/defeated per instance
         //  (b) legacy damage_dealt    → distribute across instances starting
         //                                from instance 0 (the "all-or-nothing"
         //                                approximation that mirrors pre-Phase-1
         //                                behavior). Logged so the SAVE_VERSION
         //                                trail makes the migration visible.
-        // damageToEncounters is a vestigial gameState field at this point
-        // (Phase 2 deletes it) — leave the existing object alone but never
-        // read from it for HP logic.
         const rooms = (gd().module && gd().module.rooms) || {};
         for (const room of Object.values(rooms)) {
             for (const enc of (room.encounters || [])) {
@@ -918,7 +908,6 @@
                 }
             }
         }
-        gs().damageToEncounters = {};
 
         gs().inCombat       = !!(payload.combat && payload.combat.in_combat);
         gs().lastCombatRoom = (payload.combat && payload.combat.last_combat_room) || null;
@@ -1217,17 +1206,16 @@
     //
     // Callers ask GameState for a unified moduleState view, pass it to
     // RulesEngine.prereqsMet / applyEffect, and then re-render the
-    // affected panels. buildModuleState derives the `encounters` map
-    // from damageToEncounters + authored encounter HP so prereq
-    // evaluators that gate on encounter defeat work without a separate
-    // encounter-state store (Stage 3 shim model stays authoritative).
+    // affected panels. The `encounters` rollup is derived from each
+    // encounter's instances[] (Phase 1+) so prereq evaluators that gate on
+    // encounter defeat fire correctly when every per-instance HP hits 0.
     // ------------------------------------------------------------
 
     /**
      * Assemble the moduleState view the RulesEngine Stage 5 helpers expect.
      * Returns a live reference to gs().featureState and gs().connectionsModified
      * (so applyEffect's mutations persist), plus a derived encounters map
-     * built from damageToEncounters + the room's authored encounter HP.
+     * built from each encounter's instances[].
      */
     function buildModuleState() {
         if (!gs().featureState) gs().featureState = {};

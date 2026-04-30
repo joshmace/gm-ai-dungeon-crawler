@@ -150,8 +150,6 @@
             conversationHistory: [],
             waitingForRoll: false,
             pendingRollContext: null,
-            /** Damage dealt to each encounter by id (e.g. goblin_guard: 5). Used to show current monster HP. */
-            damageToEncounters: {},
             /** True when combat has started (either side attacked). Cleared when all nearby enemies defeated, player dies, or player retreats. */
             inCombat: false,
             /** Current pillar: 'exploration' | 'combat' | 'travel'. Exactly one active; drives mode-specific prompt. */
@@ -351,6 +349,8 @@
             // Stage 7: print the current save envelope to the console for
             // spec-checking without round-tripping through localStorage.
             // Returns the object as well, so `const s = test.dumpSave()` works.
+            // Phase 2: also surfaces a flat per-instance table of every
+            // encounter so you can read kill state at a glance.
             dumpSave() {
                 if (!window.GameState || !window.GameState.getStateToSave) {
                     addSystemMessage('[DEBUG] dumpSave: GameState.getStateToSave not available');
@@ -358,10 +358,27 @@
                 }
                 const payload = window.GameState.getStateToSave();
                 console.log('[DEBUG] Save envelope:', payload);
+                const encounters = (payload && payload.module && payload.module.encounters) || {};
+                const rows = [];
+                for (const [encId, row] of Object.entries(encounters)) {
+                    const insts = (row && row.instances) || [];
+                    if (insts.length === 0) {
+                        rows.push({ encounter: encId, instance_id: '—', monster_ref: '—', current_hp: '—', defeated: row && row.resolved });
+                    } else {
+                        for (const i of insts) rows.push({
+                            encounter:   encId,
+                            instance_id: i.instance_id,
+                            monster_ref: i.monster_ref,
+                            current_hp:  i.current_hp,
+                            defeated:    !!i.defeated
+                        });
+                    }
+                }
+                if (rows.length) console.table(rows);
                 const schema = payload && payload.schema_version;
                 const pack   = payload && payload.game_pack_id;
                 const module_ = payload && payload.module_id;
-                addSystemMessage(`[DEBUG] dumpSave: schema=${schema} pack=${pack} module=${module_} (full blob in console)`);
+                addSystemMessage(`[DEBUG] dumpSave: schema=${schema} pack=${pack} module=${module_} (full blob + per-instance table in console)`);
                 return payload;
             },
 
@@ -502,6 +519,35 @@
                 if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
                 if (window.updateMonsterPanel) window.updateMonsterPanel();
                 if (typeof saveGame === 'function') saveGame();
+            },
+
+            // Phase 2: apply N damage to a specific instance via the same
+            // helper the parser/dice flow uses. Routes through the targeting
+            // rule with an explicit instance_id, so it's exercising the real
+            // code path — not just stomping current_hp.
+            //   test.damageInstance('goblin_scavengers', 'goblin_scout_2', 4)
+            damageInstance(encounterId, instanceId, amount) {
+                const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
+                if (!rooms) return;
+                for (const room of Object.values(rooms)) {
+                    for (const enc of (room.encounters || [])) {
+                        if (!enc || enc.id !== encounterId || !Array.isArray(enc.instances)) continue;
+                        if (typeof window.applyDamageToEncounter !== 'function') {
+                            addSystemMessage('[DEBUG] damageInstance: applyDamageToEncounter not wired');
+                            return;
+                        }
+                        const result = window.applyDamageToEncounter(enc, amount, { instance_id: instanceId });
+                        const tag = result && result.instance ? result.instance.instance_id : '(no active match)';
+                        const killed = result && result.killed ? ' KILLED' : '';
+                        const resolved = result && result.rollupJustResolved ? ' (encounter resolved)' : '';
+                        addSystemMessage(`[DEBUG] damageInstance: ${encounterId}/${instanceId} -${amount} → hit ${tag}${killed}${resolved}`);
+                        if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
+                        if (window.updateMonsterPanel) window.updateMonsterPanel();
+                        if (typeof saveGame === 'function') saveGame();
+                        return result;
+                    }
+                }
+                addSystemMessage(`[DEBUG] damageInstance: encounter ${encounterId} not found`);
             },
 
             // Phase 1: defeat exactly one instance of a multi-instance

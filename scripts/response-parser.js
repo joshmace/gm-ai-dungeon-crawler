@@ -162,6 +162,7 @@
             .replace(/\[ROOM:\s*[a-z0-9_]+\]/gi, '')
             .replace(/\[FEATURE_SOLVED:\s*[a-z0-9_]+\]/gi, '')
             .replace(/\[REWARD:\s*[^\]]+\]/gi, '')
+            .replace(/\[ATTACK_TARGET:\s*[a-z0-9_]+\]/gi, '')
             .replace(/\[(?:DAMAGE_TO_PLAYER|HEAL_PLAYER|DAMAGE_TO_MONSTER|MONSTER_DEFEATED|MONSTER_FLED):[^\]]*\]/gi, '')
             .trim();
         
@@ -746,6 +747,41 @@
         }
     }
     
+    /**
+     * Phase 2: parse [ATTACK_TARGET: <instance_id>] — GM emits this alongside
+     * [ROLL_REQUEST: Attack] when the player's declaration named a specific
+     * creature ("I attack the brute"). Stashed on gs().pendingAttackTargetId
+     * so the dice flow's target picker pre-selects that instance instead of
+     * defaulting to lowest-HP active. Cleared when the picker reads it (or
+     * when the next non-attack action runs through showDiceSection).
+     *
+     * Validates that the id refers to an active instance in the current
+     * room — otherwise drops on the floor with a debug log so a GM
+     * hallucinating an instance_id can't pin the picker on a dead/missing
+     * creature.
+     */
+    function tryParseAttackTargetTag(text) {
+        if (!text) return;
+        const m = text.match(/\[ATTACK_TARGET:\s*([a-z0-9_]+)\s*\]/i);
+        if (!m) return;
+        const targetId = m[1];
+        const room = gd().module && gd().module.rooms && gd().module.rooms[gs().currentRoom];
+        const encs = (room && room.encounters) || [];
+        let found = null;
+        for (const enc of encs) {
+            const insts = Array.isArray(enc.instances) ? enc.instances : [];
+            const inst = insts.find(i => i && i.instance_id === targetId && !i.defeated && (Number(i.current_hp) || 0) > 0);
+            if (inst) { found = inst; break; }
+        }
+        if (found) {
+            gs().pendingAttackTargetId = targetId;
+            debugLog('PARSE', `Tag attack target: ${targetId} (will pre-select in picker)`);
+        } else {
+            gs().pendingAttackTargetId = null;
+            debugLog('PARSE', `Tag attack target IGNORED (no active instance in current room): ${targetId}`);
+        }
+    }
+
     /** Parse [MODE: travel] and [MODE: exploration] — GM switches pillar. */
     function tryParseModeTag(text) {
         if (!text) return;
@@ -852,6 +888,7 @@
         tryParseModeTag(plainText);
         tryParseFeatureSolved(plainText);  // Stage 5: [FEATURE_SOLVED: <id>] → markSolved.
         tryParseRewardTag(plainText);      // Ad-hoc prose rewards: [REWARD: gold/xp/item ...] → applyReward.
+        tryParseAttackTargetTag(plainText); // Phase 2: [ATTACK_TARGET: <instance_id>] → picker default.
         tryParseCombatTag(plainText);   // GM tag takes precedence
         tryParseCombatBegins(plainText);
         tryParseRetreat(plainText);
