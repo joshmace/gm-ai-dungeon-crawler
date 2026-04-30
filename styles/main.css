@@ -1200,6 +1200,91 @@ input[type="number"].dice-input {
   margin: 2px 0;
 }
 
+/* Phase 2: per-instance rows (one creature per row inside a monster-stat-block).
+   Each row has a name + HP bar + numeric readout. Defeated rows stay visible but
+   dim — the player should see kills accumulating. */
+.monster-instances {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ltColor);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.monster-instance-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px 10px;
+  align-items: center;
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.monster-instance-row.defeated {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+.monster-instance-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monster-instance-ac {
+  font-variant-numeric: tabular-nums;
+  color: var(--acColor);
+  font-weight: bold;
+  font-size: 0.85em;
+}
+
+.monster-instance-hp {
+  font-variant-numeric: tabular-nums;
+  color: var(--hpColor);
+  font-weight: bold;
+  font-size: 0.85em;
+}
+
+.monster-instance-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: var(--ltColor);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.monster-instance-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--hpColor);
+  transition: width 120ms ease-out;
+}
+
+.monster-instance-row.defeated .monster-instance-bar-fill {
+  width: 0% !important;
+}
+
+/* Phase 2: target picker shown above the damage Roll button when an encounter
+   has 2+ active instances. Default selection = lowest-HP active (matches the
+   GM-side adjudication rule in applyDamageToEncounter). */
+.dice-target-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-basis: 100%;
+}
+
+.dice-target-picker {
+  background: rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+  border: 1px solid rgba(77, 201, 77, 0.6);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 0.85em;
+  font-family: inherit;
+}
+
 /* ============================================
    Debug Panel
    ============================================ */

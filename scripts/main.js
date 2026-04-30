@@ -203,7 +203,6 @@
         gs().isDead = false;
         gs().triggeredEvents = [];
         gs().conversationHistory = [];
-        gs().damageToEncounters = {};
         gs().inCombat = false;
         gs().mode = 'exploration';
         gs().equippedInUse = [];
@@ -495,6 +494,26 @@
         tryParseWeaponSwitch(action);
         tryParseArmorState(action);
         tryParseRetreat(action);
+        // Phase 2: preemptive combat-mode flip. Pre-Phase-1 combat only
+        // engaged once damage was applied (or the GM emitted [COMBAT: on]
+        // in response). That meant the very first GM call after the player
+        // declared an attack ran with mode=exploration even though the
+        // player was clearly entering combat — a beat of stale framing.
+        // When the player message reads as aggressive AND there's an active
+        // enemy in the current room, flip to combat now so the GM gets
+        // mode=combat on the prompt that drives the [ROLL_REQUEST: Attack].
+        // Same as a symmetric counterpart to tryParseRetreat (which flips
+        // OFF on retreat language).
+        const aggressiveRe = /\b(?:i\s+)?(?:attack|strike|swing|stab|slash|shoot|fire(?:\s+at)?|charge|engage|lunge|hack|cleave)\b/i;
+        if (!gs().inCombat && aggressiveRe.test(action)) {
+            const enc = global.getFirstActiveEncounterInCurrentRoom && global.getFirstActiveEncounterInCurrentRoom();
+            if (enc) {
+                gs().inCombat = true;
+                gs().mode = 'combat';
+                if (global.debugLog) global.debugLog('PARSE', `Combat begun (player declared attack vs ${enc.id})`);
+                if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
+            }
+        }
         gs().torchUseParsedThisTurn = false; // reset each turn
         tryParsePackItemUse(action, true); // parse player's declared actions (e.g. "I pull out my torch and light it")
         
