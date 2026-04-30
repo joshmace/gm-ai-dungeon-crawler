@@ -1,7 +1,8 @@
 # Per-Instance Encounter HP — Phased Refactor Plan
 
 **Drafted:** 2026-04-29 (Plan-agent pass)
-**Status:** Phase 1 not started. The seven design questions in §4 are pending Josh's confirmation before Phase 1 code begins.
+**Decisions locked:** 2026-04-29 — all 7 design questions in §4 confirmed as recommended.
+**Status:** Phase 1 ready to start.
 **Companion docs:** `BACKLOG.md` (Polish & smoke-test items → "Cross-room combat re-entry"), `JSON_SCHEMAS.md` (already promises per-instance HP at `instances[]`).
 
 ---
@@ -283,13 +284,13 @@ Now that the runtime is instance-aware, surface it.
 
 | # | Question | Recommendation | Status |
 |---|---|---|---|
-| 1 | Instance ID scheme | `<monster_ref>_<n>` (e.g. `goblin_scout_2`) — readable; revisit only if cross-group monster_ref collisions appear | Pending |
-| 2 | How GM disambiguates in narration | Let GM coin names freely ("the wounded scout"). Don't author per-instance flavor names. | Pending |
-| 3 | Per-instance HP rolls | Fixed bestiary HP for v1. Per-instance HP variance is v2; flag `instance.max_hp_method = 'fixed'`. | Pending |
-| 4 | Per-instance treasure split | Defer. Encounter-level treasure stays the v1 contract. Document the v2 extension in `JSON_SCHEMAS.md`. | Pending |
-| 5 | Save migration for in-progress saves | Distribute existing `damage_dealt` to instance 0 first, etc. — preserves "the player did some damage already." Log a `SAVE_VERSION` debug entry. | Pending |
-| 6 | `[MONSTER_DEFEATED: encounter_id]` semantics | Keep current — defeats every remaining instance at once. Push GMs toward instance-id form via prompt. | Pending |
-| 7 | Auto-target picker from GM's last narration | Defer. Default-to-lowest-HP-active is good enough for v1. | Pending |
+| 1 | Instance ID scheme | `<monster_ref>_<n>` (e.g. `goblin_scout_2`) — readable; revisit only if cross-group monster_ref collisions appear | Confirmed (2026-04-29) |
+| 2 | How GM disambiguates in narration | Let GM coin names freely ("the wounded scout"). Don't author per-instance flavor names. | Confirmed (2026-04-29) |
+| 3 | Per-instance HP rolls | Fixed bestiary HP for v1. Per-instance HP variance is v2; flag `instance.max_hp_method = 'fixed'`. | Confirmed (2026-04-29) |
+| 4 | Per-instance treasure split | Defer. Encounter-level treasure stays the v1 contract. Document the v2 extension in `JSON_SCHEMAS.md`. | Confirmed (2026-04-29) |
+| 5 | Save migration for in-progress saves | Distribute existing `damage_dealt` to instance 0 first, etc. — preserves "the player did some damage already." Log a `SAVE_VERSION` debug entry. | Confirmed (2026-04-29) |
+| 6 | `[MONSTER_DEFEATED: encounter_id]` semantics | Keep current — defeats every remaining instance at once. Push GMs toward instance-id form via prompt. | Confirmed (2026-04-29) |
+| 7 | Auto-target picker from GM's last narration | Defer. Default-to-lowest-HP-active is good enough for v1. | Confirmed (2026-04-29) |
 
 ---
 

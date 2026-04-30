@@ -350,6 +350,63 @@
         return { xp_award, treasure };
     }
 
+    /**
+     * Look up bestiary HP for a monster_ref. Module-scoped entries override
+     * shared. Returns 0 when the monster is missing — caller should handle.
+     */
+    function bestiaryHPFor(monsterRef, gameData) {
+        if (!monsterRef) return 0;
+        const shared = (gameData.bestiary && gameData.bestiary.monsters) || {};
+        const scoped = (gameData.module && gameData.module.module_bestiary
+                        && gameData.module.module_bestiary.monsters) || {};
+        const m = scoped[monsterRef] || shared[monsterRef];
+        return (m && typeof m.hp === 'number') ? m.hp : 0;
+    }
+
+    /**
+     * Phase 1: expand an authored encounter (enc.groups[]) into a flat
+     * instances[] array. Instance ids are deterministic
+     * (`<monster_ref>_<1-based ordinal within group>`) so saves round-trip.
+     * Per-instance HP rolls are deferred to v2 (max_hp_method = 'fixed' for
+     * v1 — every instance shares the bestiary average for its monster_ref).
+     *
+     * If the encounter has no groups[] but a legacy top-level monster_ref,
+     * fall back to a single-instance shape so older authoring still works.
+     */
+    function expandEncounterInstances(enc, gameData) {
+        const instances = [];
+        const groups = Array.isArray(enc.groups) ? enc.groups : null;
+        if (groups && groups.length) {
+            for (const group of groups) {
+                const ref = group && group.monster_ref;
+                const qty = Math.max(1, Number(group && group.quantity) || 1);
+                if (!ref) continue;
+                const maxHp = bestiaryHPFor(ref, gameData);
+                for (let i = 1; i <= qty; i++) {
+                    instances.push({
+                        instance_id:    `${ref}_${i}`,
+                        monster_ref:    ref,
+                        max_hp:         maxHp,
+                        current_hp:     maxHp,
+                        defeated:       false,
+                        max_hp_method:  'fixed'
+                    });
+                }
+            }
+        } else if (enc.monster_ref) {
+            const maxHp = bestiaryHPFor(enc.monster_ref, gameData);
+            instances.push({
+                instance_id:    `${enc.monster_ref}_1`,
+                monster_ref:    enc.monster_ref,
+                max_hp:         maxHp,
+                current_hp:     maxHp,
+                defeated:       false,
+                max_hp_method:  'fixed'
+            });
+        }
+        return instances;
+    }
+
     function buildShimmedModule(gameData) {
         const mod = gameData.module || {};
         const envelope = {};
@@ -362,6 +419,10 @@
         // encounter.rewards.{xp, treasure[{type, amount}]}. Translate both so the
         // pre-v1 renderers resolve their lookups. A later stage replaces those
         // callers with v1-aware ones.
+        //
+        // Phase 1: also expand groups[] into a flat instances[] so per-instance
+        // HP tracking has somewhere to live. monster_ref stays set to the first
+        // group's ref for any not-yet-migrated reader; Phase 2 retires it.
         const shimmedRooms = {};
         for (const [roomId, room] of Object.entries(mod.rooms || {})) {
             const shimmedRoom = { ...room };
@@ -370,6 +431,7 @@
                     const first = Array.isArray(enc.groups) && enc.groups.length ? enc.groups[0] : null;
                     const monsterRef = enc.monster_ref || (first && first.monster_ref) || null;
                     const shimEnc = { ...enc, monster_ref: monsterRef };
+                    shimEnc.instances = expandEncounterInstances(shimEnc, gameData);
                     if (enc.rewards && !enc.on_death) {
                         shimEnc.on_death = buildLegacyOnDeath(enc, monsterRef, gameData);
                     }
@@ -385,6 +447,111 @@
             module_items:         mod.module_items || null,
             completion_condition: mod.completion_condition || null
         };
+    }
+
+    // ------------------------------------------------------------
+    // Phase 1: per-instance encounter HP helpers.
+    //
+    // Reads / writes go through these. They expect enc.instances[] to exist
+    // (populated by buildShimmedModule). Encounter rollup HP is the SUM of
+    // per-instance HP — when a 3-goblin encounter renders its aggregate, the
+    // model finally sees 28/28 instead of the pre-Phase-1 7/7.
+    // ------------------------------------------------------------
+
+    /** Sum of every instance's max_hp on the encounter. */
+    function getEncounterMaxHP(enc) {
+        if (!enc || !Array.isArray(enc.instances)) return 0;
+        return enc.instances.reduce((s, inst) => s + (Number(inst.max_hp) || 0), 0);
+    }
+
+    /** Sum of every instance's current_hp on the encounter. */
+    function getEncounterCurrentHP(enc) {
+        if (!enc || !Array.isArray(enc.instances)) return 0;
+        return enc.instances.reduce((s, inst) => s + Math.max(0, Number(inst.current_hp) || 0), 0);
+    }
+
+    /** First non-defeated instance, or null if every instance is down. */
+    function getFirstActiveInstance(enc) {
+        if (!enc || !Array.isArray(enc.instances)) return null;
+        return enc.instances.find(inst => !inst.defeated && (Number(inst.current_hp) || 0) > 0) || null;
+    }
+
+    /**
+     * Phase 1 targeting rule: route damage to a specific instance when
+     * opts.instance_id matches; otherwise pick the lowest-current_hp non-
+     * defeated instance, ties broken by ordinal position. Damage caps at
+     * the instance's current_hp — overflow does not splash to the next
+     * instance (matches today's encounter-as-pool semantics).
+     *
+     * Returns { instance, killed, rollupResolved, rollupJustResolved }:
+     *   - instance:           the instance that took the hit (or null if none active)
+     *   - killed:             true iff this hit reduced the instance to 0
+     *   - rollupResolved:     true iff every instance is now defeated
+     *   - rollupJustResolved: true iff the rollup transitioned this call
+     *
+     * Callers check rollupJustResolved to fire encounter rewards exactly
+     * once (replaces the pre-Phase-1 hpBefore>0 && hpInfo.defeated edge).
+     */
+    function applyDamageToEncounter(enc, amount, opts) {
+        const damage = Math.max(0, Number(amount) || 0);
+        const result = { instance: null, killed: false, rollupResolved: false, rollupJustResolved: false };
+        if (!enc || !Array.isArray(enc.instances) || enc.instances.length === 0) return result;
+
+        const wasResolved = enc.instances.every(inst => inst.defeated);
+
+        // Instance-id targeting: GM emitted [DAMAGE_TO_MONSTER: <instance_id>, N].
+        // Falls through to the lowest-HP rule when the id isn't found or is
+        // already defeated, mirroring the encounter-id fallback.
+        let target = null;
+        const instanceId = opts && opts.instance_id;
+        if (instanceId) {
+            target = enc.instances.find(inst => inst.instance_id === instanceId
+                                             && !inst.defeated
+                                             && (Number(inst.current_hp) || 0) > 0) || null;
+        }
+        if (!target) {
+            // Lowest current_hp among non-defeated instances; ties broken by ordinal.
+            for (const inst of enc.instances) {
+                if (inst.defeated || (Number(inst.current_hp) || 0) <= 0) continue;
+                if (!target || Number(inst.current_hp) < Number(target.current_hp)) target = inst;
+            }
+        }
+        if (!target) {
+            // Every instance already defeated — caller will see rollupResolved.
+            result.rollupResolved = true;
+            return result;
+        }
+
+        const beforeHp = Number(target.current_hp) || 0;
+        const applied  = Math.min(damage, beforeHp);
+        target.current_hp = Math.max(0, beforeHp - applied);
+        if (target.current_hp <= 0) {
+            target.defeated = true;
+            result.killed = true;
+        }
+        result.instance = target;
+        result.rollupResolved = enc.instances.every(inst => inst.defeated);
+        result.rollupJustResolved = !wasResolved && result.rollupResolved;
+        return result;
+    }
+
+    /**
+     * Distribute legacy `damage_dealt` (the pre-Phase-1 aggregate) across
+     * the encounter's instances starting from instance 0. Used by loadGame
+     * for saves written before Phase 1 — preserves the "the player did some
+     * damage" approximation. Writes current_hp / defeated in place.
+     */
+    function distributeLegacyDamageAcrossInstances(enc, totalDamage) {
+        if (!enc || !Array.isArray(enc.instances) || enc.instances.length === 0) return;
+        let remaining = Math.max(0, Number(totalDamage) || 0);
+        for (const inst of enc.instances) {
+            if (remaining <= 0) break;
+            const hp = Number(inst.max_hp) || 0;
+            const hit = Math.min(remaining, hp);
+            inst.current_hp = Math.max(0, hp - hit);
+            inst.defeated   = inst.current_hp <= 0;
+            remaining -= hit;
+        }
     }
 
     // Entry point: take a v1 gameData from PackLoader, return a shimmed object
@@ -450,26 +617,36 @@
         return (mod && mod.id) || null;
     }
 
-    // Build the encounters{} map for the save envelope. Per the spec the
-    // shape is `{ [id]: { resolved, instances[] } }` keyed by encounter id.
-    // Per-instance HP tracking isn't modeled in runtime yet (Stage 3 damage
-    // is per encounter group, not per instance) — we still ship the spec
-    // shape with a `damage_dealt` companion so round-trip preserves the
-    // information we DO have; `instances[]` stays empty until the
-    // per-instance rewrite lands.
+    // Build the encounters{} map for the save envelope. Per JSON_SCHEMAS.md
+    // the shape is `{ [id]: { resolved, instances[] } }` keyed by encounter
+    // id. Phase 1 now writes real per-instance state. We also keep the
+    // pre-Phase-1 `damage_dealt` companion for one save-version overlap so
+    // a Phase-1 save remains loadable by a pre-Phase-1 build during testing;
+    // Phase 2 drops the legacy field. The encounters live on the shimmed
+    // module (`gd().module.rooms`), not the raw v1 source.
     function buildEncountersForSave() {
         const out = {};
-        const rooms = (gd()._v1 && gd()._v1.module && gd()._v1.module.rooms) || {};
-        const damage = gs().damageToEncounters || {};
+        const rooms = (gd().module && gd().module.rooms) || {};
         for (const room of Object.values(rooms)) {
             for (const enc of (room.encounters || [])) {
                 if (!enc || !enc.id) continue;
-                let maxHp = 0;
-                try { maxHp = (global.getEncounterHP && global.getEncounterHP(enc).max) || 0; }
-                catch (e) { maxHp = 0; }
-                const dmg = Number(damage[enc.id] || 0);
-                const resolved = maxHp > 0 && dmg >= maxHp;
-                out[enc.id] = { resolved, damage_dealt: dmg, instances: [] };
+                const instances = Array.isArray(enc.instances) ? enc.instances : [];
+                const savedInstances = instances.map(inst => ({
+                    monster_ref: inst.monster_ref,
+                    instance_id: inst.instance_id,
+                    current_hp:  Number(inst.current_hp) || 0,
+                    defeated:    !!inst.defeated
+                }));
+                const resolved = instances.length > 0 && instances.every(inst => inst.defeated);
+                const damageDealt = instances.reduce(
+                    (s, inst) => s + Math.max(0, (Number(inst.max_hp) || 0) - (Number(inst.current_hp) || 0)),
+                    0
+                );
+                out[enc.id] = {
+                    resolved,
+                    instances:    savedInstances,
+                    damage_dealt: damageDealt
+                };
             }
         }
         return out;
@@ -709,13 +886,39 @@
         gs().featureState        = m.features             ? clone(m.features)             : {};
         gs().connectionsModified = m.connections_modified ? clone(m.connections_modified) : {};
 
-        // Rehydrate damageToEncounters from encounters[id].damage_dealt
-        // (per-instance HP not modeled yet — see buildEncountersForSave).
-        const dmg = {};
-        for (const [id, row] of Object.entries(m.encounters || {})) {
-            if (row && typeof row.damage_dealt === 'number') dmg[id] = row.damage_dealt;
+        // Phase 1: rehydrate per-instance HP from the save. Two shapes:
+        //  (a) instances[] populated  → restore current_hp/defeated per instance
+        //  (b) legacy damage_dealt    → distribute across instances starting
+        //                                from instance 0 (the "all-or-nothing"
+        //                                approximation that mirrors pre-Phase-1
+        //                                behavior). Logged so the SAVE_VERSION
+        //                                trail makes the migration visible.
+        // damageToEncounters is a vestigial gameState field at this point
+        // (Phase 2 deletes it) — leave the existing object alone but never
+        // read from it for HP logic.
+        const rooms = (gd().module && gd().module.rooms) || {};
+        for (const room of Object.values(rooms)) {
+            for (const enc of (room.encounters || [])) {
+                if (!enc || !enc.id || !Array.isArray(enc.instances)) continue;
+                const row = (m.encounters || {})[enc.id];
+                if (!row) continue;
+                const savedInstances = Array.isArray(row.instances) ? row.instances : [];
+                if (savedInstances.length > 0) {
+                    // Match by instance_id; saves built before Phase 1 won't
+                    // have these populated, so the legacy branch handles them.
+                    for (const inst of enc.instances) {
+                        const saved = savedInstances.find(s => s && s.instance_id === inst.instance_id);
+                        if (!saved) continue;
+                        inst.current_hp = Math.max(0, Math.min(Number(inst.max_hp) || 0, Number(saved.current_hp) || 0));
+                        inst.defeated   = !!saved.defeated || inst.current_hp <= 0;
+                    }
+                } else if (typeof row.damage_dealt === 'number' && row.damage_dealt > 0) {
+                    distributeLegacyDamageAcrossInstances(enc, row.damage_dealt);
+                    debugLog('SAVE_VERSION', `Migrated legacy damage_dealt=${row.damage_dealt} for encounter ${enc.id} → distributed across ${enc.instances.length} instance(s)`);
+                }
+            }
         }
-        gs().damageToEncounters = dmg;
+        gs().damageToEncounters = {};
 
         gs().inCombat       = !!(payload.combat && payload.combat.in_combat);
         gs().lastCombatRoom = (payload.combat && payload.combat.last_combat_room) || null;
@@ -1033,16 +1236,12 @@
 
         const encounters = {};
         const rooms = (gd().module && gd().module.rooms) || {};
-        const damage = gs().damageToEncounters || {};
         for (const room of Object.values(rooms)) {
             for (const enc of (room.encounters || [])) {
                 if (!enc || !enc.id) continue;
-                const maxHp = (() => {
-                    try { return (global.getEncounterHP && global.getEncounterHP(enc).max) || 0; }
-                    catch (e) { return 0; }
-                })();
-                const dmg = Number(damage[enc.id] || 0);
-                const defeated = maxHp > 0 && dmg >= maxHp;
+                // Phase 1: encounter rollup is "every instance defeated".
+                const insts = Array.isArray(enc.instances) ? enc.instances : [];
+                const defeated = insts.length > 0 && insts.every(inst => inst.defeated);
                 encounters[enc.id] = { defeated, resolved: defeated };
             }
         }
@@ -1655,6 +1854,13 @@
         buildModuleState,
         markRoomVisited,
         applyReward,
+        // Phase 1 — per-instance encounter HP:
+        expandEncounterInstances,
+        getEncounterMaxHP,
+        getEncounterCurrentHP,
+        getFirstActiveInstance,
+        applyDamageToEncounter,
+        distributeLegacyDamageAcrossInstances,
         // Stage 7:
         checkCompletion,
         buildCompletionSummary,
@@ -1700,6 +1906,13 @@
     global.buildModuleState             = buildModuleState;
     global.markRoomVisited              = markRoomVisited;
     global.applyReward                  = applyReward;
+    // Phase 1 — per-instance encounter HP:
+    global.expandEncounterInstances              = expandEncounterInstances;
+    global.getEncounterMaxHP                     = getEncounterMaxHP;
+    global.getEncounterCurrentHP                 = getEncounterCurrentHP;
+    global.getFirstActiveInstance                = getFirstActiveInstance;
+    global.applyDamageToEncounter                = applyDamageToEncounter;
+    global.distributeLegacyDamageAcrossInstances = distributeLegacyDamageAcrossInstances;
     // Stage 7 legacy globals.
     global.checkCompletion              = checkCompletion;
     global.buildCompletionSummary       = buildCompletionSummary;

@@ -28,6 +28,21 @@
         return gd().bestiary[monsterId];
     }
 
+    /**
+     * Phase 1: monster stats resolve to the FIRST ACTIVE INSTANCE rather
+     * than the encounter's first-group monster_ref. This matters for
+     * heterogeneous groups (e.g. 2 scouts + 1 brute): once both scouts are
+     * down, the brute's attack/damage should drive the monster turn — pre-
+     * Phase-1 the brute would silently keep using the scout's stats because
+     * enc.monster_ref always pointed at groups[0].
+     *
+     * For x1 / homogeneous encounters this is identical to the old behavior.
+     */
+    function activeInstanceMonsterRef(enc) {
+        const inst = global.getFirstActiveInstance && global.getFirstActiveInstance(enc);
+        return (inst && inst.monster_ref) || (enc && enc.monster_ref) || null;
+    }
+
     /** First active (non-defeated) encounter in current room, or null. */
     function getFirstActiveEncounterInCurrentRoom() {
         const room = gd().module && gd().module.rooms && gd().module.rooms[gs().currentRoom];
@@ -42,7 +57,7 @@
     function getMonsterDamageFormulaForCurrentRoom() {
         const enc = getFirstActiveEncounterInCurrentRoom();
         if (!enc) return null;
-        const monster = resolveMonster(enc.monster_ref);
+        const monster = resolveMonster(activeInstanceMonsterRef(enc));
         if (!monster || !monster.attacks || monster.attacks.length === 0) return null;
         const a = monster.attacks[0];
         return (a.damage || '').trim() || null;
@@ -52,7 +67,7 @@
     function getMonsterAttackInfoForCurrentRoom() {
         const enc = getFirstActiveEncounterInCurrentRoom();
         if (!enc) return null;
-        const monster = resolveMonster(enc.monster_ref);
+        const monster = resolveMonster(activeInstanceMonsterRef(enc));
         if (!monster || !monster.attacks || monster.attacks.length === 0) return null;
         const a = monster.attacks[0];
         return {
@@ -70,7 +85,7 @@
             if (!room || !room.encounters || room.encounters.length === 0) continue;
             for (const enc of room.encounters) {
                 if (getEncounterHP(enc).defeated) continue;
-                const monster = resolveMonster(enc.monster_ref);
+                const monster = resolveMonster(activeInstanceMonsterRef(enc));
                 if (!monster || !monster.attacks || monster.attacks.length === 0) continue;
                 const d = (monster.attacks[0].damage || '').trim();
                 if (d) return d;
@@ -101,14 +116,25 @@
         return { total, breakdown };
     }
 
-    /** Current HP for an encounter (tracked damage vs monster max HP). */
+    /**
+     * Current HP for an encounter — the SUM across every instance.
+     *
+     * Phase 1: reads enc.instances[].current_hp / .max_hp directly. The
+     * shape ({current, max, defeated}) is unchanged so callers don't need
+     * updates yet. Aggregate semantics: a 3-goblin encounter reports
+     * 28/28 HP instead of the pre-Phase-1 7/7.
+     */
     function getEncounterHP(encounter) {
-        const monster = resolveMonster(encounter.monster_ref);
-        if (!monster) return { current: 0, max: 0, defeated: true };
-        const maxHP = (encounter.hp != null && encounter.hp > 0) ? Number(encounter.hp) : (monster.hp != null ? monster.hp : 0);
-        const damage = (gs().damageToEncounters && gs().damageToEncounters[encounter.id]) || 0;
-        const current = Math.max(0, maxHP - damage);
-        return { current, max: maxHP, defeated: current <= 0 };
+        if (!encounter || !Array.isArray(encounter.instances) || encounter.instances.length === 0) {
+            return { current: 0, max: 0, defeated: true };
+        }
+        let max = 0, current = 0;
+        for (const inst of encounter.instances) {
+            max     += Number(inst.max_hp) || 0;
+            current += Math.max(0, Number(inst.current_hp) || 0);
+        }
+        const defeated = encounter.instances.every(inst => inst.defeated);
+        return { current, max, defeated };
     }
 
     /** Best combat fallback room: prefer non-defeated encounters, else any room with encounters. */
@@ -168,6 +194,16 @@
                     range:       a.range
                 }))
                 : [];
+            // Phase 1: snapshot every instance so post-combat panels have
+            // per-creature data even after combat ends and the live enc is
+            // mutated. Phase 2's per-instance UI reads this directly.
+            const instancesSnapshot = (enc.instances || []).map(inst => ({
+                instance_id: inst.instance_id,
+                monster_ref: inst.monster_ref,
+                max_hp:      inst.max_hp,
+                current_hp:  inst.current_hp,
+                defeated:    !!inst.defeated
+            }));
             const idx = gs().encounterHistory.findIndex(e => e.key === key);
             const base = {
                 key,
@@ -177,7 +213,8 @@
                 displayName:     enc.name || (monster && monster.name) || enc.monster_ref || 'Unknown',
                 monsterRef:      enc.monster_ref || null,
                 acSnapshot:      ac != null ? ac : '—',
-                attacksSnapshot: attacks
+                attacksSnapshot: attacks,
+                instancesSnapshot
             };
             if (idx === -1) {
                 gs().encounterHistory.unshift({
