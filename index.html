@@ -100,7 +100,7 @@
         const CONFIG = {
             DEBUG_MODE: true,
             /** Game Pack manifest: references setting, rules, bestiary, adventure_module, items, character. */
-            GAME_PACK: './game_pack_village_three_knots.json',
+            GAME_PACK: './game_pack_lantern_and_blade.json',
             API_ENDPOINT: '/api/messages',
             /** Stream GM responses via SSE; set false to fall back to single-shot JSON. */
             STREAM: true,
@@ -480,20 +480,20 @@
             // shot. Useful for Gauntlet regression ("null completion_
             // condition must never fire") and for quickly reaching the
             // all_encounters_defeated path on packs that use it.
-            // Mutates damageToEncounters so the engine sees the kills;
-            // does NOT fire the on_defeat_effects (those belong to the
-            // GM-narrated path).
+            // Phase 1: defeats every per-encounter instance directly; does
+            // NOT fire on_defeat_effects (those belong to the GM-narrated
+            // path).
             defeatAllEncounters() {
                 const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
                 if (!rooms) return;
-                const { getEncounterHP } = window.UI && window.UI.encounters || {};
-                const hpLookup = getEncounterHP || window.getEncounterHP;
                 let n = 0;
                 for (const room of Object.values(rooms)) {
                     for (const enc of (room.encounters || [])) {
-                        if (!enc || !enc.id) continue;
-                        const hp = hpLookup ? hpLookup(enc) : { max: 9999 };
-                        gameState.damageToEncounters[enc.id] = (hp && hp.max) || 9999;
+                        if (!enc || !Array.isArray(enc.instances)) continue;
+                        for (const inst of enc.instances) {
+                            inst.current_hp = 0;
+                            inst.defeated = true;
+                        }
                         n++;
                     }
                 }
@@ -502,6 +502,58 @@
                 if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
                 if (window.updateMonsterPanel) window.updateMonsterPanel();
                 if (typeof saveGame === 'function') saveGame();
+            },
+
+            // Phase 1: defeat exactly one instance of a multi-instance
+            // encounter. Useful for smoke-testing the goblin-by-goblin
+            // kill discipline ("first scout dies, encounter remains active").
+            //   test.defeatInstance('goblin_scavengers', 'goblin_scout_1')
+            defeatInstance(encounterId, instanceId) {
+                const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
+                if (!rooms) return;
+                for (const room of Object.values(rooms)) {
+                    for (const enc of (room.encounters || [])) {
+                        if (!enc || enc.id !== encounterId || !Array.isArray(enc.instances)) continue;
+                        const inst = enc.instances.find(i => i && i.instance_id === instanceId);
+                        if (!inst) {
+                            addSystemMessage(`[DEBUG] defeatInstance: ${instanceId} not found on ${encounterId}`);
+                            return;
+                        }
+                        inst.current_hp = 0;
+                        inst.defeated = true;
+                        addSystemMessage(`[DEBUG] defeatInstance: ${encounterId}/${instanceId} (${enc.instances.filter(i => i.defeated).length}/${enc.instances.length} defeated)`);
+                        if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
+                        if (window.updateMonsterPanel) window.updateMonsterPanel();
+                        if (typeof saveGame === 'function') saveGame();
+                        return;
+                    }
+                }
+                addSystemMessage(`[DEBUG] defeatInstance: encounter ${encounterId} not found`);
+            },
+
+            // Phase 1: console.table dump of an encounter's per-instance
+            // state — the fastest way to confirm "three goblins, three
+            // independent HP bars" without scrolling the monster panel.
+            //   test.dumpEncounterInstances('goblin_scavengers')
+            dumpEncounterInstances(encounterId) {
+                const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
+                if (!rooms) return null;
+                for (const room of Object.values(rooms)) {
+                    for (const enc of (room.encounters || [])) {
+                        if (!enc || enc.id !== encounterId || !Array.isArray(enc.instances)) continue;
+                        console.log(`[DEBUG] ${encounterId} (${enc.instances.length} instance(s))`);
+                        console.table(enc.instances.map(i => ({
+                            instance_id: i.instance_id,
+                            monster_ref: i.monster_ref,
+                            max_hp:      i.max_hp,
+                            current_hp:  i.current_hp,
+                            defeated:    !!i.defeated
+                        })));
+                        return enc.instances;
+                    }
+                }
+                addSystemMessage(`[DEBUG] dumpEncounterInstances: ${encounterId} not found`);
+                return null;
             },
 
             // Post-Stage-7: measure the current system prompt size and
@@ -576,12 +628,13 @@
             defeatEncounter(encounterId) {
                 const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
                 if (!rooms) return;
-                const hpLookup = window.getEncounterHP;
                 for (const room of Object.values(rooms)) {
                     for (const enc of (room.encounters || [])) {
-                        if (!enc || enc.id !== encounterId) continue;
-                        const hp = hpLookup ? hpLookup(enc) : { max: 9999 };
-                        gameState.damageToEncounters[enc.id] = (hp && hp.max) || 9999;
+                        if (!enc || enc.id !== encounterId || !Array.isArray(enc.instances)) continue;
+                        for (const inst of enc.instances) {
+                            inst.current_hp = 0;
+                            inst.defeated = true;
+                        }
                         addSystemMessage(`[DEBUG] defeatEncounter: ${encounterId} (marked resolved)`);
                         if (window.checkCompletion) window.checkCompletion();
                         if (typeof saveGame === 'function') saveGame();

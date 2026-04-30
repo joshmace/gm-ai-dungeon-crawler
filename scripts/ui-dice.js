@@ -945,8 +945,12 @@
             if (ctx.type === 'weapon') {
                 const enc = getFirstActiveEncounterInCurrentRoom();
                 if (enc) {
-                    const hpBefore = getEncounterHP(enc).current;
-                    gs().damageToEncounters[enc.id] = (gs().damageToEncounters[enc.id] || 0) + totalDamage;
+                    // Phase 1: route through applyDamageToEncounter. Targeting
+                    // rule (lowest-HP active instance) is the helper's default
+                    // when no instance_id is supplied — Phase 2 will surface a
+                    // target picker that stamps an instance_id onto
+                    // pendingAttackResolution so the dice flow can pass it in.
+                    const result = global.applyDamageToEncounter(enc, totalDamage);
                     gs().inCombat = true;
                     gs().mode = 'combat';
                     const hpInfo = getEncounterHP(enc);
@@ -959,7 +963,13 @@
                         gs().lastCombatRoom = gs().currentRoom;
                     }
                     updateCharacterDisplay();
-                    if (hpBefore > 0 && hpInfo.defeated && enc.on_death) defeatedEncForReward = enc;
+                    // Reward fires on the rollup transition edge: the helper
+                    // returns rollupJustResolved=true ONLY when this hit was
+                    // the one that flipped every instance to defeated. This
+                    // replaces the pre-Phase-1 hpBefore>0 && hpInfo.defeated
+                    // edge — that one would mis-fire on the second-to-last
+                    // kill in a multi-instance encounter.
+                    if (result && result.rollupJustResolved && enc.on_death) defeatedEncForReward = enc;
                 }
             }
             const typeSuffix = damageTypeStr ? ` (${damageTypeStr})` : '';

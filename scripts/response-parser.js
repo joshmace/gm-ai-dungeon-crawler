@@ -233,7 +233,6 @@
     function parseMonsterDamage(text) {
         const rooms = gd().module && gd().module.rooms;
         if (!rooms) return;
-        if (!gs().damageToEncounters) gs().damageToEncounters = {};
         let roomWithUpdate = null;
         for (const [roomId, room] of Object.entries(rooms)) {
             if (!room || !room.encounters || room.encounters.length === 0) continue;
@@ -260,11 +259,17 @@
                     re.lastIndex = 0;
                     while ((m = re.exec(text)) !== null) {
                         const damage = parseInt(m[1], 10);
-                        gs().damageToEncounters[enc.id] = (gs().damageToEncounters[enc.id] || 0) + damage;
+                        // Phase 1: route through applyDamageToEncounter so the
+                        // hit lands on the lowest-HP active instance. Narrative
+                        // damage doesn't carry an instance_id — the targeting
+                        // rule picks the wounded one.
+                        const result = global.applyDamageToEncounter(enc, damage);
                         gs().inCombat = true;
                         gs().mode = 'combat';
                         roomWithUpdate = roomId;
-                        debugLog('PARSE', `Monster damage: ${enc.name} +${damage} (total: ${gs().damageToEncounters[enc.id]}/${monster.hp})`);
+                        const hpInfo = getEncounterHP(enc);
+                        const tag = result && result.instance ? result.instance.instance_id : '(no active instance)';
+                        debugLog('PARSE', `Monster damage: ${enc.name} +${damage} → ${tag} (encounter ${hpInfo.current}/${hpInfo.max})`);
                     }
                 }
                 // NOTE: Narrative death/flee detection removed — the GM frequently uses dramatic death
@@ -299,7 +304,17 @@
         return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     }
 
-    /** Find encounter by explicit tag token (encounter id/name/monster_ref/monster name). Prefers current room. */
+    /**
+     * Find encounter (and optionally a specific instance) by explicit tag
+     * token. Match priority within a room:
+     *   1) instance_id          (Phase 1 first-class — the precise tool)
+     *   2) encounter id / name
+     *   3) encounter monster_ref / monster name (legacy fallback)
+     *
+     * Returns { roomId, room, encounter, monster, instance } where instance
+     * is the matched instance object when the token resolved as an
+     * instance_id, otherwise null. Prefers the current room.
+     */
     function findEncounterForStateTag(targetToken) {
         const rooms = gd().module && gd().module.rooms;
         if (!rooms) return null;
@@ -309,6 +324,19 @@
         function scanRoom(roomId) {
             const room = rooms[roomId];
             if (!room || !room.encounters) return null;
+            // First pass: instance_id matches anywhere in this room.
+            for (const enc of room.encounters) {
+                const insts = Array.isArray(enc.instances) ? enc.instances : [];
+                const matchedInst = insts.find(inst => normalizeEntityToken(inst.instance_id) === token);
+                if (matchedInst) {
+                    return {
+                        roomId, room, encounter: enc,
+                        monster: resolveMonster(matchedInst.monster_ref || enc.monster_ref),
+                        instance: matchedInst
+                    };
+                }
+            }
+            // Second pass: encounter id / name / first-group monster_ref / monster name.
             for (const enc of room.encounters) {
                 const monster = resolveMonster(enc.monster_ref);
                 const candidates = [
@@ -319,7 +347,7 @@
                     monster && monster.name
                 ];
                 if (candidates.some(c => normalizeEntityToken(c) === token)) {
-                    return { roomId, room, encounter: enc, monster };
+                    return { roomId, room, encounter: enc, monster, instance: null };
                 }
             }
             return null;
@@ -392,11 +420,17 @@
                 debugLog('PARSE', `Tag damage to monster ignored (no target match): ${target}`);
                 continue;
             }
-            gs().damageToEncounters[found.encounter.id] = (gs().damageToEncounters[found.encounter.id] || 0) + damage;
+            // Phase 1 hybrid targeting: when the GM resolved an instance_id,
+            // route damage to that instance precisely. Otherwise fall back to
+            // the lowest-HP active instance (matches what GMs implicitly mean
+            // by an encounter-id tag — "kill the wounded one first").
+            const opts = found.instance ? { instance_id: found.instance.instance_id } : undefined;
+            const result = global.applyDamageToEncounter(found.encounter, damage, opts);
             gs().inCombat = true;
             gs().mode = 'combat';
             roomWithUpdate = found.roomId;
-            debugLog('PARSE', `Tag damage TO MONSTER: ${found.encounter.name} +${damage}`);
+            const tag = result && result.instance ? result.instance.instance_id : '(no active instance)';
+            debugLog('PARSE', `Tag damage TO MONSTER: ${found.encounter.name} +${damage} → ${tag}`);
         }
 
         const defeatedMonsterRe = /\[MONSTER_DEFEATED:\s*([^\]]+)\s*\]/gi;
@@ -408,13 +442,31 @@
                 debugLog('PARSE', `Tag monster defeated ignored (no target match): ${target}`);
                 continue;
             }
-            const hp = getEncounterHP(found.encounter);
-            const currentDamage = gs().damageToEncounters[found.encounter.id] || 0;
-            gs().damageToEncounters[found.encounter.id] = Math.max(currentDamage, hp.max);
+            // instance_id form defeats just that instance; encounter-id form
+            // defeats every remaining instance (matches the pre-Phase-1 "the
+            // goblins flee" semantics that callers may rely on).
+            if (found.instance) {
+                const inst = found.instance;
+                const before = Number(inst.current_hp) || 0;
+                if (before > 0) global.applyDamageToEncounter(found.encounter, before, { instance_id: inst.instance_id });
+                debugLog('PARSE', `Tag monster defeated: instance ${inst.instance_id} (was ${before}/${inst.max_hp})`);
+            } else {
+                let killed = 0;
+                for (const inst of (found.encounter.instances || [])) {
+                    if (inst.defeated) continue;
+                    const before = Number(inst.current_hp) || 0;
+                    if (before > 0) {
+                        global.applyDamageToEncounter(found.encounter, before, { instance_id: inst.instance_id });
+                    } else {
+                        inst.defeated = true;
+                    }
+                    killed++;
+                }
+                debugLog('PARSE', `Tag monster defeated: encounter ${found.encounter.name} (defeated ${killed} instance(s))`);
+            }
             gs().inCombat = true;
             gs().mode = 'combat';
             roomWithUpdate = found.roomId;
-            debugLog('PARSE', `Tag monster defeated: ${found.encounter.name} (set to 0/${hp.max})`);
         }
 
         const fledMonsterRe = /\[MONSTER_FLED:\s*([^\]]+)\s*\]/gi;
@@ -426,13 +478,28 @@
                 debugLog('PARSE', `Tag monster fled ignored (no target match): ${target}`);
                 continue;
             }
-            const hp = getEncounterHP(found.encounter);
-            const currentDamage = gs().damageToEncounters[found.encounter.id] || 0;
-            gs().damageToEncounters[found.encounter.id] = Math.max(currentDamage, hp.max);
+            // Tracked-as-defeated for encounter-rollup purposes — same overload
+            // pattern as MONSTER_DEFEATED (instance vs. encounter scope).
+            if (found.instance) {
+                const inst = found.instance;
+                const before = Number(inst.current_hp) || 0;
+                if (before > 0) global.applyDamageToEncounter(found.encounter, before, { instance_id: inst.instance_id });
+                debugLog('PARSE', `Tag monster fled: instance ${inst.instance_id} (tracked as defeated)`);
+            } else {
+                for (const inst of (found.encounter.instances || [])) {
+                    if (inst.defeated) continue;
+                    const before = Number(inst.current_hp) || 0;
+                    if (before > 0) {
+                        global.applyDamageToEncounter(found.encounter, before, { instance_id: inst.instance_id });
+                    } else {
+                        inst.defeated = true;
+                    }
+                }
+                debugLog('PARSE', `Tag monster fled: encounter ${found.encounter.name} (all instances tracked as defeated)`);
+            }
             gs().inCombat = true;
             gs().mode = 'combat';
             roomWithUpdate = found.roomId;
-            debugLog('PARSE', `Tag monster fled (tracked as defeated): ${found.encounter.name} (set to 0/${hp.max})`);
         }
 
         if (roomWithUpdate) {
