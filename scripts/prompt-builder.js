@@ -544,6 +544,16 @@
         if (global.gameState) {
             global.gameState._lastSystemPromptLen = out.length;
             global.gameState._lastSystemPromptBuiltAt = Date.now();
+            // Phase 3: this prompt is being sent to the GM with currentRoom
+            // rendered FULL (description + features + encounters). Mark the
+            // room as panel-ready so the right-hand encounter panel can
+            // surface its enemies on the NEXT response cycle. Walking
+            // through a threshold doesn't trigger this — only an in-room
+            // prompt build does.
+            if (!Array.isArray(global.gameState.panelReadyRooms)) global.gameState.panelReadyRooms = [];
+            if (gs.currentRoom && !global.gameState.panelReadyRooms.includes(gs.currentRoom)) {
+                global.gameState.panelReadyRooms.push(gs.currentRoom);
+            }
         }
         if (global.debugLog) {
             global.debugLog('PROMPT', `built system prompt: ${out.length} chars (mode=${gs.mode || 'exploration'}, room=${gs.currentRoom}, last_roll=${gs.lastUserRollType || '-'}, encounters=${(room.encounters || []).length})`);

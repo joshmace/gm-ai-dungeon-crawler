@@ -226,6 +226,13 @@
                     const room = gameData.module.rooms[roomId];
                     addSystemMessage(`[DEBUG] Teleported to ${room.name}`);
                     addNarration(room.description);
+                    // Phase 3: teleport semantics treat the destination as
+                    // "the GM already knows this room" — the test harness
+                    // surfaces the description directly. Mark panel-ready
+                    // so the encounter panel surfaces enemies immediately,
+                    // matching prior test workflows.
+                    if (!Array.isArray(gameState.panelReadyRooms)) gameState.panelReadyRooms = [];
+                    if (!gameState.panelReadyRooms.includes(roomId)) gameState.panelReadyRooms.push(roomId);
                     // Stage 5: single coordination point — marks visited,
                     // renders feature cards + connections strip, fires
                     // on_enter hazards. Matches the production room-change

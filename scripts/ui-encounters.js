@@ -241,7 +241,17 @@
         if (!gs().inCombat && gs().lastCombatRoom != null && gs().lastCombatRoom !== '') {
             roomIdToShow = gs().lastCombatRoom;
         }
-        recordEncounterHistoryForRoom(roomIdToShow);
+        // Phase 3: only surface a room's encounters in the panel after the
+        // GM has had a prompt build with that room as current — i.e. it has
+        // seen the full description + encounter info and had a chance to
+        // narrate them. Without this gate, walking through a fresh-room
+        // threshold pre-loads enemies into the panel before the GM has even
+        // mentioned them. inCombat is a fallback for the rare case combat
+        // begins before the room's first full prompt build.
+        const ready = Array.isArray(gs().panelReadyRooms) ? gs().panelReadyRooms : [];
+        if (ready.includes(roomIdToShow) || gs().inCombat) {
+            recordEncounterHistoryForRoom(roomIdToShow);
+        }
 
         if (!gs().encounterHistory || gs().encounterHistory.length === 0) {
             container.className = 'monster-panel-empty';

@@ -218,6 +218,13 @@
         gs().featureState = {};
         gs().connectionsModified = {};
         gs().visitedRooms = [];
+        // Phase 3: rooms whose encounter info has been "released" to the
+        // monster panel. A room joins this list the first time the system
+        // prompt is built with it as the current room — i.e. the GM has
+        // had a turn with the full room description + encounters in hand.
+        // Walking through the threshold of a fresh-encounter room does NOT
+        // surface enemies in the panel until the GM has narrated them.
+        gs().panelReadyRooms = [];
         gs().commandHistory = [];
         gs().commandHistoryIndex = -1;
         gs().commandHistoryDraft = '';
