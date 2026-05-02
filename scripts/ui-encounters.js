@@ -406,6 +406,20 @@
         const instances = Array.isArray(encounter.instances) ? encounter.instances : [];
         const hpInfo = includeCurrentHP ? getEncounterHP(encounter) : null;
 
+        // Phase 3: surface the authored `placement` field when the encounter
+        // is active. Without this, the GM only sees the stat block and has
+        // to invent how/where these enemies appear in narration when the
+        // player asks. The placement field exists in the module precisely
+        // for this — wire it through so the GM uses authored prose instead.
+        const isActive = hpInfo ? !hpInfo.defeated : true;
+        const trimPrompt = (s) => {
+            const str = String(s || '').replace(/\s+/g, ' ').trim();
+            return str.length > 260 ? str.slice(0, 259) + '…' : str;
+        };
+        const placementLine = (isActive && encounter.placement)
+            ? `\n  Placement on engagement: "${trimPrompt(encounter.placement)}"`
+            : '';
+
         // Build the rewards suffix once — applied to both the single-instance
         // and multi-instance shapes so the GM hears about XP / treasure
         // exactly once per encounter regardless of layout.
@@ -455,7 +469,7 @@
             const idTrail = instances.length === 1
                 ? `, instance ${instances[0].instance_id}`
                 : '';
-            return `${encounter.name} (${monster.name}, id ${encounter.id}${idTrail}): ${hpStr}, AC ${monster.ac}. Attacks: ${attackStr}${rewardSuffix}`;
+            return `${encounter.name} (${monster.name}, id ${encounter.id}${idTrail}): ${hpStr}, AC ${monster.ac}. Attacks: ${attackStr}${rewardSuffix}${placementLine}`;
         }
 
         // Multi-instance: header + per-instance lines. The GM should target
@@ -476,6 +490,7 @@
         const acFragment = homogeneous ? `AC ${monster.ac}. ` : '';
         let header = `${encounter.name} (id ${encounter.id}): ${acFragment}${statusStr}. Attacks: ${attackStr}${rewardSuffix}`;
         let lines = [header];
+        if (placementLine) lines.push(placementLine.replace(/^\n/, ''));
         for (const inst of instances) {
             const im = resolveMonster(inst.monster_ref) || monster;
             const max = Number(inst.max_hp) || 0;
