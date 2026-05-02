@@ -188,11 +188,19 @@
         } else if (match) {
             const ability = match[1].trim();
             const abilityLower = ability.toLowerCase();
+            let suppressRollUI = false;
             if (abilityLower === 'damage' || abilityLower.includes('attack')) {
                 gs().inCombat = true;
                 gs().mode = 'combat';
                 const combatLegit = guardCombatRoomHasActiveEncounter();
-                if (combatLegit && abilityLower === 'damage' && !gs().readiedWeaponName) {
+                if (!combatLegit) {
+                    // Phase 3: GM tried to drive an attack/damage roll in a
+                    // room with no active enemy. The guard already reverted
+                    // combat state and posted the callout; suppress the dice
+                    // prompt too so the player isn't stuck staring at
+                    // "Roll Attack:" with nothing to swing at.
+                    suppressRollUI = true;
+                } else if (abilityLower === 'damage' && !gs().readiedWeaponName) {
                     const sources = gd().character && gd().character.equipment
                         ? [...(gd().character.equipment.wielded || []), ...(gd().character.equipment.carried || [])]
                         : [];
@@ -206,7 +214,11 @@
             }
             const formattedResponse = displayResponse.replace(rollRequestPattern, '').trim();
             if (formattedResponse) addNarration(formattedResponse);
-            showDiceSection(`Roll ${ability}:`, ability);
+            if (suppressRollUI) {
+                disableInput(false);
+            } else {
+                showDiceSection(`Roll ${ability}:`, ability);
+            }
         } else {
             // Desired order: GM block first, then monster callouts, then outcome line.
             if (displayResponse) addNarration(displayResponse);
