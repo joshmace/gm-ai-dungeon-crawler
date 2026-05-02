@@ -505,8 +505,6 @@
 
         if (roomWithUpdate) {
             gs().currentRoom = roomWithUpdate;
-            // Do NOT call ensureCombatRoomHasEncounters() here: it would jump to another room with
-            // active encounters (e.g. morale_chamber) when this room just ended combat, making Scout/Fighter appear early.
             const room = gd().module && gd().module.rooms && gd().module.rooms[roomWithUpdate];
             if (room && room.encounters && room.encounters.length > 0) {
                 const allDefeated = room.encounters.every(enc => getEncounterHP(enc).defeated);

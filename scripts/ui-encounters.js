@@ -137,38 +137,6 @@
         return { current, max, defeated };
     }
 
-    /** Best combat fallback room: prefer non-defeated encounters, else any room with encounters. */
-    function getFirstRoomIdWithEncounters() {
-        const rooms = gd().module && gd().module.rooms;
-        if (!rooms) return null;
-        const ids = Object.keys(rooms).sort();
-        for (const id of ids) {
-            const r = rooms[id];
-            if (!r || !r.encounters || r.encounters.length === 0) continue;
-            if (r.encounters.some(enc => !getEncounterHP(enc).defeated)) return id;
-        }
-        for (const id of ids) {
-            const r = rooms[id];
-            if (r && r.encounters && r.encounters.length > 0) return id;
-        }
-        return null;
-    }
-
-    /** When combat starts, ensure currentRoom has encounters so the monster panel populates. */
-    function ensureCombatRoomHasEncounters() {
-        const rooms = gd().module && gd().module.rooms;
-        if (!rooms) return;
-        const cur = rooms[gs().currentRoom];
-        const curHasActiveEncounters = cur && cur.encounters && cur.encounters.some(enc => !getEncounterHP(enc).defeated);
-        if (curHasActiveEncounters) return;
-        const fallback = getFirstRoomIdWithEncounters();
-        if (fallback) {
-            gs().currentRoom = fallback;
-            if (global.updateCharacterDisplay) global.updateCharacterDisplay();
-            debugLog('PARSE', `Combat started but current room had no active encounters; set currentRoom to ${fallback} for monster panel`);
-        }
-    }
-
     /** Stable key for encounter-history entries. */
     function getEncounterHistoryKey(roomId, encounter) {
         return `${roomId || 'unknown'}::${encounter && encounter.id ? encounter.id : 'unknown'}`;
@@ -520,8 +488,6 @@
         getMonsterDamageFormulaFromAnyRoom,
         rollDiceFormula,
         getEncounterHP,
-        getFirstRoomIdWithEncounters,
-        ensureCombatRoomHasEncounters,
         getEncounterHistoryKey,
         recordEncounterHistoryForRoom,
         updateMonsterPanel,
@@ -538,8 +504,6 @@
     global.getMonsterDamageFormulaFromAnyRoom    = getMonsterDamageFormulaFromAnyRoom;
     global.rollDiceFormula                       = rollDiceFormula;
     global.getEncounterHP                        = getEncounterHP;
-    global.getFirstRoomIdWithEncounters          = getFirstRoomIdWithEncounters;
-    global.ensureCombatRoomHasEncounters         = ensureCombatRoomHasEncounters;
     global.getEncounterHistoryKey                = getEncounterHistoryKey;
     global.recordEncounterHistoryForRoom         = recordEncounterHistoryForRoom;
     global.updateMonsterPanel                    = updateMonsterPanel;
