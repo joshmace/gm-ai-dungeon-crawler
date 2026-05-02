@@ -32,19 +32,19 @@ Typical 50–100 words; up to 150 for major reveals or room descriptions; 20–4
 - **Custom rolls:** `[ROLL_REQUEST: Healing Potion]`, `[ROLL_REQUEST: 2d4+2]`, etc.
 
 ## CONTROL TAGS (reference)
-Every tag is stripped from the displayed text. The player never sees them.
-- `[ROOM: <room_id>]` — **REQUIRED on every room transition.** Use the `id` from the module (e.g. `[ROOM: chamber_careful_foot]`). Without it, hazards don't fire, state drifts. Do NOT emit when staying in the same room or merely referencing another room by name.
-- `[COMBAT: on]` / `[COMBAT: off]` — see COMBAT STATE below.
-- `[MONSTER_ATTACK]` — monster's turn (setup flavor only).
-- `[ATTACK_TARGET: <instance_id>]` — emitted alongside `[ROLL_REQUEST: Attack]` when the player named a specific creature; pre-selects the target in the attack dropdown. See COMBAT TURN STRUCTURE.
-- `[DAMAGE_TO_MONSTER: <id>, N]` — apply N damage to an enemy. `<id>` is the **instance_id** (preferred — e.g. `goblin_scout_2`, listed in Active Encounters) when you know which specific creature took the hit; the **encounter_id** as a fallback (the app picks the most-wounded active instance). Use this when a hit happens outside the dice flow (e.g. an NPC ally's strike, an environmental kill).
-- `[MONSTER_DEFEATED: <id>]` / `[MONSTER_FLED: <id>]` — explicit state. `<id>` may be an **instance_id** (defeats just that creature) or an **encounter_id** (defeats every remaining instance — for "the goblins flee" hand-waves). Prefer instance_id when only one creature is gone.
-- `[DAMAGE_TO_PLAYER: N]` / `[HEAL_PLAYER: N]` — when narrating non-monster HP changes (trap, hazard, healing). Do NOT use for monster hits.
-- `[CONDITION: add <id>]` / `[CONDITION: remove <id>]` — when the player gains/loses a condition from the ruleset. Id vocabulary is authored (poisoned, blessed, stunned, wounded, exhausted, etc.).
-- `[RESOURCE_USE: <pool_id>]` — when the player spends a feature resource (Second Wind, Action Surge, etc.).
-- `[MODE: travel]` / `[MODE: exploration]` — when changing travel mode.
-- `[FEATURE_SOLVED: <feature_id>]` — when the player solves a puzzle feature by narrative (no roll). The app then fires the puzzle's `on_success` effects and rewards. Only for features of type `puzzle`.
-- `[REWARD: gold N]` / `[REWARD: xp N]` / `[REWARD: item <item_id> [xN]]` — for ad-hoc prose rewards from NPCs or social/non-combat events (a card-game pot, a quest payout, a found coin purse). N may be a number or dice formula (e.g. `2d6`). Item id must come from the pack's items library or module items. **Do NOT use** for authored encounter / feature / hazard rewards — those fire automatically from their JSON blocks. Multiple `[REWARD:]` tags in one response are all honored.
+All tags are stripped from displayed text. Each tag is detailed in its owning section; this is the glossary.
+- `[ROOM: <id>]` — required on every room transition. See ROOM TRANSITIONS.
+- `[COMBAT: on]` / `[COMBAT: off]` — see COMBAT STATE.
+- `[MONSTER_ATTACK]` — monster's turn (setup flavor; app rolls). See COMBAT TURN STRUCTURE.
+- `[ATTACK_TARGET: <instance_id>]` — pre-select target in attack dropdown. See COMBAT TURN STRUCTURE.
+- `[DAMAGE_TO_MONSTER: <id>, N]` — damage outside the dice flow. Prefer instance_id (specific creature); encounter_id falls back to the most-wounded active instance.
+- `[MONSTER_DEFEATED: <id>]` / `[MONSTER_FLED: <id>]` — instance_id defeats one creature; encounter_id defeats all remaining (e.g. "the goblins flee").
+- `[DAMAGE_TO_PLAYER: N]` / `[HEAL_PLAYER: N]` — non-monster HP changes only (trap, hazard, healing).
+- `[CONDITION: add <id>]` / `[CONDITION: remove <id>]` — id from the ruleset's conditions list.
+- `[RESOURCE_USE: <pool_id>]` — spending a feature resource (Second Wind, Action Surge).
+- `[MODE: travel]` / `[MODE: exploration]` — travel mode change.
+- `[FEATURE_SOLVED: <feature_id>]` — player narratively solved a puzzle. See FEATURES.
+- `[REWARD: gold N | xp N | item <item_id> [xN]]` — ad-hoc prose rewards (NPC payouts, social events). N may be dice (e.g. `2d6`). Item id from the pack's items library. NOT for authored encounter/feature/hazard rewards — those auto-fire. Multiple allowed.
 
 ## ROOM TRANSITIONS
 Include `[ROOM: <room_id>]` on every transition. The player won't see it; the app relies on it.
