@@ -183,7 +183,7 @@
         // When the player changes rooms, the next turn's LAYOUT_BLOCK
         // rebuilds with the new current room in full — no loss of fidelity,
         // just paged access.
-        let out = '\nNote: the CURRENT ROOM is rendered in full below. Other rooms are listed by id + name + exits only; their full descriptions, features, hazards, and encounters will appear when the player enters them. Use them only to route movement, not to invent content you haven\'t been given.\n';
+        let out = '\nCURRENT ROOM rendered in full below; other rooms compact (id + name + exits) — full detail loads when the player enters. Use compact rooms to route movement only. Compact-exit notation: `label → target_id (v|u, [LOCKED])` where v = visited, u = unvisited.\n';
 
         // Current room (full detail).
         const current = currentRoomId ? rooms[currentRoomId] : null;
@@ -224,13 +224,13 @@
         const visited = Array.isArray(gs.visitedRooms) ? gs.visitedRooms : [];
         let out = `\n--- CURRENT ROOM: ${room.name} (id: ${roomId}) ---\n`;
         out += `Description: ${room.description}\n`;
-        out += `Exits (use ONLY these; click-driven in-app too):\n${renderExitsDetailed(room, rooms, visited)}\n`;
+        out += `Exits:\n${renderExitsDetailed(room, rooms, visited)}\n`;
 
         if (room.features && room.features.length > 0) {
             out += renderFeaturesBlock(room.features);
         }
         if (Array.isArray(room.hazards) && room.hazards.length > 0) {
-            out += 'Hazards (APP HANDLES — do not request rolls for these; narrate only after the app reports the outcome in a callout):\n';
+            out += 'Hazards (app handles — see HAZARDS):\n';
             for (const h of room.hazards) {
                 const tt = (h.trigger && h.trigger.type) || 'on_enter';
                 const shape = h.detection && h.avoidance ? 'detect-then-avoid'
@@ -240,7 +240,7 @@
             }
         }
         if (room.encounters && room.encounters.length > 0) {
-            out += 'Encounters here (ONLY these monsters exist in this room): ';
+            out += 'Encounters: ';
             out += room.encounters.map(e => e.name + ' (' + e.monster_ref + ')').join(', ') + '\n';
         }
         return out;
@@ -265,12 +265,12 @@
         return Object.entries(room.connections).map(([key, authored]) => {
             const c = effectiveConnection(key, authored, overrides);
             if (c.state === 'hidden') return null;   // don't surface hidden doors in the prompt
-            const target = c.target ? rooms[c.target] : null;
-            const targetName = target ? target.name : (c.target || '?');
-            const vFlag = visited && c.target && visited.includes(c.target) ? ', visited' : ', unvisited';
+            const vFlag = visited && c.target && visited.includes(c.target) ? 'v' : 'u';
             const stateTag = c.state === 'locked' ? ', LOCKED' : '';
             const label = c.label || key;
-            return `${label} → ${targetName} (${c.target || '?'}${vFlag}${stateTag})`;
+            // Target name omitted; each compact room's own line carries id + name,
+            // so the GM can resolve the destination by scanning the layout block.
+            return `${label} → ${c.target || '?'} (${vFlag}${stateTag})`;
         }).filter(Boolean).join(', ') || 'none';
     }
 
@@ -316,7 +316,7 @@
             ? global.GameState.buildModuleState()
             : { features: gs.featureState || {}, connectionsModified: gs.connectionsModified || {}, encounters: {} };
 
-        let out = 'Features (APP DRIVES cards for these — do not request rolls or narrate outcomes; only embellish lore prose and judge puzzle proposals via [FEATURE_SOLVED: <id>]):\n';
+        let out = 'Features (app drives cards — see FEATURES):\n';
         for (const f of features) {
             if (!f) continue;
             const type = (f.type || 'lore').toLowerCase();
