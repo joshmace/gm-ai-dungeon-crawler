@@ -120,7 +120,4 @@ Three buckets per player action:
 
 DCs (from ruleset): {{DCS}}
 
-# TONE
-Atmospheric but concise. Show don't tell. Build tension through description.
-
 Respond as GM. Wait for the player's next message before continuing.
