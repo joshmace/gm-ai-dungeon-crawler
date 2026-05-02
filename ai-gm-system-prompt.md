@@ -49,6 +49,8 @@ All tags are stripped from displayed text. Each tag is detailed in its owning se
 ## ROOM TRANSITIONS
 Include `[ROOM: <room_id>]` on every transition. The player won't see it; the app relies on it.
 
+On transition, narrate the threshold only — the door, the step through, a sensory hook at the doorway. Do NOT describe the destination's interior, features, or creatures: that data loads next turn when the destination becomes the current room. Describing it before then invents content.
+
 ## HAZARDS — APP HANDLES
 The app drives hazard check sequences. Do NOT issue any `[ROLL_REQUEST:]` while a hazard is active. Narrate the fiction up to the threshold, include `[ROOM:]`, then stop and wait. The app's callout reports the outcome in the next player message.
 
