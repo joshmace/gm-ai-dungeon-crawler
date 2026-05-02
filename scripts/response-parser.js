@@ -15,7 +15,7 @@
  *                        addErrorMessage, parseSceneDirectives,
  *                        normalizeNarrativeFormatting, CONTROL_TAG_RE
  *   - Encounters:        resolveMonster, getFirstActiveEncounterInCurrentRoom,
- *                        getEncounterHP, ensureCombatRoomHasEncounters,
+ *                        getEncounterHP,
  *                        recordEncounterHistoryForRoom, updateMonsterPanel,
  *                        getExpectedRewardsForCurrentRoom, rollDiceFormula,
  *                        getMonsterAttackInfoForCurrentRoom,
@@ -191,8 +191,8 @@
             if (abilityLower === 'damage' || abilityLower.includes('attack')) {
                 gs().inCombat = true;
                 gs().mode = 'combat';
-                ensureCombatRoomHasEncounters();
-                if (abilityLower === 'damage' && !gs().readiedWeaponName) {
+                const combatLegit = guardCombatRoomHasActiveEncounter();
+                if (combatLegit && abilityLower === 'damage' && !gs().readiedWeaponName) {
                     const sources = gd().character && gd().character.equipment
                         ? [...(gd().character.equipment.wielded || []), ...(gd().character.equipment.carried || [])]
                         : [];
@@ -609,6 +609,28 @@
         }
     }
     
+    /**
+     * Phase 3: combat must never silently teleport the player. When
+     * [COMBAT: on], a [ROLL_REQUEST: damage|attack], or the "combat begins"
+     * heuristic fires in a room with no active enemy instance, revert the
+     * just-set combat flags and surface a callout. Returns true if combat
+     * is legitimately on (currentRoom has at least one non-defeated
+     * instance); false if the guard reverted state. currentRoom is never
+     * changed here — that was the cross-room teleport bug.
+     */
+    function guardCombatRoomHasActiveEncounter() {
+        const rooms = gd().module && gd().module.rooms;
+        const cur = rooms && rooms[gs().currentRoom];
+        const hasActive = cur && Array.isArray(cur.encounters)
+            && cur.encounters.some(enc => !getEncounterHP(enc).defeated);
+        if (hasActive) return true;
+        gs().inCombat = false;
+        gs().mode = 'exploration';
+        addMechanicsCallout('No active enemy in this room. Combat tag ignored.');
+        debugLog('PARSE', `Combat ignored: no active enemy in ${gs().currentRoom}`);
+        return false;
+    }
+
     /** Parse [COMBAT: on] and [COMBAT: off] — GM explicitly sets combat state. Takes precedence over heuristics. */
     function tryParseCombatTag(text) {
         if (!text) return;
@@ -618,9 +640,10 @@
             gs().inCombat = true;
             gs().mode = 'combat';
             gs().combatStateFromTag = true;
-            ensureCombatRoomHasEncounters();
+            if (guardCombatRoomHasActiveEncounter()) {
+                debugLog('PARSE', 'Combat state: on (GM tag)');
+            }
             updateCharacterDisplay();
-            debugLog('PARSE', 'Combat state: on (GM tag)');
         } else if (offMatch) {
             gs().inCombat = false;
             gs().mode = 'exploration';
@@ -639,9 +662,10 @@
         if (/\bcombat\s+(?:begins?|starts?)\b/.test(t) || /\b(?:the\s+)?(?:fight|battle)\s+(?:begins?|starts?|is\s+on)\b/.test(t) || /\b(?:you\s+are\s+)(?:in\s+)?combat\b/.test(t)) {
             gs().inCombat = true;
             gs().mode = 'combat';
-            ensureCombatRoomHasEncounters();
+            if (guardCombatRoomHasActiveEncounter()) {
+                debugLog('PARSE', 'Combat began (GM narrative fallback)');
+            }
             updateCharacterDisplay();
-            debugLog('PARSE', 'Combat began (GM narrative fallback)');
         }
     }
     
