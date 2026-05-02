@@ -477,7 +477,7 @@
             const idTrail = instances.length === 1
                 ? `, instance ${instances[0].instance_id}`
                 : '';
-            return `${encounter.name} (${monster.name}, id ${encounter.id}${idTrail}): ${hpStr}, AC ${monster.ac} (use this exact AC for hit/miss). Attacks: ${attackStr}${rewardSuffix}`;
+            return `${encounter.name} (${monster.name}, id ${encounter.id}${idTrail}): ${hpStr}, AC ${monster.ac}. Attacks: ${attackStr}${rewardSuffix}`;
         }
 
         // Multi-instance: header + per-instance lines. The GM should target
@@ -490,13 +490,13 @@
         // creature. Homogeneous encounters keep the encounter-level AC.
         const activeCount = instances.filter(i => !i.defeated).length;
         const statusStr = hpInfo && hpInfo.defeated
-            ? `DEFEATED — narrate the last death, award XP/treasure from On death`
-            : `ACTIVE — ${activeCount} of ${instances.length} instances remaining`;
+            ? `DEFEATED — narrate the last death; award XP/treasure from On death`
+            : `${activeCount} of ${instances.length} active`;
         const refs = new Set(instances.map(i => i && i.monster_ref).filter(Boolean));
         const homogeneous = refs.size <= 1;
 
         const acFragment = homogeneous ? `AC ${monster.ac}. ` : '';
-        let header = `${encounter.name} (id ${encounter.id}): ${acFragment}Status: ${statusStr}. Attacks: ${attackStr}${rewardSuffix}`;
+        let header = `${encounter.name} (id ${encounter.id}): ${acFragment}${statusStr}. Attacks: ${attackStr}${rewardSuffix}`;
         let lines = [header];
         for (const inst of instances) {
             const im = resolveMonster(inst.monster_ref) || monster;
@@ -504,7 +504,7 @@
             const cur = Math.max(0, Number(inst.current_hp) || 0);
             const acStr = homogeneous ? '' : (im.ac != null ? `AC ${im.ac}, ` : '');
             const status = inst.defeated
-                ? `DEFEATED, ${cur}/${max} — narrate the death; do NOT let this creature act`
+                ? `DEFEATED, ${cur}/${max}`
                 : `${acStr}HP ${cur}/${max}`;
             lines.push(`  - ${inst.instance_id} (${im.name || inst.monster_ref}, ${status})`);
         }

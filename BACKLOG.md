@@ -180,21 +180,29 @@ Open polish items surfaced during the v1 refactor smoke tests, folded in from `P
   effect and optionally surfaces a "You drop the X." narrative entry
   so the GM can react. Give / transfer hooks into the NPC flow.
 
-### `[L]` System prompt back in RED zone (~19.6k post-PR-#4)
+### `[L]` System prompt back at the RED edge in dense modules
 
-- **Surfaced:** Stage 6 smoke test (2026-04-24) — session report from
-  chamber_oathblade showed 21,140 chars (RED ≥ 16k). PR #4 trimmed
-  template content by 1.7k; full prompt now ~19.6k mid-play. Still RED.
-- **Behavior risk:** instruction drift (GM forgets tag contract,
-  narrates past the 150-word cap, mixes combat sequencing). Stage 4
-  hit this at 23k and mitigated via the "current room full, others
-  compact" LAYOUT pass. The same direction still applies.
-- **Fix direction:** another trim pass, probably targeting the
-  RULESET_BLOCK (conditions list is already 90-char clamped;
-  difficulty ladder and saves section could compress). Also worth
-  reviewing whether ENCOUNTER_INFO's "exact stats" block can shrink
-  now that the engine owns combat. Defer until we see real behavior
-  drift, but log it here so it doesn't slip.
+- **History:** Stage 6 smoke test surfaced 21,140 chars (RED ≥ 16k) at
+  chamber_oathblade (2026-04-24). PR #4 trimmed template content by
+  1.7k. By 2026-05-02 the worst-case room was back at 22,087.
+- **2026-05-02 trim pass (this PR).** Re-baselined in 4 rooms: worst
+  case Crow's Hollow Officer's Study mid-combat 22,087 → **16,583**
+  (−5,504). Three of four rooms now YELLOW. Cuts came from the static
+  template (13,471 → 9,033, ~4.4k saved) plus RULESET, LAYOUT, and
+  ENCOUNTER_INFO prose tightening. Pure phrasing/de-duplication; no
+  contract changes. Smoke-test scenarios (Crow's Hollow 3-goblin
+  encounter with `[ATTACK_TARGET:]` pre-select, Three Knots solo
+  dead-king, Gauntlet 3-skeleton) all passed without behavior drift.
+- **Status:** worst case is 583 chars over the 16k threshold (still
+  RED, but close to the line). Phase 3 (cross-room combat teleport
+  fix) and future features will push back upward — revisit if a
+  session report shows the worst case climbing past ~17.5k or any
+  GM regression appears (forgets `[ROOM:]`, narrates with numbers,
+  combines combat steps, etc.).
+- **Next-pass direction (if needed):** drop the redundant `(id: foo)`
+  labelling on compact-room lines (the id is already in the prefix);
+  second-pass tightening of WHO ROLLS / COMBAT TURN STRUCTURE /
+  ADJUDICATION for ~600-1,000 more chars without losing contracts.
 
 ### `[L]` Damage callout should show dice face × 2 separately on crit
 

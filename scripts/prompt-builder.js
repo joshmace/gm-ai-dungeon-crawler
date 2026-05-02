@@ -43,7 +43,7 @@
 
         // Header + design philosophy.
         const systemLabel = r.name || r.id || 'OSR';
-        lines.push(`System: ${systemLabel}. Honor these mechanics; do not substitute your own numbers or rules.`);
+        lines.push(`System: ${systemLabel}.`);
         if (r.design_philosophy) lines.push(`Design philosophy: ${r.design_philosophy}`);
 
         // Checks — direction (roll-high vs roll-under) and adv/disadv flag.
@@ -51,14 +51,14 @@
         if (checks) {
             const dice = checks.dice || '1d20';
             if (checks.method === 'roll_under_score') {
-                lines.push(`Checks: roll ${dice}; succeed on a roll ≤ the target (ability score or save target). Natural 1 = critical success, natural 20 = critical failure. The app judges success/failure on every roll and reports it in the callout — you narrate the outcome, not the number.`);
+                lines.push(`Checks: roll ${dice}; succeed on roll ≤ target (ability score or save target). Nat 1 = crit success; nat 20 = crit failure. App judges and reports — you narrate.`);
             } else {
-                lines.push(`Checks: roll ${dice} + modifier; succeed on a total ≥ the DC. Natural 20 = critical success, natural 1 = critical failure.`);
+                lines.push(`Checks: roll ${dice} + mod; succeed on total ≥ DC. Nat 20 = crit success; nat 1 = crit failure.`);
             }
             if (checks.advantage_disadvantage) {
-                lines.push(`Advantage / disadvantage: when the GM calls for it, use [ROLL_REQUEST: <ability|skill>, advantage] or [ROLL_REQUEST: <ability|skill>, disadvantage]. The app rolls 2d20 and keeps the high (advantage) or low (disadvantage) for roll-high packs; swapped for roll-under.`);
+                lines.push(`Adv/disadv: append ", advantage" or ", disadvantage" to the [ROLL_REQUEST]; app rolls 2d20 and keeps high/low.`);
             } else {
-                lines.push(`Advantage / disadvantage: NOT supported in this ruleset — never append ", advantage" or ", disadvantage" to a [ROLL_REQUEST].`);
+                lines.push(`Adv/disadv: NOT supported — never append ", advantage" or ", disadvantage".`);
             }
         }
 
@@ -67,9 +67,9 @@
         const savesCfg = r.character_model && r.character_model.saves;
         if (savesCfg && savesCfg.type === 'categorical' && Array.isArray(savesCfg.categories) && savesCfg.categories.length) {
             const names = savesCfg.categories.map(c => `${c.id} (${c.name})`).join('; ');
-            lines.push(`Saves (categorical): authored target on the character sheet. Call for one via [ROLL_REQUEST: <save_id>] using these ids: ${names}.`);
+            lines.push(`Saves (categorical, target on character sheet): [ROLL_REQUEST: <save_id>] with ids: ${names}.`);
         } else if (savesCfg && savesCfg.type !== 'categorical') {
-            lines.push(`Saves (per-ability): call for a save via [ROLL_REQUEST: <ability> save], e.g. [ROLL_REQUEST: CON save]. Plain [ROLL_REQUEST: <ability>] is an ability check (no proficiency).`);
+            lines.push(`Saves (per-ability): [ROLL_REQUEST: <ability> save], e.g. [CON save]. Plain [ROLL_REQUEST: <ability>] is an ability check (no proficiency).`);
         }
 
         // Difficulty ladder — roll-high emits DC numbers; roll-under emits target modifiers.
@@ -96,25 +96,27 @@
             const attackRes = r.combat.attack && r.combat.attack.resolution;
             const hasProf = Array.isArray(r.progression && r.progression.level_table)
                 && r.progression.level_table.some(row => typeof row.proficiency_bonus === 'number');
-            const profPart = hasProf ? ' + proficiency' : '';
+            const profPart = hasProf ? '+prof' : '';
             if (attackRes === 'roll_high_vs_ac' || !attackRes) {
-                lines.push(`Attack: d20 + ability modifier${profPart} vs target AC (hit if total ≥ AC). Melee uses ${(r.combat.damage && r.combat.damage.melee_ability || 'str').toUpperCase()}; ranged uses ${(r.combat.damage && r.combat.damage.ranged_ability || 'dex').toUpperCase()}. The app resolves attacks end-to-end; never narrate numbers.`);
+                const melee = (r.combat.damage && r.combat.damage.melee_ability || 'str').toUpperCase();
+                const ranged = (r.combat.damage && r.combat.damage.ranged_ability || 'dex').toUpperCase();
+                lines.push(`Attack: d20+mod${profPart ? '+'+profPart : ''} vs AC. Melee=${melee}; ranged=${ranged}. App resolves end-to-end.`);
             }
             if (r.combat.damage) {
                 lines.push(`Damage: ${r.combat.damage.formula || 'weapon_die_plus_ability_mod'}.`);
             }
             const crit = r.combat.critical_hit;
             if (crit) {
-                const trig = crit.trigger === 'nat_19_or_20' ? 'natural 19 or 20' : 'natural 20';
-                const eff  = crit.effect === 'max_damage' ? 'maximized damage dice'
-                           : crit.effect === 'extra_die'  ? 'one extra damage die'
+                const trig = crit.trigger === 'nat_19_or_20' ? 'nat 19/20' : 'nat 20';
+                const eff  = crit.effect === 'max_damage' ? 'max damage dice'
+                           : crit.effect === 'extra_die'  ? '+1 damage die'
                            : 'doubled damage dice';
-                lines.push(`Critical hit: ${trig} → ${eff}. The app applies this; never narrate the math.`);
+                lines.push(`Crit: ${trig} → ${eff} (app applies).`);
             }
             if (r.combat.initiative && r.combat.initiative.type) {
                 const init = r.combat.initiative.type;
-                const label = init === 'player_first' ? 'the player acts first unless ambushed'
-                            : init === 'side_based'   ? 'side-based (player side goes first unless ambushed)'
+                const label = init === 'player_first' ? 'player acts first unless ambushed'
+                            : init === 'side_based'   ? 'side-based (player side first unless ambushed)'
                             : init;
                 lines.push(`Initiative: ${label}.`);
             }
@@ -137,7 +139,7 @@
                 const summary = c.effect_summary || c.effect || c.description || c.name || c.id;
                 return `${c.id}: ${trim(summary, 90)}`;
             }).join('; ');
-            lines.push(`Conditions (apply exactly as specified; use [CONDITION: add id] / [CONDITION: remove id] so the app can track): ${condList}`);
+            lines.push(`Conditions (apply via [CONDITION: add id] / [CONDITION: remove id]): ${condList}`);
         }
 
         return lines.join('\n');
@@ -181,7 +183,7 @@
         // When the player changes rooms, the next turn's LAYOUT_BLOCK
         // rebuilds with the new current room in full — no loss of fidelity,
         // just paged access.
-        let out = '\nNote: the CURRENT ROOM is rendered in full below. Other rooms are listed by id + name + exits only; their full descriptions, features, hazards, and encounters will appear when the player enters them. Use them only to route movement, not to invent content you haven\'t been given.\n';
+        let out = '\nCURRENT ROOM rendered in full below; other rooms compact (id + name + exits) — full detail loads when the player enters. Use compact rooms to route movement only. Compact-exit notation: `label → target_id (v|u, [LOCKED])` where v = visited, u = unvisited.\n';
 
         // Current room (full detail).
         const current = currentRoomId ? rooms[currentRoomId] : null;
@@ -222,13 +224,13 @@
         const visited = Array.isArray(gs.visitedRooms) ? gs.visitedRooms : [];
         let out = `\n--- CURRENT ROOM: ${room.name} (id: ${roomId}) ---\n`;
         out += `Description: ${room.description}\n`;
-        out += `Exits (use ONLY these; click-driven in-app too):\n${renderExitsDetailed(room, rooms, visited)}\n`;
+        out += `Exits:\n${renderExitsDetailed(room, rooms, visited)}\n`;
 
         if (room.features && room.features.length > 0) {
             out += renderFeaturesBlock(room.features);
         }
         if (Array.isArray(room.hazards) && room.hazards.length > 0) {
-            out += 'Hazards (APP HANDLES — do not request rolls for these; narrate only after the app reports the outcome in a callout):\n';
+            out += 'Hazards (app handles — see HAZARDS):\n';
             for (const h of room.hazards) {
                 const tt = (h.trigger && h.trigger.type) || 'on_enter';
                 const shape = h.detection && h.avoidance ? 'detect-then-avoid'
@@ -238,7 +240,7 @@
             }
         }
         if (room.encounters && room.encounters.length > 0) {
-            out += 'Encounters here (ONLY these monsters exist in this room): ';
+            out += 'Encounters: ';
             out += room.encounters.map(e => e.name + ' (' + e.monster_ref + ')').join(', ') + '\n';
         }
         return out;
@@ -263,12 +265,12 @@
         return Object.entries(room.connections).map(([key, authored]) => {
             const c = effectiveConnection(key, authored, overrides);
             if (c.state === 'hidden') return null;   // don't surface hidden doors in the prompt
-            const target = c.target ? rooms[c.target] : null;
-            const targetName = target ? target.name : (c.target || '?');
-            const vFlag = visited && c.target && visited.includes(c.target) ? ', visited' : ', unvisited';
+            const vFlag = visited && c.target && visited.includes(c.target) ? 'v' : 'u';
             const stateTag = c.state === 'locked' ? ', LOCKED' : '';
             const label = c.label || key;
-            return `${label} → ${targetName} (${c.target || '?'}${vFlag}${stateTag})`;
+            // Target name omitted; each compact room's own line carries id + name,
+            // so the GM can resolve the destination by scanning the layout block.
+            return `${label} → ${c.target || '?'} (${vFlag}${stateTag})`;
         }).filter(Boolean).join(', ') || 'none';
     }
 
@@ -314,7 +316,7 @@
             ? global.GameState.buildModuleState()
             : { features: gs.featureState || {}, connectionsModified: gs.connectionsModified || {}, encounters: {} };
 
-        let out = 'Features (APP DRIVES cards for these — do not request rolls or narrate outcomes; only embellish lore prose and judge puzzle proposals via [FEATURE_SOLVED: <id>]):\n';
+        let out = 'Features (app drives cards — see FEATURES):\n';
         for (const f of features) {
             if (!f) continue;
             const type = (f.type || 'lore').toLowerCase();
@@ -396,12 +398,12 @@
             // HP. Multi-instance encounters print one header line + one line
             // per instance (with a stable instance_id). Solo encounters keep
             // the compact one-line shape.
-            encounterInfo = '\n\n## Active Encounters — use these EXACT stats; current HP is tracked by the app (a creature is DEFEATED at 0 HP; you MUST narrate its death and must NOT have it act further). Each enemy has its own HP; target a specific creature with [DAMAGE_TO_MONSTER: <instance_id>, N] (preferred), or use [DAMAGE_TO_MONSTER: <encounter_id>, N] and the app will hit the most-wounded active instance.\n';
+            encounterInfo = '\n\n## Active Encounters — use these EXACT stats. App tracks HP; a creature at 0 HP is DEFEATED (narrate the death; do not let it act). Per-instance HP: prefer [DAMAGE_TO_MONSTER: <instance_id>, N] for a specific creature; encounter_id falls back to most-wounded active.\n';
             for (const enc of room.encounters) {
                 encounterInfo += global.buildEncounterDescription(enc, true) + '\n';
             }
         } else {
-            encounterInfo = '\n\n## Active Encounters: NONE — there are no monsters in this room. Do not add or invent any monsters.\n';
+            encounterInfo = '\n\n## Active Encounters: NONE — no monsters in this room.\n';
         }
 
         const hasActiveEncounter = global.getFirstActiveEncounterInCurrentRoom() != null;
