@@ -620,6 +620,62 @@
     }
     
     /**
+     * Phase 3: when [COMBAT: off] fires and the current room still has
+     * surviving enemy instances, the GM has hand-waved the resolution
+     * (typically a flee or surrender). Mark survivors defeated, fire
+     * encounter rewards once, surface the XP/treasure callout. Without
+     * this, the survivor lingers in the panel and authored XP/treasure
+     * never apply (the player has to know to demand them in prose).
+     *
+     * Reward-firing logic mirrors ui-dice.js:1116-1136 — duplicated for
+     * now rather than refactored, since the dice-flow path is the
+     * authoritative kill path and pulling the reward block into a shared
+     * helper risks subtle drift. Both paths compute the same XP/gold and
+     * surface the same callout text.
+     */
+    function autoResolveSurvivorsOnCombatOff() {
+        const rooms = gd().module && gd().module.rooms;
+        const cur = rooms && rooms[gs().currentRoom];
+        if (!cur || !Array.isArray(cur.encounters)) return;
+        for (const enc of cur.encounters) {
+            if (!Array.isArray(enc.instances)) continue;
+            const survivors = enc.instances.filter(i => !i.defeated);
+            if (survivors.length === 0) continue;
+            // Encounter has live instances — flee/defeat them all.
+            for (const inst of survivors) {
+                inst.current_hp = 0;
+                inst.defeated = true;
+            }
+            debugLog('PARSE',
+                `[COMBAT: off] auto-resolved ${enc.name || enc.id}: ${survivors.length} surviving instance(s) marked fled`);
+            // Fire encounter rewards. Only encounters that JUST resolved
+            // here pay out (the enc.on_death check guards modules without
+            // authored rewards).
+            if (enc.on_death) fireEncounterRewardsForAutoResolve(enc);
+        }
+    }
+
+    function fireEncounterRewardsForAutoResolve(enc) {
+        const xp = enc.on_death && enc.on_death.xp_award != null ? enc.on_death.xp_award : 0;
+        let goldAmount = 0;
+        const treasure = (enc.on_death && Array.isArray(enc.on_death.treasure)) ? enc.on_death.treasure : [];
+        for (const t of treasure) {
+            if ((t.item || '').toLowerCase() === 'gold') {
+                goldAmount += typeof t.quantity === 'number' ? t.quantity : parseInt(t.quantity, 10) || 0;
+            } else if (global.addToInventory) {
+                global.addToInventory(t.item || 'Item', t.quantity || 1);
+            }
+        }
+        if (goldAmount > 0 && global.addToInventory) global.addToInventory('Gold', goldAmount);
+        if (xp > 0 && global.addXP) global.addXP(xp);
+        const charName = gs().character && gs().character.name ? gs().character.name : 'The character';
+        const xpTreasureLine = goldAmount > 0
+            ? `${charName} gains ${xp} XP and discovers ${goldAmount} gold!`
+            : `${charName} gains ${xp} XP!`;
+        addMechanicsCallout(xpTreasureLine);
+    }
+
+    /**
      * Phase 3: combat must never silently teleport the player. When
      * [COMBAT: on], a [ROLL_REQUEST: damage|attack], or the "combat begins"
      * heuristic fires in a room with no active enemy instance, revert the
@@ -659,6 +715,10 @@
             gs().mode = 'exploration';
             gs().lastCombatRoom = gs().currentRoom;
             gs().combatStateFromTag = true;
+            // Phase 3: handle the GM hand-waved end-of-fight (surrender,
+            // flee, "the rest scatter"). Mark surviving instances defeated
+            // so the panel clears and authored encounter rewards fire.
+            autoResolveSurvivorsOnCombatOff();
             updateCharacterDisplay();
             debugLog('PARSE', 'Combat state: off (GM tag)');
         }
