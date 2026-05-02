@@ -43,7 +43,7 @@
 
         // Header + design philosophy.
         const systemLabel = r.name || r.id || 'OSR';
-        lines.push(`System: ${systemLabel}. Honor these mechanics; do not substitute your own numbers or rules.`);
+        lines.push(`System: ${systemLabel}.`);
         if (r.design_philosophy) lines.push(`Design philosophy: ${r.design_philosophy}`);
 
         // Checks — direction (roll-high vs roll-under) and adv/disadv flag.
@@ -51,14 +51,14 @@
         if (checks) {
             const dice = checks.dice || '1d20';
             if (checks.method === 'roll_under_score') {
-                lines.push(`Checks: roll ${dice}; succeed on a roll ≤ the target (ability score or save target). Natural 1 = critical success, natural 20 = critical failure. The app judges success/failure on every roll and reports it in the callout — you narrate the outcome, not the number.`);
+                lines.push(`Checks: roll ${dice}; succeed on roll ≤ target (ability score or save target). Nat 1 = crit success; nat 20 = crit failure. App judges and reports — you narrate.`);
             } else {
-                lines.push(`Checks: roll ${dice} + modifier; succeed on a total ≥ the DC. Natural 20 = critical success, natural 1 = critical failure.`);
+                lines.push(`Checks: roll ${dice} + mod; succeed on total ≥ DC. Nat 20 = crit success; nat 1 = crit failure.`);
             }
             if (checks.advantage_disadvantage) {
-                lines.push(`Advantage / disadvantage: when the GM calls for it, use [ROLL_REQUEST: <ability|skill>, advantage] or [ROLL_REQUEST: <ability|skill>, disadvantage]. The app rolls 2d20 and keeps the high (advantage) or low (disadvantage) for roll-high packs; swapped for roll-under.`);
+                lines.push(`Adv/disadv: append ", advantage" or ", disadvantage" to the [ROLL_REQUEST]; app rolls 2d20 and keeps high/low.`);
             } else {
-                lines.push(`Advantage / disadvantage: NOT supported in this ruleset — never append ", advantage" or ", disadvantage" to a [ROLL_REQUEST].`);
+                lines.push(`Adv/disadv: NOT supported — never append ", advantage" or ", disadvantage".`);
             }
         }
 
@@ -67,9 +67,9 @@
         const savesCfg = r.character_model && r.character_model.saves;
         if (savesCfg && savesCfg.type === 'categorical' && Array.isArray(savesCfg.categories) && savesCfg.categories.length) {
             const names = savesCfg.categories.map(c => `${c.id} (${c.name})`).join('; ');
-            lines.push(`Saves (categorical): authored target on the character sheet. Call for one via [ROLL_REQUEST: <save_id>] using these ids: ${names}.`);
+            lines.push(`Saves (categorical, target on character sheet): [ROLL_REQUEST: <save_id>] with ids: ${names}.`);
         } else if (savesCfg && savesCfg.type !== 'categorical') {
-            lines.push(`Saves (per-ability): call for a save via [ROLL_REQUEST: <ability> save], e.g. [ROLL_REQUEST: CON save]. Plain [ROLL_REQUEST: <ability>] is an ability check (no proficiency).`);
+            lines.push(`Saves (per-ability): [ROLL_REQUEST: <ability> save], e.g. [CON save]. Plain [ROLL_REQUEST: <ability>] is an ability check (no proficiency).`);
         }
 
         // Difficulty ladder — roll-high emits DC numbers; roll-under emits target modifiers.
@@ -96,25 +96,27 @@
             const attackRes = r.combat.attack && r.combat.attack.resolution;
             const hasProf = Array.isArray(r.progression && r.progression.level_table)
                 && r.progression.level_table.some(row => typeof row.proficiency_bonus === 'number');
-            const profPart = hasProf ? ' + proficiency' : '';
+            const profPart = hasProf ? '+prof' : '';
             if (attackRes === 'roll_high_vs_ac' || !attackRes) {
-                lines.push(`Attack: d20 + ability modifier${profPart} vs target AC (hit if total ≥ AC). Melee uses ${(r.combat.damage && r.combat.damage.melee_ability || 'str').toUpperCase()}; ranged uses ${(r.combat.damage && r.combat.damage.ranged_ability || 'dex').toUpperCase()}. The app resolves attacks end-to-end; never narrate numbers.`);
+                const melee = (r.combat.damage && r.combat.damage.melee_ability || 'str').toUpperCase();
+                const ranged = (r.combat.damage && r.combat.damage.ranged_ability || 'dex').toUpperCase();
+                lines.push(`Attack: d20+mod${profPart ? '+'+profPart : ''} vs AC. Melee=${melee}; ranged=${ranged}. App resolves end-to-end.`);
             }
             if (r.combat.damage) {
                 lines.push(`Damage: ${r.combat.damage.formula || 'weapon_die_plus_ability_mod'}.`);
             }
             const crit = r.combat.critical_hit;
             if (crit) {
-                const trig = crit.trigger === 'nat_19_or_20' ? 'natural 19 or 20' : 'natural 20';
-                const eff  = crit.effect === 'max_damage' ? 'maximized damage dice'
-                           : crit.effect === 'extra_die'  ? 'one extra damage die'
+                const trig = crit.trigger === 'nat_19_or_20' ? 'nat 19/20' : 'nat 20';
+                const eff  = crit.effect === 'max_damage' ? 'max damage dice'
+                           : crit.effect === 'extra_die'  ? '+1 damage die'
                            : 'doubled damage dice';
-                lines.push(`Critical hit: ${trig} → ${eff}. The app applies this; never narrate the math.`);
+                lines.push(`Crit: ${trig} → ${eff} (app applies).`);
             }
             if (r.combat.initiative && r.combat.initiative.type) {
                 const init = r.combat.initiative.type;
-                const label = init === 'player_first' ? 'the player acts first unless ambushed'
-                            : init === 'side_based'   ? 'side-based (player side goes first unless ambushed)'
+                const label = init === 'player_first' ? 'player acts first unless ambushed'
+                            : init === 'side_based'   ? 'side-based (player side first unless ambushed)'
                             : init;
                 lines.push(`Initiative: ${label}.`);
             }
@@ -137,7 +139,7 @@
                 const summary = c.effect_summary || c.effect || c.description || c.name || c.id;
                 return `${c.id}: ${trim(summary, 90)}`;
             }).join('; ');
-            lines.push(`Conditions (apply exactly as specified; use [CONDITION: add id] / [CONDITION: remove id] so the app can track): ${condList}`);
+            lines.push(`Conditions (apply via [CONDITION: add id] / [CONDITION: remove id]): ${condList}`);
         }
 
         return lines.join('\n');
