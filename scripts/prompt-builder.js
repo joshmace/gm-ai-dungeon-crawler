@@ -398,7 +398,17 @@
             // HP. Multi-instance encounters print one header line + one line
             // per instance (with a stable instance_id). Solo encounters keep
             // the compact one-line shape.
-            encounterInfo = '\n\n## Active Encounters — use these EXACT stats. App tracks HP; a creature at 0 HP is DEFEATED (narrate the death; do not let it act). Per-instance HP: prefer [DAMAGE_TO_MONSTER: <instance_id>, N] for a specific creature; encounter_id falls back to most-wounded active.\n';
+            //
+            // Phase 3: when every encounter in the room is defeated, swap the
+            // header so the GM doesn't keep narrating combat against ghosts.
+            // This is the cheapest place to inject the "no live enemy" signal
+            // — runtime-driven, costs zero extra bytes in active fights.
+            const allDefeated = room.encounters.every(enc => global.getEncounterHP(enc).defeated);
+            if (allDefeated) {
+                encounterInfo = '\n\n## Active Encounters: ALL DEFEATED — this room is cleared. The threat is over. Do NOT narrate combat with these enemies; if the player attacks, acknowledge that all enemies are defeated.\n';
+            } else {
+                encounterInfo = '\n\n## Active Encounters — use these EXACT stats. App tracks HP; a creature at 0 HP is DEFEATED (narrate the death; do not let it act). Per-instance HP: prefer [DAMAGE_TO_MONSTER: <instance_id>, N] for a specific creature; encounter_id falls back to most-wounded active.\n';
+            }
             for (const enc of room.encounters) {
                 encounterInfo += global.buildEncounterDescription(enc, true) + '\n';
             }
