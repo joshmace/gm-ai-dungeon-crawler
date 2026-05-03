@@ -2,8 +2,8 @@
 
 **Drafted:** 2026-04-29 (Plan-agent pass)
 **Decisions locked:** 2026-04-29 — all 7 design questions in §4 confirmed as recommended.
-**Status:** Phase 1 ready to start.
-**Companion docs:** `BACKLOG.md` (Polish & smoke-test items → "Cross-room combat re-entry"), `JSON_SCHEMAS.md` (already promises per-instance HP at `instances[]`).
+**Status:** ✅ COMPLETE — Phase 1 (PR #14, 2026-04-30), Phase 2 (PR #15, 2026-04-30), Phase 3 (PR pending, 2026-05-02 / 2026-05-03). Phase 3 expanded beyond the original cross-room teleport scope to address adjacent issues surfaced during smoke testing — see `CHANGELOG.md`.
+**Companion docs:** `BACKLOG.md` (Polish & smoke-test items), `JSON_SCHEMAS.md` (per-instance HP at `instances[]`), `CHANGELOG.md` (Phase 1/2/3 narrative).
 
 ---
 
