@@ -564,6 +564,38 @@
             .map(s => s.trim())
             .filter(s => s.length > 0)
             .map(s => s.toLowerCase().replace(/\bmoral chamber\b/g, 'morale chamber'));
+
+        // First pass: connection-label phrases of the current room. The
+        // authored label is the most reliable user-facing reference to a
+        // specific exit. Labels often combine a direction and a
+        // destination ("right, into the officer's study") — split on
+        // commas so "right" and "into the officer's study" can match
+        // independently. Skips locked / hidden connections.
+        const currentRoom = rooms[gs().currentRoom];
+        if (currentRoom && currentRoom.connections) {
+            const overrides = (gs() && gs().connectionsModified) || {};
+            for (const [key, authored] of Object.entries(currentRoom.connections)) {
+                const norm = (typeof authored === 'string')
+                    ? { target: authored, label: key, state: 'open' }
+                    : { target: authored.to || null, label: authored.label || key, state: authored.state || 'open' };
+                const override = overrides[key];
+                const state = (override && override.state) || norm.state;
+                if (state === 'hidden' || state === 'locked') continue;
+                if (!norm.target || !rooms[norm.target] || norm.target === gs().currentRoom) continue;
+                const labelLower = String(norm.label || '').toLowerCase();
+                if (!labelLower) continue;
+                const phrases = labelLower.split(',').map(p => p.trim()).filter(Boolean);
+                for (const s of sentences) {
+                    if (!movementRe.test(s)) continue;
+                    for (const phrase of phrases) {
+                        if (s.includes(phrase)) return norm.target;
+                    }
+                }
+            }
+        }
+
+        // Second pass: room name / id-phrase. Catches "I head to the
+        // officer's study" without any connection-label hint.
         for (const [roomId, room] of Object.entries(rooms)) {
             if (!room || roomId === gs().currentRoom) continue;
             const roomName = (room.name || '').toLowerCase();
