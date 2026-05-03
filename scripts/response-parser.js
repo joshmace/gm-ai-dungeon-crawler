@@ -15,7 +15,7 @@
  *                        addErrorMessage, parseSceneDirectives,
  *                        normalizeNarrativeFormatting, CONTROL_TAG_RE
  *   - Encounters:        resolveMonster, getFirstActiveEncounterInCurrentRoom,
- *                        getEncounterHP, ensureCombatRoomHasEncounters,
+ *                        getEncounterHP,
  *                        recordEncounterHistoryForRoom, updateMonsterPanel,
  *                        getExpectedRewardsForCurrentRoom, rollDiceFormula,
  *                        getMonsterAttackInfoForCurrentRoom,
@@ -53,7 +53,15 @@
 
     function processAIResponse(response) {
         debugLog('AI', 'Processing AI response');
-        const previousRoom = gs().currentRoom;
+        // Phase 3: when a pre-emptive room flip happened on the player's
+        // submit (connection click or movement-intent text), currentRoom
+        // has already been bumped to the destination. The original source
+        // room is stashed on this flag — read and clear it so the
+        // post-response onRoomEntry hook below correctly fires for the
+        // transition that just completed.
+        const preempted = gs()._preemptiveRoomChangeFrom;
+        gs()._preemptiveRoomChangeFrom = null;
+        const previousRoom = (preempted != null && preempted !== '') ? preempted : gs().currentRoom;
         const previousCombat = gs().inCombat;
         
         // Parse optional scene directives and strip control tags from visible text.
@@ -188,11 +196,19 @@
         } else if (match) {
             const ability = match[1].trim();
             const abilityLower = ability.toLowerCase();
+            let suppressRollUI = false;
             if (abilityLower === 'damage' || abilityLower.includes('attack')) {
                 gs().inCombat = true;
                 gs().mode = 'combat';
-                ensureCombatRoomHasEncounters();
-                if (abilityLower === 'damage' && !gs().readiedWeaponName) {
+                const combatLegit = guardCombatRoomHasActiveEncounter();
+                if (!combatLegit) {
+                    // Phase 3: GM tried to drive an attack/damage roll in a
+                    // room with no active enemy. The guard already reverted
+                    // combat state and posted the callout; suppress the dice
+                    // prompt too so the player isn't stuck staring at
+                    // "Roll Attack:" with nothing to swing at.
+                    suppressRollUI = true;
+                } else if (abilityLower === 'damage' && !gs().readiedWeaponName) {
                     const sources = gd().character && gd().character.equipment
                         ? [...(gd().character.equipment.wielded || []), ...(gd().character.equipment.carried || [])]
                         : [];
@@ -206,7 +222,11 @@
             }
             const formattedResponse = displayResponse.replace(rollRequestPattern, '').trim();
             if (formattedResponse) addNarration(formattedResponse);
-            showDiceSection(`Roll ${ability}:`, ability);
+            if (suppressRollUI) {
+                disableInput(false);
+            } else {
+                showDiceSection(`Roll ${ability}:`, ability);
+            }
         } else {
             // Desired order: GM block first, then monster callouts, then outcome line.
             if (displayResponse) addNarration(displayResponse);
@@ -505,8 +525,6 @@
 
         if (roomWithUpdate) {
             gs().currentRoom = roomWithUpdate;
-            // Do NOT call ensureCombatRoomHasEncounters() here: it would jump to another room with
-            // active encounters (e.g. morale_chamber) when this room just ended combat, making Scout/Fighter appear early.
             const room = gd().module && gd().module.rooms && gd().module.rooms[roomWithUpdate];
             if (room && room.encounters && room.encounters.length > 0) {
                 const allDefeated = room.encounters.every(enc => getEncounterHP(enc).defeated);
@@ -527,6 +545,72 @@
         return out;
     }
     
+    /**
+     * Phase 3: shared movement-intent heuristic. Returns the target room
+     * id if `text` signals movement to a known non-current room (room
+     * name or id-phrase + a movement verb in the same sentence), else
+     * null. Used by both the GM-response parser (tryParseRoomChange) and
+     * the player-input pre-emptive flip in main.js submitAction.
+     *
+     * Mirrors the heuristic in tryParseRoomChange but returns the id
+     * instead of mutating state — the caller decides what to do.
+     */
+    function findMovementTargetInText(text) {
+        const rooms = gd().module && gd().module.rooms;
+        if (!rooms || !text) return null;
+        const movementRe = /\b(?:enter(?:s|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/i;
+        const sentences = text
+            .split(/(?<=[.!?])\s+|—|\n+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+            .map(s => s.toLowerCase().replace(/\bmoral chamber\b/g, 'morale chamber'));
+
+        // First pass: connection-label phrases of the current room. The
+        // authored label is the most reliable user-facing reference to a
+        // specific exit. Labels often combine a direction and a
+        // destination ("right, into the officer's study") — split on
+        // commas so "right" and "into the officer's study" can match
+        // independently. Skips locked / hidden connections.
+        const currentRoom = rooms[gs().currentRoom];
+        if (currentRoom && currentRoom.connections) {
+            const overrides = (gs() && gs().connectionsModified) || {};
+            for (const [key, authored] of Object.entries(currentRoom.connections)) {
+                const norm = (typeof authored === 'string')
+                    ? { target: authored, label: key, state: 'open' }
+                    : { target: authored.to || null, label: authored.label || key, state: authored.state || 'open' };
+                const override = overrides[key];
+                const state = (override && override.state) || norm.state;
+                if (state === 'hidden' || state === 'locked') continue;
+                if (!norm.target || !rooms[norm.target] || norm.target === gs().currentRoom) continue;
+                const labelLower = String(norm.label || '').toLowerCase();
+                if (!labelLower) continue;
+                const phrases = labelLower.split(',').map(p => p.trim()).filter(Boolean);
+                for (const s of sentences) {
+                    if (!movementRe.test(s)) continue;
+                    for (const phrase of phrases) {
+                        if (s.includes(phrase)) return norm.target;
+                    }
+                }
+            }
+        }
+
+        // Second pass: room name / id-phrase. Catches "I head to the
+        // officer's study" without any connection-label hint.
+        for (const [roomId, room] of Object.entries(rooms)) {
+            if (!room || roomId === gs().currentRoom) continue;
+            const roomName = (room.name || '').toLowerCase();
+            const roomIdPhrase = roomId.replace(/_/g, ' ').toLowerCase();
+            for (const s of sentences) {
+                const hasName = roomName && s.includes(roomName);
+                const hasIdPhrase = roomIdPhrase && s.includes(roomIdPhrase);
+                if (!hasName && !hasIdPhrase) continue;
+                if (!movementRe.test(s)) continue;
+                return roomId;
+            }
+        }
+        return null;
+    }
+
     /** If narrative indicates the player entered a different room, update currentRoom so combat indicator etc. are correct. */
     function tryParseRoomChange(text) {
         const rooms = gd().module && gd().module.rooms;
@@ -609,6 +693,84 @@
         }
     }
     
+    /**
+     * Phase 3: when [COMBAT: off] fires and the current room still has
+     * surviving enemy instances, the GM has hand-waved the resolution
+     * (typically a flee or surrender). Mark survivors defeated, fire
+     * encounter rewards once, surface the XP/treasure callout. Without
+     * this, the survivor lingers in the panel and authored XP/treasure
+     * never apply (the player has to know to demand them in prose).
+     *
+     * Reward-firing logic mirrors ui-dice.js:1116-1136 — duplicated for
+     * now rather than refactored, since the dice-flow path is the
+     * authoritative kill path and pulling the reward block into a shared
+     * helper risks subtle drift. Both paths compute the same XP/gold and
+     * surface the same callout text.
+     */
+    function autoResolveSurvivorsOnCombatOff() {
+        const rooms = gd().module && gd().module.rooms;
+        const cur = rooms && rooms[gs().currentRoom];
+        if (!cur || !Array.isArray(cur.encounters)) return;
+        for (const enc of cur.encounters) {
+            if (!Array.isArray(enc.instances)) continue;
+            const survivors = enc.instances.filter(i => !i.defeated);
+            if (survivors.length === 0) continue;
+            // Encounter has live instances — flee/defeat them all.
+            for (const inst of survivors) {
+                inst.current_hp = 0;
+                inst.defeated = true;
+            }
+            debugLog('PARSE',
+                `[COMBAT: off] auto-resolved ${enc.name || enc.id}: ${survivors.length} surviving instance(s) marked fled`);
+            // Fire encounter rewards. Only encounters that JUST resolved
+            // here pay out (the enc.on_death check guards modules without
+            // authored rewards).
+            if (enc.on_death) fireEncounterRewardsForAutoResolve(enc);
+        }
+    }
+
+    function fireEncounterRewardsForAutoResolve(enc) {
+        const xp = enc.on_death && enc.on_death.xp_award != null ? enc.on_death.xp_award : 0;
+        let goldAmount = 0;
+        const treasure = (enc.on_death && Array.isArray(enc.on_death.treasure)) ? enc.on_death.treasure : [];
+        for (const t of treasure) {
+            if ((t.item || '').toLowerCase() === 'gold') {
+                goldAmount += typeof t.quantity === 'number' ? t.quantity : parseInt(t.quantity, 10) || 0;
+            } else if (global.addToInventory) {
+                global.addToInventory(t.item || 'Item', t.quantity || 1);
+            }
+        }
+        if (goldAmount > 0 && global.addToInventory) global.addToInventory('Gold', goldAmount);
+        if (xp > 0 && global.addXP) global.addXP(xp);
+        const charName = gs().character && gs().character.name ? gs().character.name : 'The character';
+        const xpTreasureLine = goldAmount > 0
+            ? `${charName} gains ${xp} XP and discovers ${goldAmount} gold!`
+            : `${charName} gains ${xp} XP!`;
+        addMechanicsCallout(xpTreasureLine);
+    }
+
+    /**
+     * Phase 3: combat must never silently teleport the player. When
+     * [COMBAT: on], a [ROLL_REQUEST: damage|attack], or the "combat begins"
+     * heuristic fires in a room with no active enemy instance, revert the
+     * just-set combat flags and surface a callout. Returns true if combat
+     * is legitimately on (currentRoom has at least one non-defeated
+     * instance); false if the guard reverted state. currentRoom is never
+     * changed here — that was the cross-room teleport bug.
+     */
+    function guardCombatRoomHasActiveEncounter() {
+        const rooms = gd().module && gd().module.rooms;
+        const cur = rooms && rooms[gs().currentRoom];
+        const hasActive = cur && Array.isArray(cur.encounters)
+            && cur.encounters.some(enc => !getEncounterHP(enc).defeated);
+        if (hasActive) return true;
+        gs().inCombat = false;
+        gs().mode = 'exploration';
+        addMechanicsCallout('No active enemy in this room. Combat tag ignored.');
+        debugLog('PARSE', `Combat ignored: no active enemy in ${gs().currentRoom}`);
+        return false;
+    }
+
     /** Parse [COMBAT: on] and [COMBAT: off] — GM explicitly sets combat state. Takes precedence over heuristics. */
     function tryParseCombatTag(text) {
         if (!text) return;
@@ -618,14 +780,19 @@
             gs().inCombat = true;
             gs().mode = 'combat';
             gs().combatStateFromTag = true;
-            ensureCombatRoomHasEncounters();
+            if (guardCombatRoomHasActiveEncounter()) {
+                debugLog('PARSE', 'Combat state: on (GM tag)');
+            }
             updateCharacterDisplay();
-            debugLog('PARSE', 'Combat state: on (GM tag)');
         } else if (offMatch) {
             gs().inCombat = false;
             gs().mode = 'exploration';
             gs().lastCombatRoom = gs().currentRoom;
             gs().combatStateFromTag = true;
+            // Phase 3: handle the GM hand-waved end-of-fight (surrender,
+            // flee, "the rest scatter"). Mark surviving instances defeated
+            // so the panel clears and authored encounter rewards fire.
+            autoResolveSurvivorsOnCombatOff();
             updateCharacterDisplay();
             debugLog('PARSE', 'Combat state: off (GM tag)');
         }
@@ -639,9 +806,10 @@
         if (/\bcombat\s+(?:begins?|starts?)\b/.test(t) || /\b(?:the\s+)?(?:fight|battle)\s+(?:begins?|starts?|is\s+on)\b/.test(t) || /\b(?:you\s+are\s+)(?:in\s+)?combat\b/.test(t)) {
             gs().inCombat = true;
             gs().mode = 'combat';
-            ensureCombatRoomHasEncounters();
+            if (guardCombatRoomHasActiveEncounter()) {
+                debugLog('PARSE', 'Combat began (GM narrative fallback)');
+            }
             updateCharacterDisplay();
-            debugLog('PARSE', 'Combat began (GM narrative fallback)');
         }
     }
     
@@ -1144,6 +1312,7 @@
         findEncounterForStateTag,
         parseExplicitStateTags,
         tryParseRoomChange,
+        findMovementTargetInText,
         tryParseCombatTag,
         tryParseCombatBegins,
         tryParseRetreat,
@@ -1163,6 +1332,7 @@
     global.findEncounterForStateTag = findEncounterForStateTag;
     global.parseExplicitStateTags   = parseExplicitStateTags;
     global.tryParseRoomChange       = tryParseRoomChange;
+    global.findMovementTargetInText = findMovementTargetInText;
     global.tryParseCombatTag        = tryParseCombatTag;
     global.tryParseCombatBegins     = tryParseCombatBegins;
     global.tryParseRetreat          = tryParseRetreat;

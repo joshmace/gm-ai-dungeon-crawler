@@ -398,7 +398,17 @@
             // HP. Multi-instance encounters print one header line + one line
             // per instance (with a stable instance_id). Solo encounters keep
             // the compact one-line shape.
-            encounterInfo = '\n\n## Active Encounters — use these EXACT stats. App tracks HP; a creature at 0 HP is DEFEATED (narrate the death; do not let it act). Per-instance HP: prefer [DAMAGE_TO_MONSTER: <instance_id>, N] for a specific creature; encounter_id falls back to most-wounded active.\n';
+            //
+            // Phase 3: when every encounter in the room is defeated, swap the
+            // header so the GM doesn't keep narrating combat against ghosts.
+            // This is the cheapest place to inject the "no live enemy" signal
+            // — runtime-driven, costs zero extra bytes in active fights.
+            const allDefeated = room.encounters.every(enc => global.getEncounterHP(enc).defeated);
+            if (allDefeated) {
+                encounterInfo = '\n\n## Active Encounters: ALL DEFEATED — this room is cleared. The threat is over. Do NOT narrate combat with these enemies; if the player attacks, acknowledge that all enemies are defeated.\n';
+            } else {
+                encounterInfo = '\n\n## Active Encounters — use these EXACT stats. App tracks HP; a creature at 0 HP is DEFEATED (narrate the death; do not let it act). Per-instance HP: prefer [DAMAGE_TO_MONSTER: <instance_id>, N] for a specific creature; encounter_id falls back to most-wounded active.\n';
+            }
             for (const enc of room.encounters) {
                 encounterInfo += global.buildEncounterDescription(enc, true) + '\n';
             }
@@ -534,6 +544,16 @@
         if (global.gameState) {
             global.gameState._lastSystemPromptLen = out.length;
             global.gameState._lastSystemPromptBuiltAt = Date.now();
+            // Phase 3: this prompt is being sent to the GM with currentRoom
+            // rendered FULL (description + features + encounters). Mark the
+            // room as panel-ready so the right-hand encounter panel can
+            // surface its enemies on the NEXT response cycle. Walking
+            // through a threshold doesn't trigger this — only an in-room
+            // prompt build does.
+            if (!Array.isArray(global.gameState.panelReadyRooms)) global.gameState.panelReadyRooms = [];
+            if (gs.currentRoom && !global.gameState.panelReadyRooms.includes(gs.currentRoom)) {
+                global.gameState.panelReadyRooms.push(gs.currentRoom);
+            }
         }
         if (global.debugLog) {
             global.debugLog('PROMPT', `built system prompt: ${out.length} chars (mode=${gs.mode || 'exploration'}, room=${gs.currentRoom}, last_roll=${gs.lastUserRollType || '-'}, encounters=${(room.encounters || []).length})`);

@@ -137,38 +137,6 @@
         return { current, max, defeated };
     }
 
-    /** Best combat fallback room: prefer non-defeated encounters, else any room with encounters. */
-    function getFirstRoomIdWithEncounters() {
-        const rooms = gd().module && gd().module.rooms;
-        if (!rooms) return null;
-        const ids = Object.keys(rooms).sort();
-        for (const id of ids) {
-            const r = rooms[id];
-            if (!r || !r.encounters || r.encounters.length === 0) continue;
-            if (r.encounters.some(enc => !getEncounterHP(enc).defeated)) return id;
-        }
-        for (const id of ids) {
-            const r = rooms[id];
-            if (r && r.encounters && r.encounters.length > 0) return id;
-        }
-        return null;
-    }
-
-    /** When combat starts, ensure currentRoom has encounters so the monster panel populates. */
-    function ensureCombatRoomHasEncounters() {
-        const rooms = gd().module && gd().module.rooms;
-        if (!rooms) return;
-        const cur = rooms[gs().currentRoom];
-        const curHasActiveEncounters = cur && cur.encounters && cur.encounters.some(enc => !getEncounterHP(enc).defeated);
-        if (curHasActiveEncounters) return;
-        const fallback = getFirstRoomIdWithEncounters();
-        if (fallback) {
-            gs().currentRoom = fallback;
-            if (global.updateCharacterDisplay) global.updateCharacterDisplay();
-            debugLog('PARSE', `Combat started but current room had no active encounters; set currentRoom to ${fallback} for monster panel`);
-        }
-    }
-
     /** Stable key for encounter-history entries. */
     function getEncounterHistoryKey(roomId, encounter) {
         return `${roomId || 'unknown'}::${encounter && encounter.id ? encounter.id : 'unknown'}`;
@@ -273,7 +241,17 @@
         if (!gs().inCombat && gs().lastCombatRoom != null && gs().lastCombatRoom !== '') {
             roomIdToShow = gs().lastCombatRoom;
         }
-        recordEncounterHistoryForRoom(roomIdToShow);
+        // Phase 3: only surface a room's encounters in the panel after the
+        // GM has had a prompt build with that room as current — i.e. it has
+        // seen the full description + encounter info and had a chance to
+        // narrate them. Without this gate, walking through a fresh-room
+        // threshold pre-loads enemies into the panel before the GM has even
+        // mentioned them. inCombat is a fallback for the rare case combat
+        // begins before the room's first full prompt build.
+        const ready = Array.isArray(gs().panelReadyRooms) ? gs().panelReadyRooms : [];
+        if (ready.includes(roomIdToShow) || gs().inCombat) {
+            recordEncounterHistoryForRoom(roomIdToShow);
+        }
 
         if (!gs().encounterHistory || gs().encounterHistory.length === 0) {
             container.className = 'monster-panel-empty';
@@ -428,6 +406,20 @@
         const instances = Array.isArray(encounter.instances) ? encounter.instances : [];
         const hpInfo = includeCurrentHP ? getEncounterHP(encounter) : null;
 
+        // Phase 3: surface the authored `placement` field when the encounter
+        // is active. Without this, the GM only sees the stat block and has
+        // to invent how/where these enemies appear in narration when the
+        // player asks. The placement field exists in the module precisely
+        // for this — wire it through so the GM uses authored prose instead.
+        const isActive = hpInfo ? !hpInfo.defeated : true;
+        const trimPrompt = (s) => {
+            const str = String(s || '').replace(/\s+/g, ' ').trim();
+            return str.length > 260 ? str.slice(0, 259) + '…' : str;
+        };
+        const placementLine = (isActive && encounter.placement)
+            ? `\n  Placement on engagement: "${trimPrompt(encounter.placement)}"`
+            : '';
+
         // Build the rewards suffix once — applied to both the single-instance
         // and multi-instance shapes so the GM hears about XP / treasure
         // exactly once per encounter regardless of layout.
@@ -477,7 +469,7 @@
             const idTrail = instances.length === 1
                 ? `, instance ${instances[0].instance_id}`
                 : '';
-            return `${encounter.name} (${monster.name}, id ${encounter.id}${idTrail}): ${hpStr}, AC ${monster.ac}. Attacks: ${attackStr}${rewardSuffix}`;
+            return `${encounter.name} (${monster.name}, id ${encounter.id}${idTrail}): ${hpStr}, AC ${monster.ac}. Attacks: ${attackStr}${rewardSuffix}${placementLine}`;
         }
 
         // Multi-instance: header + per-instance lines. The GM should target
@@ -498,6 +490,7 @@
         const acFragment = homogeneous ? `AC ${monster.ac}. ` : '';
         let header = `${encounter.name} (id ${encounter.id}): ${acFragment}${statusStr}. Attacks: ${attackStr}${rewardSuffix}`;
         let lines = [header];
+        if (placementLine) lines.push(placementLine.replace(/^\n/, ''));
         for (const inst of instances) {
             const im = resolveMonster(inst.monster_ref) || monster;
             const max = Number(inst.max_hp) || 0;
@@ -520,8 +513,6 @@
         getMonsterDamageFormulaFromAnyRoom,
         rollDiceFormula,
         getEncounterHP,
-        getFirstRoomIdWithEncounters,
-        ensureCombatRoomHasEncounters,
         getEncounterHistoryKey,
         recordEncounterHistoryForRoom,
         updateMonsterPanel,
@@ -538,8 +529,6 @@
     global.getMonsterDamageFormulaFromAnyRoom    = getMonsterDamageFormulaFromAnyRoom;
     global.rollDiceFormula                       = rollDiceFormula;
     global.getEncounterHP                        = getEncounterHP;
-    global.getFirstRoomIdWithEncounters          = getFirstRoomIdWithEncounters;
-    global.ensureCombatRoomHasEncounters         = ensureCombatRoomHasEncounters;
     global.getEncounterHistoryKey                = getEncounterHistoryKey;
     global.recordEncounterHistoryForRoom         = recordEncounterHistoryForRoom;
     global.updateMonsterPanel                    = updateMonsterPanel;

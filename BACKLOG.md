@@ -126,29 +126,49 @@ Open polish items surfaced during the v1 refactor smoke tests, folded in from `P
   reference includes a "do NOT use for authored encounter/feature/hazard
   rewards" guard. See `CHANGELOG.md`.
 
-### `[S]` Cross-room combat re-entry when extra attack issued after combat ends
+### `[M]` GM occasionally invents room contents or denies authored encounters on natural transitions
 
-- **Surfaced:** Stage 3 smoke test (2026-04-22, Crow's Hollow). Ren fought
-  two goblins in the study. They rendered as a single "Goblin Scavengers"
-  stat block and were defeated as one target; [COMBAT: off] fired. When
-  Ren attacked "the other goblin", combat re-entered — but against the
-  Warden's Lieutenant Orick Havel in the Warden's Crypt room, not the
-  remaining goblin.
-- **Root cause 1 (single-block encounter):** pre-v1 rendering collapses
-  every encounter group into one entry. Per-instance HP is needed —
-  `gameState.module.encounters[id].instances[]` should track each goblin
-  separately with its own HP bar. (Save envelope ships the field; runtime
-  rewrite still pending.)
-- **Root cause 2 (cross-room teleport):** when `[COMBAT: on]` fires and
-  the current room has no active encounters (because the study's sole
-  encounter is already defeated), `ensureCombatRoomHasEncounters()` in
-  `scripts/ui-encounters.js` falls back to the first alphabetically-sorted
-  room with encounters — in Crow's Hollow that's the Warden's Crypt boss.
-- **Fix direction:** rewrite encounter instance tracking and retire
-  `ensureCombatRoomHasEncounters`. For the cross-room fallback specifically:
-  when combat triggers in a room with no active encounter, the correct
-  move is to surface an error callout ("no active enemy in current room")
-  and keep the player put, not to reassign currentRoom.
+- **Surfaced:** 2026-05-02 / 2026-05-03 in Crow's Hollow during Phase 3
+  smoke testing. The architectural fix put the right data in the
+  prompt (currentRoom = destination, ENCOUNTER_INFO populated, authored
+  placement surfaced); the model occasionally elects to ignore it.
+- **Behavior patterns:**
+  - GM partially-invents room descriptions on entry: mixes authored
+    prose with hallucinated furniture, exits, scratched messages.
+  - GM denies authored encounters: player asks "are there enemies
+    here?", GM replies no even though ENCOUNTER_INFO lists 3 active
+    instances with non-zero HP.
+  - GM references the wrong room in narration ("the Gate Room is
+    quiet now") while currentRoom is officers_study and the prompt
+    explicitly says room=officers_study.
+  - GM coins its own descriptors for connections in narration
+    ("a narrower door stands ajar") that diverge from authored
+    connection labels ("right, into the officer's study"), confusing
+    the player text-input movement-intent heuristic.
+- **Mitigations already shipped (Phase 3, see CHANGELOG):**
+  - Authored encounter `placement` text surfaced in `ENCOUNTER_INFO`
+    so the GM has explicit prose to use.
+  - Pre-emptive room flip ensures destination room is rendered FULL
+    in the prompt before the GM responds.
+  - Connection-label phrase matching catches most natural text-input
+    movement intents.
+- **Still failing despite the above:**
+  - Pure compliance: GM has correct prompt content, elects to invent
+    or deny anyway. Strongest signal that this is a model-side issue
+    rather than an architecture issue.
+  - GM-coined connection synonyms: when the GM names exits in its own
+    narration that diverge from authored labels, player text matching
+    those synonyms misses (no auto-capture of GM-coined labels).
+- **Fix directions (any combination):**
+  - Add a small static-prompt directive (~80 chars): "use authored
+    connection labels verbatim in narration." Reduces label divergence
+    at the source.
+  - Upgrade the GM model from `claude-sonnet-4-5` to `claude-sonnet-4-6`
+    or `claude-sonnet-4-7` for stronger instruction-following on dense
+    prompts. Cheap to A/B test; just an `AI_MODEL` env var change.
+  - Capture GM-coined connection synonyms from prior turn narration
+    and add them as ad-hoc connection match candidates. Brittle, last
+    resort.
 
 ### `[L]` Player can't roll magic bonus-damage dice physically
 
@@ -193,12 +213,18 @@ Open polish items surfaced during the v1 refactor smoke tests, folded in from `P
   contract changes. Smoke-test scenarios (Crow's Hollow 3-goblin
   encounter with `[ATTACK_TARGET:]` pre-select, Three Knots solo
   dead-king, Gauntlet 3-skeleton) all passed without behavior drift.
-- **Status:** worst case is 583 chars over the 16k threshold (still
-  RED, but close to the line). Phase 3 (cross-room combat teleport
-  fix) and future features will push back upward — revisit if a
-  session report shows the worst case climbing past ~17.5k or any
-  GM regression appears (forgets `[ROOM:]`, narrates with numbers,
-  combines combat steps, etc.).
+- **Status (post-Phase-3, 2026-05-03):** worst case mid-combat in
+  Officer's Study is now ~17,344 chars (was 16,583 post-trim). Phase
+  3 added the encounter `placement` field to `ENCOUNTER_INFO`
+  (~150–200 chars per active encounter when present) — the cost paid
+  for finally getting the GM to introduce authored encounters on
+  entry. Roughly 156 chars of headroom against the 17,500 soft
+  ceiling. Threshold rule was reverted (the pre-emptive room flip
+  replaced it architecturally); cleared-room ENCOUNTER_INFO header
+  saves bytes when the room is cleared.
+- **Revisit if:** a session report shows the worst case climbing past
+  ~17,500 or any GM regression appears (forgets `[ROOM:]`, narrates
+  with numbers, combines combat steps, etc.).
 - **Next-pass direction (if needed):** drop the redundant `(id: foo)`
   labelling on compact-room lines (the id is already in the prefix);
   second-pass tightening of WHO ROLLS / COMBAT TURN STRUCTURE /

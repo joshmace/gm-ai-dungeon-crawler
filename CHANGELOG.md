@@ -8,6 +8,136 @@ Newest sections first.
 
 ---
 
+## Per-instance HP — Phase 3: cross-room teleport fix + room-transition compliance (2026-05-02 / 2026-05-03)
+
+Closes the cross-room teleport bug from the Stage 3 smoke test
+(Crow's Hollow goblin re-entry → Warden's Crypt boss) and the chain of
+adjacent issues that surfaced during Phase 3 smoke testing. Eleven
+commits with one revert; original Phase 3 scope (parser-side guard) was
+the first commit, the rest are follow-ups that closed gaps the smoke
+tests opened.
+
+**Original Phase 3 scope — parser-side guard.** The
+`ensureCombatRoomHasEncounters()` helper in `ui-encounters.js` was the
+silent-teleport mechanism: when `[COMBAT: on]` (or a `[ROLL_REQUEST:
+damage|attack]`, or a "combat begins" prose heuristic) fired in a room
+with no active enemy, it rewrote `gameState.currentRoom` to the
+alphabetically-first room with encounters. Replaced with
+`guardCombatRoomHasActiveEncounter()` — surfaces a `"No active enemy
+in this room. Combat tag ignored."` callout, reverts `inCombat = false`
+and `mode = exploration`, leaves `currentRoom` alone. Three call sites
+in `response-parser.js` (the `[ROLL_REQUEST:]` damage/attack branch,
+`tryParseCombatTag`, `tryParseCombatBegins`). Dead helper +
+`getFirstRoomIdWithEncounters` deleted. Net: −7 lines.
+
+**Dice-UI suppression on guard rejection.** When the guard reverted on
+a `[ROLL_REQUEST: Attack]` in a no-enemy room, the existing
+`processAIResponse` flow still called `showDiceSection`, leaving the
+player staring at "Roll Attack:" with nothing to swing at. Added a
+`suppressRollUI` flag — when the guard rejects, fall back to
+`disableInput(false)` instead of showing the dice prompt. Non-combat
+roll requests (Perception, etc.) unaffected.
+
+**Cleared-room `ENCOUNTER_INFO` header swap.** When a room has authored
+encounters but every instance is defeated, the dynamic
+`ENCOUNTER_INFO` header now reads `"## Active Encounters: ALL DEFEATED
+— this room is cleared. The threat is over. Do NOT narrate combat
+with these enemies; if the player attacks, acknowledge that all
+enemies are defeated."` instead of the standard "use these EXACT
+stats" framing. Runtime swap only — costs zero in mid-fight rooms,
+saves ~112 chars in cleared rooms.
+
+**Encounter-panel gating (`panelReadyRooms`).** Pre-fix, the right-hand
+encounter panel surfaced enemy HP bars the moment `[ROOM:]` flipped
+`currentRoom`, even though the GM hadn't yet narrated the enemies. New
+`gameState.panelReadyRooms` array — a room joins it the first time
+`buildSystemPrompt` builds with it as `currentRoom` (i.e. the GM has
+seen full description + encounters and had a turn to narrate them).
+`updateMonsterPanel` only calls `recordEncounterHistoryForRoom` for
+rooms in this list (or when `inCombat`, as a fallback).
+`test.teleportToRoom` marks the destination panel-ready directly, so
+test workflows preserve their immediate-panel semantics. Not persisted
+to the save envelope — recomputes on first prompt build after load.
+
+**Authored encounter `placement` surfaced in `ENCOUNTER_INFO`.** The
+module's authored `encounter.placement` field — the explicit "what the
+player sees on engagement" prose — was never in the prompt. Added to
+`buildEncounterDescription` for active encounters only. For Crow's
+Hollow `goblin_scavengers` this means the GM sees `"Two scouts duck
+behind the overturned drawer and the window as the player enters; the
+brute, who had been crowbarring the lockbox without success, turns
+with the crowbar still in hand and bellows for his fellows."` —
+exactly the cue it needs to introduce the encounter on entry instead
+of inventing or omitting. ~150–200 chars per active encounter; mid-
+fight Officer's Study went 16,583 → 17,344 chars.
+
+**Auto-resolve survivors on `[COMBAT: off]`.** When the GM emits
+`[COMBAT: off]` for a hand-waved end-of-fight (surrender / flee
+without an explicit `[MONSTER_FLED:]`), the parser now marks all
+surviving instances in the current room defeated and fires authored
+encounter rewards once. Pre-fix: a surrendered or fleeing instance
+lingered in the panel, encounter never resolved, authored
+XP/treasure never applied (player had to demand them in prose, which
+violated the no-numbers-in-narration contract). Post-fix: panel
+clears, `<charname> gains N XP and discovers Ngp gold!` callout
+fires, inventory updates. Reward-firing logic mirrors
+`ui-dice.js:1116-1136` inline — refactor candidate.
+
+**Threshold rule reverted.** A static-prompt directive ("on `[ROOM:]`
+transitions, narrate the threshold only — never the interior")
+shipped briefly as the fix for "GM hallucinates room contents on
+transition." Wrong call: it forced the player to manually nudge with
+"I look around" to get the description, and didn't reliably trigger
+authored encounters either. Reverted in favor of the architectural
+fix below.
+
+**Pre-emptive room flip on player movement intent.** The Stage 4
+"current room rendered FULL, others compact" paging is correct for
+prompt budget but means the GM responds to "I move to X" from a
+prompt where the destination is just an id-name-exits stub. Result:
+hallucination + missed encounters. Fix: when the player commits to
+moving — connection-button click (rock-solid) or movement-intent text
+("I head into the study", "I go right") — flip `currentRoom` to the
+destination *before* the prompt builds. The GM's response is
+generated from a prompt where the destination is rendered FULL. Added
+`preemptiveRoomFlip()` in `main.js`, `findMovementTargetInText()` in
+`response-parser.js` (shared heuristic with `tryParseRoomChange`),
+and a `_preemptiveRoomChangeFrom` flag so `processAIResponse`'s
+`onRoomEntry` hook still fires for pre-flipped transitions.
+`panelReadyRooms` naturally syncs — the destination joins on the
+first prompt build, which is now the entry response.
+
+**Connection-label matching in the movement-intent heuristic.**
+`findMovementTargetInText` now also checks the current room's
+connection labels (split on commas so "right, into the officer's
+study" matches `"right"` or the full phrase independently). Catches
+"I go right" / "I enter the right doorway" without needing the
+destination room name in the player's text. Skips locked / hidden
+connections. Edge NOT covered: when the GM coins its own descriptor
+for a connection in narration ("a narrower door stands ajar") and the
+player follows it — see new BACKLOG ticket on GM compliance.
+
+**Verified end-to-end in Crow's Hollow.** The original Phase 3 repro
+(`test.defeatAllEncounters` → "I swing at the other goblin") now
+produces a parser callout instead of a teleport. A natural walk
+yard → gate_room → officers_study (via clicks AND via text input
+matching room name or connection-label phrases) gets the full
+authored study description AND introduces the goblins per their
+placement, in a single GM turn. Combat resolves cleanly: per-instance
+target picker works, `[ATTACK_TARGET:]` pre-select works, surrender
+of the last instance auto-resolves the encounter and fires authored
+XP/treasure callouts.
+
+**Trade-offs.** Worst-case prompt at ~17,344 chars in Officer's Study
+mid-combat — 156 chars of headroom under the 17,500 soft ceiling.
+Save schema unchanged at v1. Non-Crow's-Hollow packs (Three Knots,
+Gauntlet) not directly smoke-tested in this session — risk of
+regression assessed as low (fixes are pack-agnostic) but not zero.
+Known unfixed: the deeper GM-compliance pattern (model occasionally
+denies authored content even with correct prompt) — see `BACKLOG.md`.
+
+---
+
 ## `[REWARD:]` tag — ad-hoc prose rewards (2026-04-27)
 
 Closes the prose-rewards gap surfaced in the Crow's Hollow Stage 3

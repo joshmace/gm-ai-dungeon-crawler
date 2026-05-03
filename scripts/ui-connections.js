@@ -144,6 +144,14 @@
         const label = conn.label || titleCase(conn.key);
         input.value = `I go through ${label}.`;
         debugLog('CONNECTION', `click: ${conn.key} → ${conn.target} (state=${conn.state})`);
+        // Phase 3: pre-emptive room flip — connection click is a rock-
+        // solid signal that the player is moving to conn.target. Flip
+        // currentRoom now so the GM's prompt renders the destination
+        // FULL on the very turn that handles this move. Without this,
+        // the GM responds from a prompt where the destination is just a
+        // compact id-name-exits stub and either hallucinates the room
+        // or omits the authored encounter on entry.
+        if (conn.target && global.preemptiveRoomFlip) global.preemptiveRoomFlip(conn.target);
         if (global.submitAction) {
             global.submitAction();
         }
