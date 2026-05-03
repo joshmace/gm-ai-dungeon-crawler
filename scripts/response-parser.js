@@ -53,7 +53,15 @@
 
     function processAIResponse(response) {
         debugLog('AI', 'Processing AI response');
-        const previousRoom = gs().currentRoom;
+        // Phase 3: when a pre-emptive room flip happened on the player's
+        // submit (connection click or movement-intent text), currentRoom
+        // has already been bumped to the destination. The original source
+        // room is stashed on this flag — read and clear it so the
+        // post-response onRoomEntry hook below correctly fires for the
+        // transition that just completed.
+        const preempted = gs()._preemptiveRoomChangeFrom;
+        gs()._preemptiveRoomChangeFrom = null;
+        const previousRoom = (preempted != null && preempted !== '') ? preempted : gs().currentRoom;
         const previousCombat = gs().inCombat;
         
         // Parse optional scene directives and strip control tags from visible text.
@@ -537,6 +545,40 @@
         return out;
     }
     
+    /**
+     * Phase 3: shared movement-intent heuristic. Returns the target room
+     * id if `text` signals movement to a known non-current room (room
+     * name or id-phrase + a movement verb in the same sentence), else
+     * null. Used by both the GM-response parser (tryParseRoomChange) and
+     * the player-input pre-emptive flip in main.js submitAction.
+     *
+     * Mirrors the heuristic in tryParseRoomChange but returns the id
+     * instead of mutating state — the caller decides what to do.
+     */
+    function findMovementTargetInText(text) {
+        const rooms = gd().module && gd().module.rooms;
+        if (!rooms || !text) return null;
+        const movementRe = /\b(?:enter(?:s|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/i;
+        const sentences = text
+            .split(/(?<=[.!?])\s+|—|\n+/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+            .map(s => s.toLowerCase().replace(/\bmoral chamber\b/g, 'morale chamber'));
+        for (const [roomId, room] of Object.entries(rooms)) {
+            if (!room || roomId === gs().currentRoom) continue;
+            const roomName = (room.name || '').toLowerCase();
+            const roomIdPhrase = roomId.replace(/_/g, ' ').toLowerCase();
+            for (const s of sentences) {
+                const hasName = roomName && s.includes(roomName);
+                const hasIdPhrase = roomIdPhrase && s.includes(roomIdPhrase);
+                if (!hasName && !hasIdPhrase) continue;
+                if (!movementRe.test(s)) continue;
+                return roomId;
+            }
+        }
+        return null;
+    }
+
     /** If narrative indicates the player entered a different room, update currentRoom so combat indicator etc. are correct. */
     function tryParseRoomChange(text) {
         const rooms = gd().module && gd().module.rooms;
@@ -1238,6 +1280,7 @@
         findEncounterForStateTag,
         parseExplicitStateTags,
         tryParseRoomChange,
+        findMovementTargetInText,
         tryParseCombatTag,
         tryParseCombatBegins,
         tryParseRetreat,
@@ -1257,6 +1300,7 @@
     global.findEncounterForStateTag = findEncounterForStateTag;
     global.parseExplicitStateTags   = parseExplicitStateTags;
     global.tryParseRoomChange       = tryParseRoomChange;
+    global.findMovementTargetInText = findMovementTargetInText;
     global.tryParseCombatTag        = tryParseCombatTag;
     global.tryParseCombatBegins     = tryParseCombatBegins;
     global.tryParseRetreat          = tryParseRetreat;

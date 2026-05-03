@@ -489,6 +489,31 @@
         }
     }
 
+    /**
+     * Phase 3: pre-emptive room flip. Called from the connection-click
+     * handler (rock-solid signal) and from the player-input movement-
+     * intent heuristic in submitAction. Mutates currentRoom DATA only —
+     * onRoomEntry stays on its existing async timing (fired from
+     * processAIResponse after the GM responds), so hazards still land
+     * after the GM's room-entry narration, preserving the current order.
+     *
+     * The _preemptiveRoomChangeFrom flag tells processAIResponse where
+     * we transitioned FROM, so its room-change check still fires and
+     * triggers onRoomEntry for the destination.
+     */
+    function preemptiveRoomFlip(targetId) {
+        if (!targetId) return false;
+        const rooms = gd() && gd().module && gd().module.rooms;
+        if (!rooms || !rooms[targetId]) return false;
+        const prev = gs().currentRoom;
+        if (targetId === prev) return false;
+        gs().currentRoom = targetId;
+        gs()._preemptiveRoomChangeFrom = prev;
+        if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
+        if (global.debugLog) global.debugLog('PARSE', `Pre-emptive room flip: ${prev} → ${targetId}`);
+        return true;
+    }
+
     function submitAction() {
         const input = document.getElementById('playerInput');
         const action = input.value.trim();
@@ -501,6 +526,21 @@
         tryParseWeaponSwitch(action);
         tryParseArmorState(action);
         tryParseRetreat(action);
+
+        // Phase 3: pre-emptive room flip on player movement intent. If
+        // the player's text matches a "move into <known room>" pattern
+        // (movement verb + room name/id-phrase in same sentence), flip
+        // currentRoom now so the GM's prompt renders the destination
+        // FULL — description + features + encounters. Without this, the
+        // GM responds to the move with only compact destination info
+        // and either invents the room or omits the encounter. Connection
+        // clicks (UI) hit this same path indirectly, since the click
+        // handler also calls preemptiveRoomFlip directly with the exact
+        // target id (more reliable than text heuristic).
+        if (global.findMovementTargetInText) {
+            const target = global.findMovementTargetInText(action);
+            if (target) preemptiveRoomFlip(target);
+        }
         // Phase 2: preemptive combat-mode flip. Pre-Phase-1 combat only
         // engaged once damage was applied (or the GM emitted [COMBAT: on]
         // in response). That meant the very first GM call after the player
@@ -573,6 +613,7 @@
     global.handleInputKeyDown          = handleInputKeyDown;
     global.submitAction                = submitAction;
     global.onRoomEntry                 = onRoomEntry;
+    global.preemptiveRoomFlip          = preemptiveRoomFlip;
     global.loadGameData                = loadGameData;
     global.updateLoadingStatus         = updateLoadingStatus;
     global.debugLog                    = debugLog;
