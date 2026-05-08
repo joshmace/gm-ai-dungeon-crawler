@@ -566,6 +566,14 @@ body {
   margin-top: 6px;
 }
 
+/* Movement-intent confirmation chip — Path B disambiguation gate. Mirrors
+   the gm_adjudicate confirm shape so visual idiom stays consistent. */
+.movement-chip-confirm .movement-chip-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 /* ============================================
    Narrative Panel (Center Column - 60%)
    ============================================ */

@@ -678,6 +678,34 @@
                 }
             },
 
+            // Movement-intent chip (Path B) regression helper. Reports
+            // which of the two heuristics would fire for `text` in the
+            // current room. Pure read — never flips state or surfaces a
+            // chip. Use to confirm Path A still fires silently for the
+            // strict-match cases and that Path B catches typos /
+            // ambiguous phrasings without false-triggering on prose.
+            //   test.movementChip('I head into the officer\'s study') → Path A
+            //   test.movementChip('i gor right')                      → Path B
+            //   test.movementChip('I attack the goblin')              → no chip
+            movementChip(text) {
+                const t = String(text == null ? '' : text);
+                const a = window.findMovementTargetInText
+                    ? window.findMovementTargetInText(t) : null;
+                const b = window.findAmbiguousMovementTargetInText
+                    ? window.findAmbiguousMovementTargetInText(t) : null;
+                const expected = a ? 'Path A — silent flip'
+                               : b ? `Path B — chip → ${b.label} (${b.source})`
+                               :     'no chip, no flip';
+                console.table([{
+                    input: t,
+                    pathA: a || '—',
+                    pathB: b ? `${b.target} (${b.source})` : '—',
+                    expected
+                }]);
+                addSystemMessage(`[DEBUG] movementChip: "${t}" → ${expected}`);
+                return { pathA: a, pathB: b, expected };
+            },
+
             defeatEncounter(encounterId) {
                 const rooms = window.gameData && window.gameData.module && window.gameData.module.rooms;
                 if (!rooms) return;

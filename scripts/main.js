@@ -533,6 +533,10 @@
 
         if (!action || gs().waitingForRoll) return;
 
+        // Auto-dismiss any pending movement chip from a prior turn — the
+        // new submit IS the player's revised intent now.
+        dismissMovementChip();
+
         gs().lastCombatRoom = null; // clear lingering monster panel when player takes another action
         gs()._consumableUsedThisTurn = false; // Stage 6: reset the Use-button guard for this turn
         tryParseWeaponAway(action);
@@ -555,10 +559,49 @@
         // an in-combat block as a duplicate callout).
         const fromChip = !!gs()._chipClickInProgress;
         gs()._chipClickInProgress = false;
+        let pathAFired = false;
         if (!fromChip && global.findMovementTargetInText) {
             const target = global.findMovementTargetInText(action);
-            if (target) preemptiveRoomFlip(target);
+            if (target) {
+                preemptiveRoomFlip(target);
+                pathAFired = true;
+            }
         }
+
+        // Common bookkeeping: clear input + push to command history. Must
+        // happen before any early return so the chip path keeps the action
+        // recallable via up-arrow even though it doesn't proceed yet.
+        input.value = '';
+        gs().commandHistoryIndex = -1;
+        gs().commandHistoryDraft = '';
+        if (gs().commandHistory[0] !== action) {
+            gs().commandHistory.unshift(action);
+            if (gs().commandHistory.length > 50) gs().commandHistory.pop();
+        }
+
+        // Path B: movement-intent confirmation chip. Runs only when Path A
+        // missed AND we're out of combat (chip can't bypass the combat-flip
+        // guard, so surfacing it during combat is dead UX). When an
+        // ambiguous target emerges, render the chip and STOP — proceedSubmit
+        // re-enters from the chip's Yes/No handlers.
+        if (!fromChip && !pathAFired && !gs().inCombat && global.findAmbiguousMovementTargetInText) {
+            const ambig = global.findAmbiguousMovementTargetInText(action);
+            if (ambig) {
+                renderMovementChip(action, ambig);
+                return;
+            }
+        }
+
+        proceedSubmit(action);
+    }
+
+    /**
+     * Tail of submitAction — the part that runs after Path A / Path B
+     * detection and the input/history bookkeeping. Extracted so the
+     * movement-chip Yes/No handlers can re-enter without duplicating
+     * combat-mode flip, pack-item-use parsing, or the GM call.
+     */
+    function proceedSubmit(action) {
         // Phase 2: preemptive combat-mode flip. Pre-Phase-1 combat only
         // engaged once damage was applied (or the GM emitted [COMBAT: on]
         // in response). That meant the very first GM call after the player
@@ -581,23 +624,93 @@
         }
         gs().torchUseParsedThisTurn = false; // reset each turn
         tryParsePackItemUse(action, true); // parse player's declared actions (e.g. "I pull out my torch and light it")
-        
+
         addPlayerAction(action);
-        input.value = '';
-        gs().commandHistoryIndex = -1;
-        gs().commandHistoryDraft = '';
-        if (gs().commandHistory[0] !== action) {
-            gs().commandHistory.unshift(action);
-            if (gs().commandHistory.length > 50) gs().commandHistory.pop();
-        }
-        
+
         gs().lastUserRollType = null; // player is taking a new action (not responding to a roll)
         gs().conversationHistory.push({
             role: "user",
             content: action
         });
-        
+
         callAIGM();
+    }
+
+    /**
+     * Movement-intent confirmation chip. Surfaces an inline narrative entry
+     * when Path B detects ambiguous movement intent. Yes flips and proceeds;
+     * No proceeds without flipping (treats input as prose). The chip auto-
+     * dismisses on the next submitAction so the player isn't stuck if they
+     * change their mind. Mirrors the gm_adjudicate Confirm/Cancel pattern
+     * in game-state.js so visual idiom and CSS scaffolding stay shared.
+     */
+    function renderMovementChip(action, ambig) {
+        const scroll = global.document && global.document.getElementById('narrativeScroll');
+        if (!scroll) {
+            // No narrative panel to attach to — skip the chip entirely.
+            proceedSubmit(action);
+            return;
+        }
+
+        const entry = global.document.createElement('div');
+        entry.className = 'narrative-entry movement-chip-confirm';
+
+        const wrap = global.document.createElement('div');
+        wrap.className = 'system-message';
+
+        const title = global.document.createElement('div');
+        title.innerHTML = `Move to <b>${escapeChipHtml(ambig.label)}</b>?`;
+        wrap.appendChild(title);
+
+        const btnRow = global.document.createElement('div');
+        btnRow.className = 'movement-chip-buttons';
+
+        const yes = global.document.createElement('button');
+        yes.type = 'button';
+        yes.className = 'primary-button';
+        yes.textContent = 'Yes';
+        yes.addEventListener('click', () => {
+            if (global.debugLog) global.debugLog('PARSE', `Movement chip: Yes (${ambig.source}) → ${ambig.target}`);
+            entry.remove();
+            gs()._movementChipEntry = null;
+            preemptiveRoomFlip(ambig.target);
+            proceedSubmit(action);
+        });
+        btnRow.appendChild(yes);
+
+        const no = global.document.createElement('button');
+        no.type = 'button';
+        no.className = 'secondary-button';
+        no.textContent = 'No';
+        no.addEventListener('click', () => {
+            if (global.debugLog) global.debugLog('PARSE', `Movement chip: No (kept input as prose)`);
+            entry.remove();
+            gs()._movementChipEntry = null;
+            proceedSubmit(action);
+        });
+        btnRow.appendChild(no);
+
+        wrap.appendChild(btnRow);
+        entry.appendChild(wrap);
+        scroll.appendChild(entry);
+        if (typeof scrollToBottom === 'function') scrollToBottom();
+
+        gs()._movementChipEntry = entry;
+        if (global.debugLog) global.debugLog('PARSE', `Movement chip: surface (${ambig.source}) → ${ambig.target} for "${action}"`);
+    }
+
+    /** Remove an open movement chip (auto-dismiss on next submit). */
+    function dismissMovementChip() {
+        const entry = gs() && gs()._movementChipEntry;
+        if (!entry) return;
+        entry.remove();
+        gs()._movementChipEntry = null;
+        if (global.debugLog) global.debugLog('PARSE', 'Movement chip: auto-dismissed (new submit)');
+    }
+
+    function escapeChipHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, ch =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     }
 
 

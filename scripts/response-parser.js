@@ -627,6 +627,89 @@
         return null;
     }
 
+    /**
+     * Path B for the movement-intent confirmation chip. Pure read — caller
+     * decides whether to act. Runs only when findMovementTargetInText (Path A)
+     * misses; the looser signals here drop Path A's verb screen, so they
+     * surface inputs like bare "right", "officers study", or "i gor right"
+     * (typo) that the strict heuristic ignores. Returns
+     *   { target, label, source } | null
+     * where source is one of 'label-fragment' | 'room-name'.
+     *
+     * Two signals (precedence = first match wins):
+     *   1. Connection-label phrase of the current room (no verb screen).
+     *      Reuses Path A's comma-split phrase logic so "right, into the
+     *      officer's study" matches on either fragment. Word-boundary
+     *      regex prevents "right" from matching inside "frighten".
+     *   2. Module room name / id-phrase (no verb screen). Catches
+     *      "officers study" / "officer's study" without any label hint.
+     *
+     * Signal 3 from the BACKLOG ticket (movement verb + direction word)
+     * is not implemented separately — every direction word a shipping pack
+     * uses is already a connection-label fragment, so signal 1 catches
+     * those typos. If a future pack ships a connection without a
+     * directional label fragment, revisit.
+     */
+    function findAmbiguousMovementTargetInText(text) {
+        const rooms = gd().module && gd().module.rooms;
+        if (!rooms || !text) return null;
+
+        // Normalize for comparison: lowercase, strip apostrophes (typed and
+        // smart) so "officers study" matches authored "Officer's Study", and
+        // apply the same "moral chamber" GM-typo fix Path A uses.
+        function norm(s) {
+            return String(s == null ? '' : s)
+                .toLowerCase()
+                .replace(/['‘’]/g, '')
+                .replace(/\bmoral chamber\b/g, 'morale chamber');
+        }
+        function escapeRe(s) {
+            return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        const lower = norm(text);
+        const currentRoom = rooms[gs().currentRoom];
+        const overrides = (gs() && gs().connectionsModified) || {};
+
+        if (currentRoom && currentRoom.connections) {
+            for (const [key, authored] of Object.entries(currentRoom.connections)) {
+                const entry = (typeof authored === 'string')
+                    ? { target: authored, label: key, state: 'open' }
+                    : { target: authored.to || null, label: authored.label || key, state: authored.state || 'open' };
+                const override = overrides[key];
+                const state = (override && override.state) || entry.state;
+                if (state !== 'open') continue;
+                if (!entry.target || !rooms[entry.target] || entry.target === gs().currentRoom) continue;
+                const labelLower = norm(entry.label);
+                if (!labelLower) continue;
+                const phrases = labelLower.split(',').map(p => p.trim()).filter(p => p.length >= 2);
+                for (const phrase of phrases) {
+                    const re = new RegExp(`\\b${escapeRe(phrase)}\\b`, 'i');
+                    if (re.test(lower)) {
+                        const destName = (rooms[entry.target] && rooms[entry.target].name) || entry.label;
+                        return { target: entry.target, label: destName, source: 'label-fragment' };
+                    }
+                }
+            }
+        }
+
+        for (const [roomId, room] of Object.entries(rooms)) {
+            if (!room || roomId === gs().currentRoom) continue;
+            const roomName = norm(room.name);
+            const roomIdPhrase = norm(roomId.replace(/_/g, ' '));
+            // Length floor avoids 1-3 char names colliding with common prose
+            // ("up", "den"). No shipping pack has a sub-4-char room name.
+            if (roomName && roomName.length >= 4 && lower.includes(roomName)) {
+                return { target: roomId, label: room.name, source: 'room-name' };
+            }
+            if (roomIdPhrase && roomIdPhrase.length >= 4 && lower.includes(roomIdPhrase)) {
+                return { target: roomId, label: room.name || roomIdPhrase, source: 'room-name' };
+            }
+        }
+
+        return null;
+    }
+
     /** If narrative indicates the player entered a different room, update currentRoom so combat indicator etc. are correct. */
     function tryParseRoomChange(text) {
         const rooms = gd().module && gd().module.rooms;
@@ -1329,6 +1412,7 @@
         parseExplicitStateTags,
         tryParseRoomChange,
         findMovementTargetInText,
+        findAmbiguousMovementTargetInText,
         tryParseCombatTag,
         tryParseCombatBegins,
         tryParseRetreat,
@@ -1349,6 +1433,7 @@
     global.parseExplicitStateTags   = parseExplicitStateTags;
     global.tryParseRoomChange       = tryParseRoomChange;
     global.findMovementTargetInText = findMovementTargetInText;
+    global.findAmbiguousMovementTargetInText = findAmbiguousMovementTargetInText;
     global.tryParseCombatTag        = tryParseCombatTag;
     global.tryParseCombatBegins     = tryParseCombatBegins;
     global.tryParseRetreat          = tryParseRetreat;

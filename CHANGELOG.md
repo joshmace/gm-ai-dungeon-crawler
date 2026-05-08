@@ -8,6 +8,140 @@ Newest sections first.
 
 ---
 
+## Movement-intent confirmation chip (2026-05-07)
+
+Closes the BACKLOG `[S]` "Movement-intent confirmation chip — close
+the stub-narration gap" ticket surfaced 2026-05-03 during the 4.6
+A/B test session. The strict pre-emptive flip heuristic in
+`findMovementTargetInText` was missing inputs like "I head right",
+"i gor right" (typo), and bare room-name phrasings ("officers
+study"); when it missed, the GM responded from a stub-view prompt
+(compact id-name-exits) and produced a thin punt-style entry — no
+authored description, no encounter introduction. PR #18 already
+loosened the verb regex for `go` and `head` but the user explicitly
+flagged that whack-a-mole-loosening is the wrong shape. This PR
+adds the confirmation-chip path the BACKLOG ticket called for.
+
+**What shipped.**
+
+- **Path A unchanged** — `findMovementTargetInText` still fires
+  silently when the strict heuristic matches. No regression to
+  the working "I head into the officer's study" flow.
+- **Path B detector** — new pure function
+  `findAmbiguousMovementTargetInText(text)` in
+  `scripts/response-parser.js`. Returns
+  `{ target, label, source }` or `null`. Two signals (precedence
+  = first match wins):
+  1. **Connection-label phrase fragment** of the current room,
+     no verb screen. Reuses Path A's comma-split phrase logic so
+     "right, into the officer's study" matches on either fragment.
+     Word-boundary regex prevents "right" from matching inside
+     "frighten".
+  2. **Module room name / id-phrase**, no verb screen. Catches
+     "officers study" / "officer's study" without any label hint.
+- Apostrophe normalization on both sides (typed and curly), so
+  "officers study" matches authored "Officer's Study". Length
+  floor of 4 chars on the room-name pass to avoid 1-3 char names
+  colliding with common prose ("up", "den").
+- The third candidate signal from the ticket (movement verb +
+  any direction word) wasn't implemented separately — every
+  direction word a shipping pack uses is already a connection-label
+  fragment, so signal 1 catches those typos. Documented as a
+  comment on the function for future revisits.
+
+**UX shape.**
+
+- Inline narrative-panel entry using the same Confirm/Cancel
+  idiom Stage 6 introduced for `gm_adjudicate`. Single line of
+  copy ("Move to <b>Officer's Study</b>?") plus `[Yes]` and
+  `[No]` buttons. No flavor wrapper.
+- New `.movement-chip-confirm` CSS class mirrors the
+  `.gm-adjudicate-confirm` button-row rule. ~7 lines of CSS.
+- Chip auto-dismisses on next `submitAction` so the player isn't
+  stuck if they change their mind. The original action is still
+  pushed to command history so up-arrow recall works.
+- **In-combat short-circuit** — Path B doesn't surface the chip
+  while `inCombat = true`. The PR #18 combat-flip guard at
+  `preemptiveRoomFlip` remains as the safety net for any path that
+  does try.
+
+**Integration.**
+
+- `submitAction` in `scripts/main.js` extracted into two halves:
+  the detection prelude (Path A → Path B → STOP-or-proceed) and
+  a new `proceedSubmit(action)` helper that owns the combat-mode
+  flip, pack-item-use parsing, player-action surface, conversation
+  push, and `callAIGM`. The chip's Yes/No handlers call
+  `proceedSubmit` directly so they don't re-trigger the heuristic.
+- Yes path: `entry.remove()` → `preemptiveRoomFlip(target)` →
+  `proceedSubmit(action)`. The combat-flip guard naturally rejects
+  the flip if combat began somehow between chip surface and click;
+  the original action still flows through to the GM.
+- No path: `entry.remove()` → `proceedSubmit(action)`. Action goes
+  to GM unchanged (treated as prose, not movement). Matches the
+  "I creep toward the doorway, hand on the hilt" use case.
+- The `_chipClickInProgress` flag from PR #18 is for the
+  connection-button path only — the new chip's Yes handler
+  bypasses `submitAction` entirely (calls `proceedSubmit`), so no
+  collision with the existing dedup flag.
+
+**Smoke-test matrix.** All inputs assume the player is in Crow's
+Hollow's `gate_room` (which has connections labelled "left, into
+the barracks", "right, into the officer's study", and the locked
+"the iron-strapped door"). PR #18's regex loosenings already cover
+"I head right" / "I go right" — those remain Path A silent flips
+and are not chip territory. The chip's distinct coverage is
+verb-less phrasings, typos that don't parse as movement verbs, and
+bare room-name fragments.
+
+| Bucket | Input | Expected | Observed |
+|---|---|---|---|
+| Strict-match silent | "I head into the officer's study" | Path A flip, no chip | ✅ |
+| Strict-match silent | "I head right" (post-PR-#18) | Path A flip, no chip | ✅ |
+| Strict-match silent | "I go right" (post-PR-#18) | Path A flip, no chip | ✅ |
+| Loose-match chip | "i gor right" (typo) | chip → Officer's Study | ✅ |
+| Loose-match chip | "officers study" | chip → Officer's Study | ✅ |
+| Loose-match chip | "the right door" | chip → Officer's Study | ✅ |
+| Loose-match chip | "right" (bare) | chip → Officer's Study | ✅ |
+| No-match no chip | "I attack the goblin" | no chip, no flip | ✅ |
+| No-match no chip | "I look around" | no chip, no flip | ✅ |
+| No-match no chip | "what time is it" | no chip, no flip | ✅ |
+| In-combat | any movement input | no chip; combat-flip guard if attempted | ✅ |
+
+**`test.movementChip(text)` console helper** ships with the PR.
+Reports which heuristic would fire (Path A / Path B / neither) for
+arbitrary text in the current room. Pure read — never flips state
+or surfaces a chip.
+
+**Prompt-size verification.** Chip is pre-prompt so prompt size is
+unchanged. Re-baselined in Crow's Hollow Officer's Study mid-combat:
+**16,817 chars** (RED), unchanged from PR #18.
+
+**Trade-offs.**
+- **Apostrophe normalization is asymmetric to Path A** — Path A
+  still uses raw substring match on connection-label phrases. The
+  contracts diverge slightly (Path B is more permissive). Acceptable
+  because Path A only fires with a verb screen present, which limits
+  false-positive surface; Path B's verb-less screening needs the
+  extra normalization to handle typed apostrophes consistently. If
+  Path A surfaces an apostrophe-related miss in a future smoke test,
+  port the normalization helper.
+- **`_movementChipEntry` lives on `gameState`** — same pattern as
+  `_chipClickInProgress` and `_consumableUsedThisTurn`. Not part of
+  the saved envelope (these are runtime UI flags); save/load already
+  handles this set as transient.
+- **The retreat/flee/pursuit ticket stays open and untouched.** The
+  chip mechanism is compatible with the future retreat work — Path B
+  short-circuits in combat, so the retreat ticket can design
+  parting-attack and pursuit semantics independently.
+
+**Files changed:** `scripts/response-parser.js`, `scripts/main.js`,
+`styles/main.css`, `index.html` (test helper),
+`BACKLOG.md`, `CHANGELOG.md`.
+Branch: `claude/movement-confirmation-chip-2026-05-07`.
+
+---
+
 ## GM model upgrade to claude-sonnet-4-6 + Phase 3 follow-up coverage gaps (2026-05-03 / 2026-05-07)
 
 Cheapest first lever from the `[M]` "GM occasionally invents room

@@ -214,54 +214,32 @@ Open polish items surfaced during the v1 refactor smoke tests, folded in from `P
     and add them as ad-hoc connection match candidates. Brittle, last
     resort.
 
-### `[S]` Movement-intent confirmation chip — close the stub-narration gap
+### ✅ Movement-intent confirmation chip — shipped 2026-05-07
 
-- **Surfaced:** 2026-05-03 during the 4.6 A/B test session. The strict
-  pre-emptive flip heuristic in `findMovementTargetInText` (response-
-  parser.js) misses inputs like "I head right", "I gor right" (typo),
-  or any phrasing where the verb-screen regex doesn't recognize a
-  preposition or directional word. The GM still figures out the
-  destination from context and emits `[ROOM: <id>]` in its response,
-  so the post-response flip lands the player in the right room — but
-  the GM's narration for that turn was generated from a prompt where
-  the destination was a compact id-name-exits stub. Result: thin
-  punt-style entry ("you step into a smaller room — what do you do?"),
-  no authored description, no encounter introduction.
-- **Architecture insight:** the post-response flip happening when the
-  pre-emptive flip didn't fire IS the signal that something went
-  wrong. The flip path bifurcates response quality: pre-emptive →
-  full destination rendered → faithful entry; post-response → stub
-  destination rendered → punt. The fix isn't whack-a-mole-loosening
-  the strict regex (we already did `go` and `head`) — it's a second
-  path for ambiguous intents.
-- **Design (what to build):**
-  - Keep the existing strict heuristic as path A. When it fires, flip
-    silently and proceed (current behavior).
-  - Add a looser detection path B that runs only if A didn't fire.
-    Candidate signals: sentence contains a connection-label phrase
-    of the current room (no verb screen), or sentence contains a
-    room name from the module (no verb screen), or contains a known
-    movement verb plus any direction word.
-  - When B fires, surface a small inline confirmation chip in the
-    input area: "Move to: <Room Name>? [Yes] [No]". The GM is NOT
-    called yet.
-  - On Yes: pre-emptive flip + send the input to the GM (which now
-    sees the destination rendered FULL). On No: send the input to
-    the GM as-is (treated as not movement).
-  - When neither A nor B fires, send the input to the GM unchanged.
-- **Why this is the right shape:**
-  - Preserves text-input freedom (no menu-only movement).
-  - Catches typos and unmatched phrasings without inventing new
-    regex coverage every time.
-  - The chip is the disambiguation gate, not the connection panel —
-    so TTRPG flow ("I creep toward the doorway, hand on the hilt")
-    still works; only the room flip needs confirmation, not the
-    prose.
-- **Out of scope for the chip path (separately ticketed if pursued):**
-  GM-coined connection synonyms (pattern #4 in the GM-compliance
-  ticket above). The chip handles synonym confusion by giving the
-  player a confirmation moment, but it doesn't auto-extract synonyms
-  from GM narration.
+- **Resolution:** Path A (`findMovementTargetInText`) still fires
+  silently when the strict heuristic matches. Path B
+  (`findAmbiguousMovementTargetInText` in `scripts/response-parser.js`)
+  runs when Path A misses and the player isn't in combat; it surfaces
+  an inline narrative-panel chip ("Move to: <Room>? [Yes] [No]")
+  using the gm_adjudicate Confirm/Cancel idiom. Yes flips and proceeds
+  with the destination rendered FULL; No proceeds without flipping.
+  Chip auto-dismisses on the next submit so the player isn't stuck.
+  In-combat short-circuit keeps the chip out of fight rooms — the
+  PR #18 combat-flip guard remains as the safety net. Two signals
+  shipped (label-fragment + room-name); the third candidate from the
+  ticket spec (verb + direction) was redundant given that every
+  shipping-pack direction word is already a label fragment.
+- **What this closes:** the stub-narration gap from the 2026-05-03
+  4.6 A/B session — typos like "i gor right", verb-screen misses
+  like "I head right", and bare room-name phrasings ("officers
+  study") now route through the chip instead of falling through
+  to a stub-view GM call. The retreat/flee/pursuit ticket below
+  remains its own scope; the chip mechanism is compatible with the
+  future retreat work (Path B short-circuits in combat, leaving the
+  retreat ticket free to design parting-attack and pursuit
+  semantics independently).
+- See `CHANGELOG.md` for the full implementation note and smoke-test
+  matrix.
 
 ### `[L]` Player can't roll magic bonus-damage dice physically
 
