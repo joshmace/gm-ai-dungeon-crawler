@@ -8,6 +8,159 @@ Newest sections first.
 
 ---
 
+## GM model upgrade to claude-sonnet-4-6 + Phase 3 follow-up coverage gaps (2026-05-03 / 2026-05-07)
+
+Cheapest first lever from the `[M]` "GM occasionally invents room
+contents or denies authored encounters" BACKLOG ticket: bump the GM
+model from `claude-sonnet-4-5` to `claude-sonnet-4-6` (probed for 4.7
+first; not yet released as a Sonnet model — Sonnet tops out at 4.6 in
+this window). Server-side `AI_MODEL` env var change only; no code
+required for the swap itself. The session expanded into a small wave
+of Phase 3 follow-up coverage gaps that surfaced during smoke
+testing — each kept small, bisectable, and committed in this PR.
+
+**Method.** A/B test spec written and signed off before any code
+change. Crow's Hollow entry-narration variants (button click, "I
+head into the officer's study", "I go right" connection-label
+phrase), each scored against four binary checks: module-faithful
+description, authored encounter introduced on entry, correct room
+referenced, connection labels verbatim. Plus a fifth "are there
+enemies here?" denial check on the entry turn. Then the standard
+smoke-test bar across Crow's Hollow / Three Knots / Gauntlet, plus
+post-fix `test.promptSizeReport()` in representative rooms.
+
+**Result.** 4.6 cleans up the entry-narration patterns that
+dominated 4.5 smoke testing — module-faithful descriptions, authored
+encounter introductions, correct room references, authored
+connection labels — across all three variants. Mid-combat
+sequencing (per-instance target picker, attack flow, damage
+narration) clean. Two residual compliance leaks remain, both
+"model ignores authoritative state in prompt header"
+patterns:
+- **End-of-combat: GM ignores "ALL DEFEATED" header.** Surfaced
+  in Gauntlet 3-skeleton arena. After the last instance defeated
+  (mode flips to exploration, rewards fire, prompt header reads
+  "ALL DEFEATED — Do NOT narrate combat"), 4.6 narrated "the
+  other two clatter forward" and emitted `[MONSTER_ATTACK]`.
+  **Engine side defanged this PR** via a guard on `[MONSTER_ATTACK]`
+  in a no-active-enemy room — the tag is rejected with a callout
+  ("No active enemy in this room. Monster-attack tag ignored.")
+  instead of falling through to a default `+0` ranged attack.
+  Hallucinated narration still appears, but no bogus attack roll.
+- **Connection-state ignored: GM denies an unlocked door.**
+  Surfaced in Three Knots Chamber of the Seal. Rune-pillars puzzle
+  solved via the engine's INT-check fallback;
+  `[EFFECT] unlock_connection target=sealed_inner_door applied=true`
+  confirmed in the trail; `connectionsModified` correctly written
+  to game state. The very next player turn, 4.6 narrated "the seal
+  still runs its thin cold light along every edge of the door"
+  despite the prompt showing `state=open`. History-pruning
+  (12→10 turns each cycle) likely contributes — the puzzle solve
+  ages out of recent memory while `connectionsModified` remains
+  durable in game state. Logged on the existing compliance ticket
+  as a fresh failure pattern.
+
+These two patterns kept the `[M]` ticket alive but lowered its
+priority. Downgraded `[M]→[L]` in BACKLOG with the residual edge
+documented; entry-narration is the path Phase 3 was specifically
+trying to fix and that piece holds.
+
+**Phase 3 follow-up coverage gaps closed in this PR.** Each
+surfaced during smoke testing of 4.6 and was small enough to land
+alongside the model swap rather than as a separate PR.
+
+- **`go` regex loosening in movement-intent heuristic.** Phase 3's
+  connection-label phrase matching shipped, but the underlying
+  `findMovementTargetInText` verb regex required `go` to be
+  followed by `(in)?to` — so "I go to the study" matched but "I
+  go right" / "I go through" / "I go up" / "I go back" didn't,
+  because the verb screen failed before the connection-label
+  phrase check could run. Replaced `go(?:es)?\s+(?:in)?to` with
+  `go(?:es)?` (and applied the same fix to the mirror regex in
+  `tryParseRoomChange`). Connection-label phrase requirement
+  downstream filters false positives ("I let it go", "I go
+  fight" → no label phrase → no flip).
+- **`head` regex loosening, same shape.** "I head into the study"
+  matched but "I head right" didn't, for the same reason. Replaced
+  `head(?:s|ed)?\s+(?:in)?to` with `head(?:s|ed)?`. False
+  positives ("my head hurts") harmless because no label phrase
+  appears.
+- **Engine guard for `[MONSTER_ATTACK]`.** Mirrors the Phase 3
+  `guardCombatRoomHasActiveEncounter` pattern. When the tag fires
+  in a room with no active encounter — caused by the GM ignoring
+  the "ALL DEFEATED" header and continuing combat narration — the
+  engine no longer falls through to defaults
+  (`monster=null → +0 ranged → 1d6 fallback damage`). Instead it
+  emits a callout and strips the tag.
+- **Combat-flip guard in `preemptiveRoomFlip`.** Surfaced in
+  Three Knots: clicking a connection chip mid-combat teleported
+  `currentRoom` out of the fighting room while `mode=combat`
+  persisted. Both the chip-click path and the text-heuristic
+  path funnel through `preemptiveRoomFlip`, so a single guard
+  there covers both. Now rejects flips while `inCombat=true`
+  with a callout ("You cannot leave the room during combat.
+  Resolve the encounter first, or retreat explicitly."). Explicit
+  retreat (`tryParseRetreat`) clears `inCombat` first and so
+  passes the guard naturally. Proper retreat semantics (parting
+  attacks, enemy pursuit, authored `pursue_on_flee` flag) are
+  the BACKLOG `[S]` retreat/pursuit ticket; this guard is the
+  interim until that lands.
+- **Chip-click dedup flag.** Side effect of the combat-flip guard:
+  the chip handler explicitly calls `preemptiveRoomFlip(conn.target)`,
+  then `submitAction` runs the text heuristic on the chip-emitted
+  "I go through [label]." input and calls `preemptiveRoomFlip`
+  again with the same target. Pre-fix, the second call early-
+  returned at the `targetId === prev` check (harmless). Post-
+  fix, both calls hit the in-combat block path and double-emitted
+  the callout. Added `_chipClickInProgress` flag set by the chip
+  handler and consumed by `submitAction` to skip the redundant
+  heuristic call.
+
+**Prompt-size verification.** No drift from the model swap
+(prompt size is independent of the model). Capture results:
+- Crow's Hollow Officer's Study mid-combat: **16,817 chars** (RED).
+  Phase 3 worst-case was 17,344; this run had partway-defeated
+  encounter HP so the encounter info was shorter, but the trim
+  budget holds.
+- Three Knots Chamber of the Seal mid-combat: 14,324 chars (YELLOW).
+- Three Knots The Tomb Road exploration: 14,666 chars (YELLOW).
+- Gauntlet smoke pass under the engine guard: clean run.
+
+**Trade-offs.**
+- **Prose feels slightly more compressed than 4.5.** Same authored
+  beats appear (verified by side-by-side compare of GM responses
+  to module description), but 4.6 sometimes picks fewer evocative
+  details and skips some flavor. Subjective and not blocking;
+  noted here so future sessions don't mistake it for a flip-stub
+  symptom. The existing 50–100 word target in the system prompt
+  still produces faithful entries.
+- **`AI_MODEL` setting lives in `.env`, which is gitignored.** Only
+  `.env.example` is updated in this PR (default value bumped to
+  `claude-sonnet-4-6` and the example comment refreshed). Anyone
+  running the project locally needs to add or change the line in
+  their own `.env`. The server reports the active model via
+  `/api/config`; `CONFIG.MODEL` in the browser console is the
+  quick check.
+- **Two compliance leaks remain, both engine-defanged where
+  possible.** ALL DEFEATED ignored doesn't cause incorrect attack
+  rolls anymore (engine guard); puzzle-state ignored doesn't have
+  an engine-side analogue because the connection IS open in state
+  — only the GM's narration disagrees. The proper next lever for
+  the residual is the small static-prompt directive captured in
+  the BACKLOG ticket fix-directions list.
+
+**Default pack flip.** `CONFIG.GAME_PACK` in `index.html` is now
+`game_pack_village_three_knots.json` (was Crow's Hollow). Aligns
+the code with the "active" pack already named in `CLAUDE.md`;
+Crow's Hollow remains a one-line edit away.
+
+**Files changed:** `.env.example`, `index.html`,
+`scripts/response-parser.js`, `scripts/main.js`,
+`scripts/ui-connections.js`, `BACKLOG.md`, `CHANGELOG.md`.
+Branch: `claude/gm-model-upgrade-2026-05-03`.
+
+---
+
 ## Per-instance HP — Phase 3: cross-room teleport fix + room-transition compliance (2026-05-02 / 2026-05-03)
 
 Closes the cross-room teleport bug from the Stage 3 smoke test

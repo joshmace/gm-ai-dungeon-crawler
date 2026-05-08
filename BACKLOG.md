@@ -126,8 +126,17 @@ Open polish items surfaced during the v1 refactor smoke tests, folded in from `P
   reference includes a "do NOT use for authored encounter/feature/hazard
   rewards" guard. See `CHANGELOG.md`.
 
-### `[M]` GM occasionally invents room contents or denies authored encounters on natural transitions
+### `[L]` GM occasionally ignores authoritative state in prompt headers (downgraded from `[M]` 2026-05-07)
 
+- **Status (2026-05-07):** downgraded from `[M]` after the
+  `claude-sonnet-4-6` upgrade landed. 4.6 cleaned up the
+  entry-narration patterns that dominated 4.5 testing
+  (module-faithful descriptions, authored encounter introductions,
+  correct room references, authored connection labels). Two
+  residual leaks remain — both engine-defanged where possible,
+  none blocking the next milestone. Ticket kept open for the
+  fresh state-vs-history reconciliation observations and the
+  unshipped fix-direction options below.
 - **Surfaced:** 2026-05-02 / 2026-05-03 in Crow's Hollow during Phase 3
   smoke testing. The architectural fix put the right data in the
   prompt (currentRoom = destination, ENCOUNTER_INFO populated, authored
@@ -145,6 +154,41 @@ Open polish items surfaced during the v1 refactor smoke tests, folded in from `P
     ("a narrower door stands ajar") that diverge from authored
     connection labels ("right, into the officer's study"), confusing
     the player text-input movement-intent heuristic.
+  - GM ignores the "ALL DEFEATED — this room is cleared. Do NOT
+    narrate combat with these enemies" header after the last
+    encounter instance is defeated. Surfaced 2026-05-03 in the
+    Gauntlet 3-skeleton arena under `claude-sonnet-4-6`: rewards
+    fired and mode flipped to exploration, but the GM narrated
+    "the other two clatter forward" and emitted `[MONSTER_ATTACK]`,
+    treating defeated instances as still living. Inverted form of
+    the encounter-denial pattern above — same root failure
+    (model ignores authoritative state in prompt header), opposite
+    direction. **Engine side defanged 2026-05-03:** added a guard
+    on `[MONSTER_ATTACK]` in `response-parser.js` so a no-active-
+    enemy room rejects the tag with a callout instead of rolling
+    a default `+0` attack. Model-side issue persists; the
+    hallucinated narration still appears, just without the bogus
+    attack roll.
+  - GM ignores `unlock_connection` runtime override on a previously-
+    locked door. Surfaced 2026-05-07 in Three Knots Chamber of the
+    Seal under `claude-sonnet-4-6`: rune_pillars puzzle solved via
+    the engine's INT check fallback, `[EFFECT] unlock_connection
+    target=sealed_inner_door applied=true` confirmed in the trail,
+    `connectionsModified` correctly written to game state. The very
+    next player turn ("I go through through the sealed inner door"),
+    GM responded "the seal still runs its thin cold light along
+    every edge of the door — you'd have to speak the order, or find
+    another way through." Connection-label phrase matched (verified
+    independently); pre-emptive flip should have fired. Either the
+    flip fired and the GM ignored the destination's open state, or
+    the flip didn't fire and the GM, looking at the prompt with
+    `currentRoom=tomb_chamber` showing `sealed_inner_door=open`,
+    still narrated as if locked. Both are model-side compliance
+    failures around state-vs-history reconciliation. Same family as
+    the patterns above. Conversation-history pruning (12→10 turns
+    on each cycle) likely contributes — the puzzle solve narration
+    can age out of recent turns even though `connectionsModified` is
+    durable in game state.
 - **Mitigations already shipped (Phase 3, see CHANGELOG):**
   - Authored encounter `placement` text surfaced in `ENCOUNTER_INFO`
     so the GM has explicit prose to use.
@@ -169,6 +213,55 @@ Open polish items surfaced during the v1 refactor smoke tests, folded in from `P
   - Capture GM-coined connection synonyms from prior turn narration
     and add them as ad-hoc connection match candidates. Brittle, last
     resort.
+
+### `[S]` Movement-intent confirmation chip — close the stub-narration gap
+
+- **Surfaced:** 2026-05-03 during the 4.6 A/B test session. The strict
+  pre-emptive flip heuristic in `findMovementTargetInText` (response-
+  parser.js) misses inputs like "I head right", "I gor right" (typo),
+  or any phrasing where the verb-screen regex doesn't recognize a
+  preposition or directional word. The GM still figures out the
+  destination from context and emits `[ROOM: <id>]` in its response,
+  so the post-response flip lands the player in the right room — but
+  the GM's narration for that turn was generated from a prompt where
+  the destination was a compact id-name-exits stub. Result: thin
+  punt-style entry ("you step into a smaller room — what do you do?"),
+  no authored description, no encounter introduction.
+- **Architecture insight:** the post-response flip happening when the
+  pre-emptive flip didn't fire IS the signal that something went
+  wrong. The flip path bifurcates response quality: pre-emptive →
+  full destination rendered → faithful entry; post-response → stub
+  destination rendered → punt. The fix isn't whack-a-mole-loosening
+  the strict regex (we already did `go` and `head`) — it's a second
+  path for ambiguous intents.
+- **Design (what to build):**
+  - Keep the existing strict heuristic as path A. When it fires, flip
+    silently and proceed (current behavior).
+  - Add a looser detection path B that runs only if A didn't fire.
+    Candidate signals: sentence contains a connection-label phrase
+    of the current room (no verb screen), or sentence contains a
+    room name from the module (no verb screen), or contains a known
+    movement verb plus any direction word.
+  - When B fires, surface a small inline confirmation chip in the
+    input area: "Move to: <Room Name>? [Yes] [No]". The GM is NOT
+    called yet.
+  - On Yes: pre-emptive flip + send the input to the GM (which now
+    sees the destination rendered FULL). On No: send the input to
+    the GM as-is (treated as not movement).
+  - When neither A nor B fires, send the input to the GM unchanged.
+- **Why this is the right shape:**
+  - Preserves text-input freedom (no menu-only movement).
+  - Catches typos and unmatched phrasings without inventing new
+    regex coverage every time.
+  - The chip is the disambiguation gate, not the connection panel —
+    so TTRPG flow ("I creep toward the doorway, hand on the hilt")
+    still works; only the room flip needs confirmation, not the
+    prose.
+- **Out of scope for the chip path (separately ticketed if pursued):**
+  GM-coined connection synonyms (pattern #4 in the GM-compliance
+  ticket above). The chip handles synonym confusion by giving the
+  player a confirmation moment, but it doesn't auto-extract synonyms
+  from GM narration.
 
 ### `[L]` Player can't roll magic bonus-damage dice physically
 
@@ -436,3 +529,4 @@ Open polish items surfaced during the v1 refactor smoke tests, folded in from `P
 *(Use this area for rapid capture - will be organized into main backlog periodically)*
 
 - [ ] `[S]` Equipped gear should be highlighted based on player actions — parse equipment changes from player input (e.g., "I stow my shortbow and draw my sword" should unhighlight shortbow and highlight longsword in character panel)
+- [ ] `[S]` **Player retreat / flee / disengage — and enemy pursuit across rooms.** Surfaced 2026-05-03 during the 4.6 A/B testing session. Open design questions: how does the player declare a retreat/flee mid-combat (text-input intent, dedicated UI button, or both)? Does it cost a turn / provoke a parting attack? When the player exits the combat room, do surviving enemies pursue into the destination room (move with the player), stay put (combat resolves to surviving-instances-still-active in the original room), or behave per a `pursuit` flag on the encounter? How does this interact with the Phase 3 cross-room teleport guard (which currently rejects `[COMBAT: on]` in a room with no encounters)? UX: distinct callout for "you flee" vs "you disengage cleanly"; encounter panel state during retreat. Likely needs an authored encounter field (`pursue_on_flee: true|false`) so module designers can declare which encounters chase. **Interim guard shipped 2026-05-07:** `preemptiveRoomFlip` in `main.js` now rejects flips while `inCombat=true` and surfaces a callout ("You cannot leave the room during combat. Resolve the encounter first, or retreat explicitly.") — covers both the connection-chip click path and the text-heuristic path. Surfaced after a Three Knots playthrough in which clicking a connection mid-combat teleported `currentRoom` out of the fighting room while `mode=combat` persisted. Explicit retreat (`tryParseRetreat`) still works because it clears `inCombat` first. The proper retreat semantics replace this guard when the design lands; this stub remains the design conversation.

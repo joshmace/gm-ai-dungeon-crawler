@@ -77,8 +77,23 @@
         // until after GM narration so display order reads GM → callouts → outcome.
         if (/\[MONSTER_ATTACK\]/i.test(scene.cleanText)) {
             const enc = getFirstActiveEncounterInCurrentRoom();
-            const monster = enc ? resolveMonster(enc.monster_ref) : null;
-            const monsterName = enc ? (enc.name || (monster && monster.name) || 'Monster') : 'Monster';
+            // Guard: GM hallucinated a continuing fight after the encounter
+            // resolved (e.g. ignored "ALL DEFEATED" header). Strip the tag,
+            // emit a callout, and skip processing — mirrors the Phase 3
+            // guardCombatRoomHasActiveEncounter pattern. Without this, the
+            // engine fell through to a default +0 ranged attack with damage
+            // formula 1d6, surfacing a bogus monster swing on the player.
+            if (!enc) {
+                addMechanicsCallout('No active enemy in this room. Monster-attack tag ignored.');
+                debugLog('PARSE', `Monster attack ignored: no active enemy in ${gs().currentRoom}`);
+                scene.cleanText = scene.cleanText
+                    .replace(/\[MONSTER_ATTACK\]/gi, '')
+                    .replace(/\s+\./g, '.')
+                    .replace(/\.\.+/g, '.')
+                    .trim();
+            } else {
+            const monster = resolveMonster(enc.monster_ref);
+            const monsterName = enc.name || (monster && monster.name) || 'Monster';
             const playerAC = getEffectiveAC();
 
             // Pull the player's v1-equipped damage resistance/immunity/vulnerability arrays.
@@ -140,6 +155,7 @@
                     .replace(/\s+\./g, '.')
                     .replace(/\.\.+/g, '.')
                     .trim();
+            }
             }
         }
 
@@ -558,7 +574,7 @@
     function findMovementTargetInText(text) {
         const rooms = gd().module && gd().module.rooms;
         if (!rooms || !text) return null;
-        const movementRe = /\b(?:enter(?:s|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/i;
+        const movementRe = /\b(?:enter(?:s|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?|go(?:es)?|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/i;
         const sentences = text
             .split(/(?<=[.!?])\s+|—|\n+/)
             .map(s => s.trim())
@@ -644,7 +660,7 @@
         // Test 4 / Test 5 false-positive cases where "reach for the jar" in
         // one sentence co-occurred with "the tomb road" in a later sentence
         // of the same GM turn.
-        const movementRe = /\b(?:enter(?:s|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?\s+(?:in)?to|go(?:es)?\s+(?:in)?to|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/;
+        const movementRe = /\b(?:enter(?:s|ed)?|arrive(?:s|d)?|step(?:s|ped)?\s+(?:in(?:to)?|through|onto)|walk(?:s|ed)?\s+(?:in|into|through|onto)|move(?:s|d)?\s+(?:in|into|through|onto)|push(?:es|ed)?\s+(?:in|through)|find\s+yourself\s+in|are\s+now\s+in|head(?:s|ed)?|go(?:es)?|pass(?:es|ed)?\s+(?:in|into|through|onto))\b/;
 
         // Split GM text into sentences on ., !, ?, and em-dashes to catch
         // tight-packed GM prose. Keep sentence fragments above one word so
