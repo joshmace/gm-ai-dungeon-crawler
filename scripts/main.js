@@ -507,6 +507,19 @@
         if (!rooms || !rooms[targetId]) return false;
         const prev = gs().currentRoom;
         if (targetId === prev) return false;
+        // Combat-flip guard: don't teleport the player out of an active fight.
+        // Both the connection-chip click path and the text-heuristic path
+        // funnel into here, so blocking the flip here covers both. Explicit
+        // retreat language (tryParseRetreat) clears inCombat first and so
+        // passes this check naturally. Proper retreat semantics (parting
+        // attacks, enemy pursuit) are deferred to the BACKLOG retreat ticket.
+        if (gs().inCombat) {
+            if (global.addMechanicsCallout) {
+                global.addMechanicsCallout('You cannot leave the room during combat. Resolve the encounter first, or retreat explicitly.');
+            }
+            if (global.debugLog) global.debugLog('PARSE', `Pre-emptive flip blocked: in combat (${prev} → ${targetId})`);
+            return false;
+        }
         gs().currentRoom = targetId;
         gs()._preemptiveRoomChangeFrom = prev;
         if (typeof updateCharacterDisplay === 'function') updateCharacterDisplay();
@@ -536,8 +549,13 @@
         // and either invents the room or omits the encounter. Connection
         // clicks (UI) hit this same path indirectly, since the click
         // handler also calls preemptiveRoomFlip directly with the exact
-        // target id (more reliable than text heuristic).
-        if (global.findMovementTargetInText) {
+        // target id (more reliable than text heuristic). When the chip
+        // path already attempted the flip, _chipClickInProgress is set;
+        // skip the heuristic to avoid duplicate side effects (visible on
+        // an in-combat block as a duplicate callout).
+        const fromChip = !!gs()._chipClickInProgress;
+        gs()._chipClickInProgress = false;
+        if (!fromChip && global.findMovementTargetInText) {
             const target = global.findMovementTargetInText(action);
             if (target) preemptiveRoomFlip(target);
         }

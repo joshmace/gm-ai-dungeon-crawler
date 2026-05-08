@@ -151,6 +151,14 @@
         // the GM responds from a prompt where the destination is just a
         // compact id-name-exits stub and either hallucinates the room
         // or omits the authored encounter on entry.
+        //
+        // Mark the click so submitAction skips its redundant text-heuristic
+        // call into preemptiveRoomFlip — the chip already attempted the
+        // flip with the exact target id, and the heuristic on the same
+        // text would attempt it again, which is harmless on success but
+        // double-emits side effects (callout, debug log) on a blocked
+        // attempt (in-combat guard).
+        gs()._chipClickInProgress = true;
         if (conn.target && global.preemptiveRoomFlip) global.preemptiveRoomFlip(conn.target);
         if (global.submitAction) {
             global.submitAction();
